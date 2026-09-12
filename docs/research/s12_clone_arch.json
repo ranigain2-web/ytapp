@@ -1,0 +1,29 @@
+[
+  {
+    "url": "https://www.cosmicjs.com",
+    "name": "How to Build a YouTube Clone with React and Cosmic",
+    "snippet": "Mar 23, 2025 — In this tutorial, we'll build a video sharing platform similar to YouTube using React for the frontend and Cosmic as our content management ... Read more",
+    "host_name": "www.cosmicjs.com",
+    "rank": 0,
+    "date": "Mar 23, 2025",
+    "favicon": ""
+  },
+  {
+    "url": "https://dev.to",
+    "name": "Let's build a Youtube clone with Nextjs and Tailwind-css🎉",
+    "snippet": "Jul 20, 2022 — Start by creating a new Next.js project if you don't have one set up already. The most common approach is to use Create Next App. npx create ... Read more",
+    "host_name": "dev.to",
+    "rank": 1,
+    "date": "Jul 20, 2022",
+    "favicon": ""
+  },
+  {
+    "url": "https://javascript.plainenglish.io",
+    "name": "Let's Build a YouTube Clone with React | by Nouman",
+    "snippet": "Feb 17, 2021 — In this tutorial , we will finish building our YouTube Clone by building our video player to play any video on YouTube .",
+    "host_name": "javascript.plainenglish.io",
+    "rank": 2,
+    "date": "Feb 17, 2021",
+    "favicon": ""
+  }
+]

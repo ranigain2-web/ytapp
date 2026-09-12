@@ -1,0 +1,66 @@
+# ===== dependencies =====
+node_modules
+/.pnp
+.pnp.*
+
+# ===== build output =====
+/.next/
+/out/
+/android/
+/build
+/release/
+*.tsbuildinfo
+next-env.d.ts
+*.apk
+*.aab
+*.dmg
+
+# ===== electron-builder output =====
+electron/release/
+
+# ===== runtime / logs =====
+*.log
+dev.log
+server.log
+pot-server.log
+pot-test.log
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ===== env (secrets — never commit) =====
+.env*
+!.env.example
+
+# ===== sandbox-only artifacts (dev environment, NOT part of the product) =====
+/.zscripts/
+/mini-services/
+/examples/
+/tests/
+/tool-results/
+/ytjs-test/
+/gh-repo-inspect/
+/research/
+/download/
+/prisma/
+/db/
+/Caddyfile
+/worklog.md
+/scripts/gauntlet_critic.mjs
+/scripts/vlm.mjs
+/scripts/test_youtubei.mjs
+/scripts/smoke_v2.mjs
+/scripts/test_web_embedded.js
+/scripts/start-yt-api.sh
+
+# ===== misc =====
+.vercel
+.claude
+.z-ai-config
+local-*
+prompt
+test
+coverage
+/skills/

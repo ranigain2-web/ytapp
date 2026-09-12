@@ -1,0 +1,38 @@
+[
+  {
+    "url": "https://developers.google.com/youtube/terms/developer-policies",
+    "name": "YouTube API Services - Developer Policies",
+    "snippet": "Jun 24, 2026 — API Clients must not modify user-provided values before sending them to YouTube by truncating, appending, or otherwise altering those values",
+    "host_name": "developers.google.com",
+    "rank": 0,
+    "date": "Jun 24, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://developers.google.com/youtube/terms/api-services-terms-of-service",
+    "name": "YouTube API Services Terms of Service",
+    "snippet": "Apr 28, 2026 — THE YOUTUBE API SERVICES MAY CONTAIN LINKS TO THIRD PARTY WEBSITES AND ONLINE SERVICES THAT ARE NOT OWNED OR CONTROLLED BY YOUTUBE .",
+    "host_name": "developers.google.com",
+    "rank": 1,
+    "date": "Apr 28, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://support.google.com/youtube/thread/269521462/enforcement-on-third-party-apps?hl=en",
+    "name": "Enforcement on Third Party Apps - YouTube Community",
+    "snippet": "Apr 15, 2024 — We only allow third - party apps to use our API when they follow our API Services Terms of Service , and when we find an app that violates these ... Read more",
+    "host_name": "support.google.com",
+    "rank": 2,
+    "date": "Apr 15, 2024",
+    "favicon": ""
+  },
+  {
+    "url": "https://tubepress.com",
+    "name": "Don't Stress About the Updated YouTube API Terms of Service",
+    "snippet": "Feb 8, 2017 — Prevent TubePress from storing any YouTube API data for longer than 30 days as per section E.4.d of the new Developer Policies . In TubePress ... Read more",
+    "host_name": "tubepress.com",
+    "rank": 3,
+    "date": "Feb 8, 2017",
+    "favicon": ""
+  }
+]

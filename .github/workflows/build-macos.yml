@@ -1,0 +1,72 @@
+name: Build macOS App (Intel x64)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Electron dmg + zip (Intel x64, self-contained)
+    runs-on: macos-latest
+    env:
+      # Unsigned build (no Apple Developer cert required).
+      # First launch on a new Mac: right-click the app → Open. See docs/BUILD_GUIDE.md.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend deps
+        run: bun install --frozen-lockfile
+
+      - name: Build web app (static export)
+        # NEXT_PUBLIC_API_BASE intentionally EMPTY here — the Electron preload
+        # injects the runtime API base (http://127.0.0.1:<port>) into localStorage
+        # on every launch, so the app always finds its bundled local backend.
+        run: BUILD_MODE=static bunx next build
+
+      - name: Install backend deps (yt-api)
+        run: cd server && npm install --omit=dev --no-audit --no-fund
+
+      - name: Install PO-token provider deps
+        run: cd pot-provider && npm install --omit=dev --no-audit --no-fund
+
+      - name: Install Electron toolchain
+        run: cd electron && npm install --no-audit --no-fund
+
+      - name: Build unsigned macOS app (Intel x64)
+        run: cd electron && npx electron-builder --mac --x64 --config builder.yml --publish never
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytapp-macos-intel-dmg
+          path: electron/release/*.dmg
+          if-no-files-found: error
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytapp-macos-intel-zip
+          path: electron/release/*.zip
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          echo "## macOS (Intel x64) build complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- DMG installer: artifact \`ytapp-macos-intel-dmg\`" >> $GITHUB_STEP_SUMMARY
+          echo "- ZIP (app bundle): artifact \`ytapp-macos-intel-zip\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The app is fully self-contained (frontend + yt-api + PO-token provider all bundled, runs on 127.0.0.1)." >> $GITHUB_STEP_SUMMARY
+          echo "It is UNSIGNED — first launch: right-click the app → **Open**, then confirm. Logs live in \`~/Library/Application Support/YouTube/logs/backend.log\`." >> $GITHUB_STEP_SUMMARY

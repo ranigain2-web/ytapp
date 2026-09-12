@@ -1,0 +1,47 @@
+[
+  {
+    "url": "https://docs.invidious.io",
+    "name": "Frequently Asked Questions",
+    "snippet": "If you're trying to watch a music clip, Youtube is likely blocking the video stream. Try enabling Proxy videos in the preferences (or add &local=1 in the URL). Read more",
+    "host_name": "docs.invidious.io",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://mindcloud.co",
+    "name": "Invidious API Documentation: Get Popular Videos Action",
+    "snippet": "Run the Get Popular Videos action with the Invidious Universal API in MindCloud. Release Resolved URL Search Result Search … using Invidious language codes.",
+    "host_name": "mindcloud.co",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com",
+    "name": "[bug] Videos API does not respect local parameter #3221",
+    "snippet": "Jul 26, 2022 — Invidious provides a local=true query parameter as a fix for this issue. If some kind of similar (or same) parameter is added to the API so all ...",
+    "host_name": "github.com",
+    "rank": 2,
+    "date": "Jul 26, 2022",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.freetubeapp.io",
+    "name": "Invidious API",
+    "snippet": "The Invidious API is one method of obtaining data from YouTube. For another method of obtaining data supported with FreeTube, check out the Local API . Read more",
+    "host_name": "docs.freetubeapp.io",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developers.google.com/youtube/v3/docs/search/list",
+    "name": "Search: list | YouTube Data API",
+    "snippet": "Returns a collection of search results that match the query parameters specified in the API request. By default, a search result set identifies matching video ...",
+    "host_name": "developers.google.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  }
+]

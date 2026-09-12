@@ -1,0 +1,70 @@
+# electron-builder config — YouTube (ytapp) macOS Intel build
+# Built on a GitHub Actions macOS runner; targets x64 explicitly so the app
+# runs on Intel Macs. Code signing is disabled (identity: null) — see
+# docs/BUILD_GUIDE.md for how users open an unsigned app the first time and
+# how to add real signing/notarization later.
+
+appId: com.robonuggets.ytapp.desktop
+productName: YouTube
+copyright: MIT (app) · GPL-3.0 (bundled pot-provider)
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the shell goes inside the asar archive; the backend stacks must stay
+# as real files on disk because they run as separate Node child processes.
+files:
+  - main.cjs
+  - preload.cjs
+  - package.json
+
+extraResources:
+  # Static frontend build (produced by `BUILD_MODE=static bunx next build`)
+  - from: ../out
+    to: web
+    filter:
+      - "**/*"
+      - "!__next.*"
+      - "!*.txt"
+      - "!robots.txt"
+  # yt-api backend (+ its production node_modules — CI installs them)
+  - from: ../server
+    to: server
+    filter:
+      - "**/*"
+      - "!server.log"
+      - "!bun.lock"
+      - "!package-lock.json"
+  # PO-token provider (vendored bgutil v2.0.0 build + production node_modules)
+  - from: ../pot-provider
+    to: pot-provider
+    filter:
+      - "**/*"
+      - "!*.log"
+      - "!package-lock.json"
+      - "!pot-test.log"
+
+asar: true
+
+mac:
+  category: public.app-category.entertainment
+  target:
+    - target: dmg
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+  identity: null   # unsigned build (Gatekeeper: right-click → Open, see docs)
+  icon: icon.png    # resolves against directories.buildResources (electron/build/)
+  extendInfo:
+    LSMinimumSystemVersion: "10.15"
+    NSAppTransportSecurity:
+      NSAllowsArbitraryLoads: false
+
+# Trim shipped locales (the app UI is English-only)
+electronLanguages:
+  - en-US
+  - en-GB
+
+# No auto-update publishing (artifacts uploaded to GitHub Actions instead)
+publish: null

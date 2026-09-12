@@ -1,0 +1,56 @@
+[
+  {
+    "url": "https://www.reddit.com/r/selfhosted/comments/177h2hx/sponsorblock_client_for_all_youtube_tv_clients",
+    "name": "SponsorBlock client for all YouTube TV clients. : r/selfhosted",
+    "snippet": "It connects to the device, watches its activity and skips any sponsor segment using the SponsorBlock API . It can also skip/mute YouTube ads .",
+    "host_name": "www.reddit.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/ajayyy/SponsorBlock",
+    "name": "ajayyy/SponsorBlock: Skip YouTube video sponsors",
+    "snippet": "SponsorBlock is an open-source crowdsourced browser extension to skip sponsor segments in YouTube videos. API Docs page for more. You can read the API docs ...",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://sponsor.ajay.app",
+    "name": "SponsorBlock - Skip over YouTube Sponsors - Sponsorship",
+    "snippet": "SponsorBlock is a crowdsourced browser extension to skip sponsor segments in YouTube videos. You can view the docs for the public API or host a mirror.",
+    "host_name": "sponsor.ajay.app",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://sponsorblockpy.readthedocs.io/en/latest/api_reference.html",
+    "name": "API Reference — Welcome to sponsorblock.py",
+    "snippet": "The client module provides a Client for the SponsorBlock API . Add a skip segment to the server. segment ( Segment ) – The skip segment to add segments (List[ ...",
+    "host_name": "sponsorblockpy.readthedocs.io",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.freetubeapp.io/usage/sponsorblock",
+    "name": "Sponsorblock",
+    "snippet": "“ SponsorBlock is an open-source crowdsourced browser extension and open API for skipping sponsor segments in YouTube videos. Users submit when a sponsor happens ... Read more",
+    "host_name": "docs.freetubeapp.io",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=ITjFGH-GeHA",
+    "name": "iSponsorBlockTV: Auto-Skip YouTube Sponsors On Every TV",
+    "snippet": "iSponsorBlockTV is a self - hosted server that quietly auto-skips sponsor segments on every YouTube TV app in your house — Apple TV, Roku, ...",
+    "host_name": "www.youtube.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  }
+]

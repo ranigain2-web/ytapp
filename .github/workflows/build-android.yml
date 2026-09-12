@@ -1,0 +1,88 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "Backend API base URL baked into the app (optional — can also be set later in the app's Settings page)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  build:
+    name: Build APK (debug + release-unsigned)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install frontend deps (includes Capacitor)
+        run: bun install --frozen-lockfile
+
+      - name: Build web app (static export)
+        env:
+          BUILD_MODE: static
+          NEXT_PUBLIC_API_BASE: ${{ github.event.inputs.api_base || vars.API_BASE || '' }}
+        run: bunx next build
+
+      - name: Add + sync Android platform
+        run: |
+          [ -d android ] || bunx cap add android
+          bunx cap sync android
+
+      - name: Apply app icons
+        run: cp -r icons/android/res/* android/app/src/main/res/
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Build release APK (unsigned)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytapp-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload release APK (unsigned)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytapp-release-unsigned-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          echo "## Android build complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Debug APK (install directly): artifact \`ytapp-debug-apk\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Release APK (unsigned): artifact \`ytapp-release-unsigned-apk\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The APK needs a yt-api backend URL — set it in the app's **Settings** page, or bake one at build time with the \`api_base\` workflow input / \`API_BASE\` repo variable. See docs/BUILD_GUIDE.md." >> $GITHUB_STEP_SUMMARY

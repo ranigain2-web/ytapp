@@ -1,0 +1,18 @@
+# NOTICE
+
+This repository vendors a compiled build of
+[bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
+(upstream tag `2.0.0`, © its contributors) in the `pot-provider/` directory,
+together with a minimal production dependency manifest. That directory is
+licensed under **GPL-3.0-only** (see `pot-provider/LICENSE`); it is used to
+generate YouTube PO tokens for the bundled backend. The rest of this
+repository's own code is MIT (see LICENSE).
+
+Other open-source components used at runtime or build time (not vendored;
+fetched from npm by CI/Docker): youtubei.js (MIT), hls.js (Apache-2.0),
+Express (MIT), jsdom (MIT), React/Next.js (MIT), shadcn/ui (MIT),
+Capacitor (MIT), Electron (MIT), SponsorBlock public API (community service).
+
+This project is a personal-use, unofficial YouTube client. It is not
+affiliated with or endorsed by YouTube/Google. See docs/RESEARCH.md §3 for
+the terms-of-service discussion.

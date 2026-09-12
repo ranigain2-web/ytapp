@@ -1,0 +1,38 @@
+[
+  {
+    "url": "https://discuss.privacyguides.net",
+    "name": "Is there any working frontend for Youtube? - Questions",
+    "snippet": "Feb 14, 2025 — Freetube works mostly . NewPipe also works mostly. Its a perpetual game of cat and mouse. All we have to do is wait and bounce around Invidious ... Read more",
+    "host_name": "discuss.privacyguides.net",
+    "rank": 0,
+    "date": "Feb 14, 2025",
+    "favicon": ""
+  },
+  {
+    "url": "https://discuss.grapheneos.org",
+    "name": "Which YouTube Front End is the best?",
+    "snippet": "Dec 13, 2024 — It worked great, but when Youtube changes their frontend , it takes NewPipe days to fix it. Tabular is basically NewPipe with SponsorBlock. Read more",
+    "host_name": "discuss.grapheneos.org",
+    "rank": 1,
+    "date": "Dec 13, 2024",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com",
+    "name": "libre-tube/LibreTube: An alternative frontend for YouTube",
+    "snippet": "While LibreTube only supports content from YouTube , NewPipe also allows the use of other platforms like SoundCloud, PeerTube, Bandcamp and media.ccc.de. Read more",
+    "host_name": "github.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://privacytools.io",
+    "name": "LibreTube Review: Private Frontends in 2026",
+    "snippet": "LibreTube is an open-source Android YouTube client that routes requests through the Piped API instead of Google directly. It supports SponsorBlock ...",
+    "host_name": "privacytools.io",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  }
+]

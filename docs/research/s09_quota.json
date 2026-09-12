@@ -1,0 +1,56 @@
+[
+  {
+    "url": "https://developers.google.com/youtube/v3/determine_quota_cost",
+    "name": "Quota Calculator | YouTube Data API",
+    "snippet": "8 days ago — Each of these methods has a default daily limit of 100 per day . The quota cost is 1 per call. If your application calls a method, such as search ... Read more",
+    "host_name": "developers.google.com",
+    "rank": 0,
+    "date": "Sep 4, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://channelcrawler.com",
+    "name": "YouTube API Daily Limit: Quotas, Costs, and How to Scale",
+    "snippet": "The default daily quota for the YouTube Data API is 10,000 units per Google Cloud project. This allocation resets at midnight Pacific Time each day .",
+    "host_name": "channelcrawler.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.getphyllo.com",
+    "name": "YouTube API Limits in 2026: How to Calculate Quota",
+    "snippet": "As of 2026, the YouTube Data API v3 still uses the same quota ‑ unit system, with 10,000 units per day by default and unit costs between 1 and 1,600 per request. Read more",
+    "host_name": "www.getphyllo.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://outlierkit.com",
+    "name": "YouTube API Pricing in 2026: Is It Free? What It Actually",
+    "snippet": "Jun 12, 2026 — Yes, the YouTube Data API v3 is free . Google has no paid tier for it. Every project gets a default quota of 10,000 units per day, and you cannot ... Read more",
+    "host_name": "outlierkit.com",
+    "rank": 3,
+    "date": "Jun 12, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits",
+    "name": "Your Complete Guide to YouTube Data API v3 – Quotas,",
+    "snippet": "May 20, 2026 — YouTube Data API receive a default daily quota of 10,000 units per day . Search for 100 videos: 10,000 units (100 per search)",
+    "host_name": "developers.google.com",
+    "rank": 4,
+    "date": "May 20, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.socialcrawl.dev",
+    "name": "YouTube API Quota: 100 Searches Burn 10000 Units (2026)",
+    "snippet": "Jun 19, 2026 — The YouTube Data API is free until the quota math bites: 100 searches = 10,000 daily units gone. Key setup, transcript limits, ... Read more",
+    "host_name": "www.socialcrawl.dev",
+    "rank": 5,
+    "date": "Jun 19, 2026",
+    "favicon": ""
+  }
+]

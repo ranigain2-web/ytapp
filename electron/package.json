@@ -1,0 +1,20 @@
+{
+  "name": "ytapp-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "YouTube desktop app (macOS Intel) — self-contained: static frontend + yt-api gateway + PO-token provider",
+  "main": "main.cjs",
+  "author": "ranigain2-web",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac-x64": "electron-builder --mac --x64 --config builder.yml --publish never"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

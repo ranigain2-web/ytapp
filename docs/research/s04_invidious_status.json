@@ -1,0 +1,56 @@
+[
+  {
+    "url": "https://github.com",
+    "name": "[Bug] Can't load the video on this Invidious instance.",
+    "snippet": "Aug 10, 2023 — YouTube is currently trying to block Invidious instances . Alternative solution is to switch off proxy or use another instance that is unblocked.",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "Aug 10, 2023",
+    "favicon": ""
+  },
+  {
+    "url": "https://dev.to",
+    "name": "Invidious Vs Piped",
+    "snippet": "Mar 17, 2026 — Invidious's public instance list has collapsed from dozens to just 3 due to YouTube's IP blocking . The project now explicitly recommends self- ...",
+    "host_name": "dev.to",
+    "rank": 1,
+    "date": "Mar 17, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://forum.cloudron.io",
+    "name": "YouTube is currently trying to block Invidious instances",
+    "snippet": "Jan 6, 2024 — so unfortunately again all instances of invidious are blocked by Google . Hopefully the developers will fix it soon.",
+    "host_name": "forum.cloudron.io",
+    "rank": 2,
+    "date": "Jan 6, 2024",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.invidious.io",
+    "name": "Invidious Instances",
+    "snippet": "The list of public instances is short due to the recent YouTube issues. If you can, please host Invidious at home instead of using a public instance .",
+    "host_name": "docs.invidious.io",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://discuss.privacyguides.net",
+    "name": "Watch YouTube privately - Materialious - Project Showcase",
+    "snippet": "Feb 15, 2026 — Invidious is optional, so if the Invidious instance referenced in the Docker Compose file becomes nonfunctional due to YouTube upstream changes, ...",
+    "host_name": "discuss.privacyguides.net",
+    "rank": 4,
+    "date": "Feb 15, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://forum.garudalinux.org",
+    "name": "Piped/Invidious - Web services",
+    "snippet": "Jun 18, 2023 — The developers of Invidious , a privacy-respecting alternative front-end for YouTube , have received a cease-and-desist notice from YouTube . Est.",
+    "host_name": "forum.garudalinux.org",
+    "rank": 5,
+    "date": "Jun 18, 2023",
+    "favicon": ""
+  }
+]

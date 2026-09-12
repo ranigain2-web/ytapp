@@ -1,0 +1,74 @@
+[
+  {
+    "url": "https://github.com",
+    "name": "Allow passing poToken for unblock YouTube restrictions",
+    "snippet": "Jun 25, 2024 — I want to get poToken without any browser drivers as it doesn't work on youtubei . js /web. As far as I know, only full-on browsers are able to ...",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "Jun 25, 2024",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.npmjs.com",
+    "name": "youtubei.js",
+    "snippet": "Aug 13, 2026 — A JavaScript client for YouTube's private API, known as InnerTube.. Latest version: 18.0.0, last published: 23 days ago.",
+    "host_name": "www.npmjs.com",
+    "rank": 1,
+    "date": "Aug 13, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://ytjs.dev",
+    "name": "Getting Started",
+    "snippet": "May 13, 2026 — po_token (string). Description: Session-bound Proof of Origin Token (attestation token ) used to confirm the request is from a real client.",
+    "host_name": "ytjs.dev",
+    "rank": 2,
+    "date": "May 13, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.jsdelivr.com",
+    "name": "np-dev/youtubei-js",
+    "snippet": "This library manages all low-level communication with InnerTube, providing a simple and efficient way to interact with YouTube programmatically. Its design aims ...",
+    "host_name": "www.jsdelivr.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://classic.yarnpkg.com",
+    "name": "np-dev/youtubei-js",
+    "snippet": "This library manages all low-level communication with InnerTube, providing a simple and efficient way to interact with YouTube programmatically.",
+    "host_name": "classic.yarnpkg.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.rs",
+    "name": "rustypipe_botguard - Rust",
+    "snippet": "RustyPipe Botguard is a CLI tool to run YouTube's Botguard challenges and generate Proof-of-origin tokens (PO tokens).",
+    "host_name": "docs.rs",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://news.ycombinator.com",
+    "name": "full-featured wrapper around YouTube's private API",
+    "snippet": "Apr 14, 2022 — we can edit and adapt the JS library if the structure or content of YouTube's video page template changes, by requiring an access token or ...",
+    "host_name": "news.ycombinator.com",
+    "rank": 6,
+    "date": "Apr 14, 2022",
+    "favicon": ""
+  },
+  {
+    "url": "https://security.snyk.io",
+    "name": "youtubei.js 17.0.1",
+    "snippet": "youtubei.js@17.0.1 . A JavaScript client for YouTube's private API, known as InnerTube. latest version. 17.2.0. latest non vulnerable version.",
+    "host_name": "security.snyk.io",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  }
+]

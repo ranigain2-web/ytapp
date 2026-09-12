@@ -1,0 +1,74 @@
+[
+  {
+    "url": "https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide",
+    "name": "YouTube PO Token Guide - yt-dlp/yt-dlp Wiki - GitHub",
+    "snippet": "YouTube is at present rolling out changes to enforce PO Tokens for video playback. ... Only SABR formats available in some cases. tv_simply, GVS, Account cookies ...",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/youtubedl/comments/1nrfrzk/ytdlp_release_20250926",
+    "name": "yt-dlp release 2025.09.26 : r/youtubedl - Reddit",
+    "snippet": "Sep 26, 2025 · I do find the PO Token when following the PO Token for Player or Subs but this is tied to video ID right? So I won't be able to download a ... GVS PO Tokens and \"sabr=1\" yt-dlp release 2026.01.31 More results from www.reddit.com",
+    "host_name": "www.reddit.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.scribd.com/document/989146185/youtube-web-only-has-SABR-formats-Issue-12482-yt-dlp-yt-dlp",
+    "name": "(Youtube) 'Web' Only Has SABR Formats Issue #12482 Yt-Dlp - Scribd",
+    "snippet": "YouTube's web client has removed adaptiveFormats for playback, leaving only the SABR streaming URL available. This change affects yt-dlp users,",
+    "host_name": "www.scribd.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://pypi.org/project/yt-dlp-ytse",
+    "name": "yt-dlp-ytse · PyPI",
+    "snippet": "Experimental YouTube streaming features for yt-dlp. These features are experimental. They may change without notice. Requires yt-dlp 2025.01.26 or above. ...",
+    "host_name": "pypi.org",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/yt-dlp/yt-dlp/issues/16128",
+    "name": "YouTube: DASH audio-only formats missing in yt-dlp 2026.03.03 but",
+    "snippet": "Mar 3, 2026 · yt-dlp 2025.12.08 still does. formats (91–96) and progressive format 18. YouTube is forcing SABR streaming for this client. without po tokens. ...",
+    "host_name": "github.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://dev.to/pickuma/yt-dlp-the-cli-video-downloader-developers-actually-use-in-2026-57jk",
+    "name": "yt-dlp: The CLI Video Downloader Developers Actually Use in 2026",
+    "snippet": "May 12, 2026 · Format availability changes. Numeric format codes (137, 248, 251, etc.) that worked last quarter may not exist next month — YouTube reshuffles ...",
+    "host_name": "dev.to",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=pcd2Ibrrfes",
+    "name": "yt-dlp | GitHub Curated Picks | 2026-08-19 - YouTube",
+    "snippet": "Aug 19, 2026 · Chapters: 00:00 2026-08-19 | GitHub Curated Picks 00:10 Pick #1 yt-dlp 00:31 Pick #2 Build Your Own X 00:49 Pick #3 Prompts.chat GitHub ...",
+    "host_name": "www.youtube.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://stackoverflow.com/questions/80002131/programatically-downloading-youtube-videos-at-scale-yt-dlp-rate-limits-gvs-po",
+    "name": "Programatically downloading YouTube videos at scale: yt-dlp rate",
+    "snippet": "2 days ago · GVS PO Token (Proof of Origin) warnings. SABR-related errors. Significant throttling of download speeds. Additional latency during metadata ...",
+    "host_name": "stackoverflow.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  }
+]
