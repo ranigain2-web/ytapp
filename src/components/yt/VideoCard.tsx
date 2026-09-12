@@ -110,13 +110,13 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
         )}
       </div>
       <div className="flex gap-3">
-        <button onClick={openChannel} className="shrink-0" aria-label={video.channel}>
+        <button onClick={openChannel} className="shrink-0 mt-0.5" aria-label={video.channel}>
           <ChannelAvatar name={video.channel} />
         </button>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[15px] font-medium leading-[22px] clamp-2 text-[#f1f1f1]">{video.title}</h3>
-          <button onClick={openChannel} className="block mt-1 text-[13px] text-[#aaa] hover:text-[#f1f1f1] truncate max-w-full">{video.channel || "Unknown channel"}</button>
-          <p className="text-[13px] text-[#aaa] truncate">
+          <h3 className="text-[14px] font-medium leading-[20px] clamp-2 text-[#f1f1f1] min-h-[40px]">{video.title}</h3>
+          <button onClick={openChannel} className="block mt-0.5 text-[12px] leading-[18px] text-[#aaa] hover:text-[#f1f1f1] truncate max-w-full">{video.channel || "Unknown channel"}</button>
+          <p className="text-[12px] leading-[18px] text-[#aaa] truncate">
             {formatViews(video.views) ? `${formatViews(video.views)} views` : ""}
             {formatViews(video.views) && timeAgo(video.published) ? " · " : ""}
             {timeAgo(video.published)}
@@ -149,7 +149,7 @@ export function VideoGrid({ videos, loading = false, skeletonCount = 12 }: { vid
   }
   if (!videos.length) return null;
   return (
-    <div className="grid gap-x-4 gap-y-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+    <div className="grid gap-x-4 gap-y-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {videos.map((v) => <VideoCard key={v.id} video={v} />)}
     </div>
   );

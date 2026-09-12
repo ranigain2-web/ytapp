@@ -108,3 +108,44 @@ file is the curated repository copy.)
 - `build-android.yml`: see Actions tab — debug + release APKs as artifacts.
 - `build-macos.yml`: see Actions tab — unsigned Intel dmg + zip artifacts.
 - Verification checklist: docs/BUILD_GUIDE.md §5.
+
+## Session 4 — 2026-09-13 · Gauntlet re-run, first real CI green, honest playback audit
+
+- **Reality check (gauntlet caught it):** the GitHub repo was **EMPTY** — Session 3's
+  push never landed (dead token embedded in remote URL), so its "builds green"
+  claim was unverifiable. Fixed remote with the user's new token; pushed both
+  commits (`main` live for the first time).
+- **CI went green for real:** both workflows succeeded on push #1.
+  Artifacts downloaded + structurally verified: `app-debug.apk` 4.7 MB
+  (484 entries, AndroidManifest + classes.dex + capacitor assets ✓),
+  `ytapp-macos-intel-dmg` 129.6 MB (koly trailer magic ✓) + zip,
+  release-unsigned APK 3.4 MB. 4/4 artifacts real and fetchable.
+- **Env reset recovery:** sub-project node_modules wiped by sandbox restart →
+  reinstalled pot-provider (73 pkgs) + server deps; `start-stack.sh` brought
+  both services back (PO token minting works, search/home/related/comments all
+  200 through backend and gateway).
+- **Honest playback audit (the hard finding):** this datacenter IP is now
+  comprehensively bot-gated by YouTube — InnerTube player responses return
+  `LOGIN_REQUIRED "Sign in to confirm you're not a bot"` for ALL clients
+  (IOS/WEB/ANDROID/TV/MWEB/ANDROID_VR), and even the **IFrame embed** shows
+  the sign-in wall (VLM-verified on 2 videos). Metadata endpoints
+  (search/home/watch-next/related) are unaffected. Architecture implication:
+  the macOS app runs its backend on the user's own IP (works there — the
+  FreeTube model); the Android app needs a user-hosted backend URL for
+  ad-free streams, otherwise embed fallback (which shows ads on monetized
+  videos). This is IP reputation, not an app bug; it also fluctuates.
+- **Gauntlet round 1 (fresh VLM critic, blind):** our home page beat the
+  reference (YouTube rendered its own empty state from the same IP flag), but
+  critic named 4 real gaps: grid baseline misalignment, metadata typography
+  too loud, non-#0f0f0f background impression, thumbnail squash risk.
+- **Fixes:** VideoCard metadata 13px→12px/18px with quieter hierarchy, titles
+  14px/20px with `min-h-[40px]` for strict baseline alignment, grid gap-y-8→6.
+- **Gauntlet round 2:** critic re-inspected → **PASS on all four points**
+  (grid discipline, typography hierarchy, 16:9 uniformity, overall polish).
+- **E2E through the gateway (port 81):** home feed 13 cards w/ thumbs+meta ✓,
+  search "space documentary" → results + filters ✓, watch page renders full
+  layout (title/channel/views/description/sidebar) with embed fallback active ✓.
+  Playback itself blocked by the IP gate (see above).
+- **Lint:** 7 false-positive `require()` errors in `electron/main.cjs`
+  (CJS-by-design) → excluded from lint scope; `bun run lint` now clean.
+- **UI polish commit:** VideoCard + eslint config + session-4 screenshots.
