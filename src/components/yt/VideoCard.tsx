@@ -67,7 +67,7 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
     // sidebar-related video card (horizontal)
     return (
       <button onClick={open} className="flex gap-2 w-full text-left group">
-        <div className="relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[#212121]">
+        <div className="relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[var(--yt-bg-elev)]">
           {!imgFailed ? (
 
             <img src={video.thumb} alt={video.title} loading="lazy" className="w-full h-full object-cover" onError={() => setImgFailed(true)} />
@@ -77,9 +77,9 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-[14px] font-normal leading-[20px] clamp-2 text-[#f1f1f1]">{video.title}</h3>
-          <p className="text-[12px] text-[#aaa] mt-1 truncate">{video.channel || "Unknown channel"}</p>
-          <p className="text-[12px] text-[#aaa] truncate">
+          <h3 className="text-[14px] font-normal leading-[20px] clamp-2 text-[var(--yt-text)]">{video.title}</h3>
+          <p className="text-[12px] text-[var(--yt-text-2)] mt-1 truncate">{video.channel || "Unknown channel"}</p>
+          <p className="text-[12px] text-[var(--yt-text-2)] truncate">
             {[viewsText(video), timeAgo(video.published)].filter(Boolean).join(" · ")}
           </p>
         </div>
@@ -96,7 +96,7 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
       onMouseLeave={() => setHover(false)}
       aria-label={video.title}
     >
-      <div className="relative aspect-video rounded-xl overflow-hidden bg-[#212121] mb-3">
+      <div className="relative aspect-video rounded-xl overflow-hidden bg-[var(--yt-bg-elev)] mb-3">
         {!imgFailed ? (
 
           <img
@@ -126,7 +126,7 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
             title="Save to Watch later"
             className="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/80 hover:bg-black flex items-center justify-center"
           >
-            <BookmarkPlus className={`w-5 h-5 ${isLater ? "text-[#3ea6ff]" : "text-white"}`} fill={isLater ? "#3ea6ff" : "none"} />
+            <BookmarkPlus className={`w-5 h-5 ${isLater ? "text-[var(--yt-blue)]" : "text-white"}`} fill={isLater ? "#3ea6ff" : "none"} />
           </button>
         )}
       </div>
@@ -135,9 +135,9 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
           <ChannelAvatar name={video.channel} channelId={video.channel_id} url={video.channel_thumb} />
         </button>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[14px] font-normal leading-[20px] clamp-2 text-[#f1f1f1] min-h-[40px]">{video.title}</h3>
-          <button onClick={openChannel} className="block mt-1 text-[12px] leading-[18px] text-[#aaa] hover:text-[#f1f1f1] truncate max-w-full">{video.channel || "Unknown channel"}</button>
-          <p className="text-[12px] leading-[18px] text-[#aaa] truncate">
+          <h3 className="text-[14px] font-normal leading-[20px] clamp-2 text-[var(--yt-text)] min-h-[40px]">{video.title}</h3>
+          <button onClick={openChannel} className="block mt-1 text-[12px] leading-[18px] text-[var(--yt-text-2)] hover:text-[var(--yt-text)] truncate max-w-full">{video.channel || "Unknown channel"}</button>
+          <p className="text-[12px] leading-[18px] text-[var(--yt-text-2)] truncate">
             {[viewsText(video), timeAgo(video.published)].filter(Boolean).join(" · ")}
           </p>
         </div>

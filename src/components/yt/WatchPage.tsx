@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchVideo, fetchComments, getActiveSource, type YtVideoFull, type YtComment } from "@/lib/yt-api";
 import { useRouter } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
 import { formatViews, formatCount, timeAgo, fullDate } from "@/lib/yt-format";
+import { loadYouTubeIframeAPI } from "@/lib/yt-embed-api";
 import VideoPlayer from "./VideoPlayer";
 import { VideoCard } from "./VideoCard";
 import Comments from "./Comments";
-import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Download, Scissors, Bell, AlertTriangle } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Download, Scissors, Bell, AlertTriangle, SkipForward } from "lucide-react";
 
 export default function WatchPage({ videoId, startAt }: { videoId: string; startAt?: number }) {
   const { navigate } = useRouter();
@@ -34,6 +35,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const addHistory = useYt(s => s.addHistory);
   const setProgress = useYt(s => s.setProgress);
   const autoplay = useYt(s => s.prefs.autoplay);
+  const setPrefs = useYt(s => s.setPrefs);
 
   const isSubbed = subs.some(s => s.id === (data?.channel_id || ""));
   const isLiked = liked.some(l => l.id === videoId);
@@ -70,6 +72,40 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     if (data?.related?.[0]) navigate({ name: "watch", v: data.related[0].id });
   }, [data, navigate]);
 
+  // ---- Embed player: YouTube IFrame API wiring ----
+  // Embed-fallback videos play inside YouTube's own iframe; the IFrame API
+  // lets us observe its state so "Autoplay next video" also works there.
+  const embedActive = !!(data
+    && (data.embed_fallback || forceEmbed)
+    && !(data.embed_fallback && data.playability_reason && (data.embed_blocked || data.unavailable)));
+  const embedIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const autoplayRef = useRef(autoplay);
+  const goNextRef = useRef(goNext);
+  useEffect(() => { autoplayRef.current = autoplay; goNextRef.current = goNext; }, [autoplay, goNext]);
+  useEffect(() => {
+    if (!embedActive || !embedIframeRef.current) return;
+    let player: { destroy: () => void } | null = null;
+    let dead = false;
+    loadYouTubeIframeAPI()
+      .then(YT => {
+        if (dead || !embedIframeRef.current) return;
+        try {
+          player = new YT.Player(embedIframeRef.current, {
+            events: {
+              onStateChange: (e: { data: number }) => {
+                if (e.data === 0 && autoplayRef.current) goNextRef.current(); // ENDED
+              },
+            },
+          });
+        } catch { /* API attach failed — embed still plays */ }
+      })
+      .catch(() => { /* script blocked — embed still plays */ });
+    return () => {
+      dead = true;
+      try { player?.destroy(); } catch { /* iframe already gone */ }
+    };
+  }, [embedActive, data?.id]);
+
   if (loading) {
     return (
       <div className="max-w-[1280px] mx-auto px-2 sm:px-6 pt-4 pb-10">
@@ -90,15 +126,15 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     const reason = err || data?.playability_reason || "This video is unavailable";
     return (
       <div className="max-w-[560px] mx-auto px-6 pt-20 pb-10 text-center">
-        <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[#272727] flex items-center justify-center">
-          <AlertTriangle className="w-8 h-8 text-[#aaa]" />
+        <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[var(--yt-bg-elev2)] flex items-center justify-center">
+          <AlertTriangle className="w-8 h-8 text-[var(--yt-text-2)]" />
         </div>
-        <h1 className="text-[20px] font-bold text-[#f1f1f1] mb-3">Video unavailable</h1>
-        <p className="text-[14px] leading-[20px] text-[#aaa] mb-8">{reason}</p>
+        <h1 className="text-[20px] font-bold text-[var(--yt-text)] mb-3">Video unavailable</h1>
+        <p className="text-[14px] leading-[20px] text-[var(--yt-text-2)] mb-8">{reason}</p>
         <div className="flex items-center justify-center gap-3">
-          <button onClick={() => navigate({ name: "home" })} className="px-5 py-2.5 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-[14px]">Go to home</button>
+          <button onClick={() => navigate({ name: "home" })} className="px-5 py-2.5 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[14px]">Go to home</button>
           {data?.id && (
-            <a href={`https://www.youtube.com/watch?v=${data.id}`} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 rounded-full bg-[#f1f1f1] text-[#0f0f0f] text-[14px] font-medium">
+            <a href={`https://www.youtube.com/watch?v=${data.id}`} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 rounded-full bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)] text-[14px] font-medium">
               Watch on YouTube
             </a>
           )}
@@ -132,14 +168,14 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             style={v.thumb_lg || v.thumb ? { backgroundImage: `linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.72)), url(${v.thumb_lg || v.thumb})` } : undefined}
             data-testid="blocked-video"
           >
-            <AlertTriangle className="w-10 h-10 text-[#ddd] mb-4" />
+            <AlertTriangle className="w-10 h-10 text-[var(--yt-text-2)] mb-4" />
             <h2 className="text-white text-[17px] font-medium mb-2">Video unavailable</h2>
-            <p className="text-[#ddd]/80 text-[13px] leading-[18px] max-w-[480px]">{blockedMessage}</p>
+            <p className="text-[var(--yt-text-2)] text-[13px] leading-[18px] max-w-[480px]">{blockedMessage}</p>
             <a
               href={`https://www.youtube.com/watch?v=${v.id}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-5 px-5 py-2.5 rounded-full bg-[#f1f1f1] text-[#0f0f0f] text-[14px] font-medium"
+              className="mt-5 px-5 py-2.5 rounded-full bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)] text-[14px] font-medium"
             >
               Watch on YouTube
             </a>
@@ -150,7 +186,9 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             style={{ backgroundImage: v.thumb_lg || v.thumb ? `url(${v.thumb_lg || v.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
           >
             <iframe
-              src={`https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1&playsinline=1&rel=0&modestbranding=1${startAt ? `&start=${Math.floor(startAt)}` : ""}`}
+              key={v.id}
+              ref={embedIframeRef}
+              src={`https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1${startAt ? `&start=${Math.floor(startAt)}` : ""}`}
               title={v.title}
               className="w-full h-full border-0 relative z-10"
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
@@ -162,18 +200,46 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           <VideoPlayer video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onNext={goNext} onProgress={onProgress} onFallback={handlePlayerFallback} />
         )}
         {(v.embed_fallback || forceEmbed) && !blockedMessage && (
-          <p className="px-4 sm:px-0 py-2 text-[12px] text-[#aaa] bg-[#1a1a1a] sm:rounded-lg sm:mt-2 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#ffb13b]" />
+          <p className="px-4 sm:px-0 py-2 text-[12px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev)] sm:rounded-lg sm:mt-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#ffb13b] shrink-0" />
             {standaloneMode
-              ? "Playing via the official YouTube player — ads may appear on monetized videos."
+              ? "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one."
               : communityMode
-              ? "Community mode — playing via the official embed (ads may appear on monetized videos)."
-              : "Playing via the official YouTube player — ads may appear on monetized videos."}
+              ? "Community mode — playing via the official embed (ads may appear on monetized videos). Use Skip video below to jump to the next one."
+              : "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one."}
           </p>
         )}
 
+        {/* PLAYER BAR — always visible in BOTH player modes so playback
+            controls (autoplay + skip-entire-video) are always discoverable,
+            even when the video plays inside YouTube's own embed iframe. */}
+        {!blockedMessage && (
+          <div className="flex items-center justify-between gap-3 px-3 sm:px-0 py-2 mt-1 border-b border-[var(--yt-border)]">
+            <button
+              onClick={() => setPrefs({ autoplay: !autoplay })}
+              role="switch"
+              aria-checked={autoplay}
+              aria-label="Autoplay next video"
+              className="flex items-center gap-2.5 py-1"
+            >
+              <span className="text-[13px] font-medium text-[var(--yt-text)]">Autoplay</span>
+              <span className={`relative w-10 h-5 rounded-full transition-colors ${autoplay ? "bg-[var(--yt-blue)]" : "bg-[var(--yt-switch)]"}`}>
+                <span className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white transition-all ${autoplay ? "left-[22px]" : "left-[3px]"}`} />
+              </span>
+            </button>
+            <button
+              onClick={goNext}
+              disabled={!v.related?.[0]}
+              className={`flex items-center gap-2 h-8 px-3.5 rounded-full text-[13px] font-medium shrink-0 ${v.related?.[0] ? "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]" : "opacity-40 pointer-events-none"}`}
+              title="Skip to the next video"
+            >
+              <SkipForward className="w-4 h-4" /> Skip video
+            </button>
+          </div>
+        )}
+
         {/* title */}
-        <h1 className="px-3 sm:px-0 mt-3 text-[18px] sm:text-[20px] font-medium leading-[26px] text-[#f1f1f1]">{v.title || "Untitled"}</h1>
+        <h1 className="px-3 sm:px-0 mt-2 text-[18px] sm:text-[20px] font-medium leading-[26px] text-[var(--yt-text)]">{v.title || "Untitled"}</h1>
 
         {/* channel + actions row */}
         <div className="px-3 sm:px-0 mt-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
@@ -187,20 +253,20 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
 
                 <img src={v.channel_thumb} alt="" className="w-10 h-10 rounded-full object-cover" />
               ) : (
-                <span className="w-10 h-10 rounded-full bg-[#3ea6ff] text-[#0f0f0f] font-bold text-lg flex items-center justify-center">
+                <span className="w-10 h-10 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] font-bold text-lg flex items-center justify-center">
                   {(v.channel || "?")[0]?.toUpperCase()}
                 </span>
               )}
             </button>
             <div className="min-w-0">
-              <button onClick={() => v.channel_id && navigate({ name: "channel", id: v.channel_id })} className="block text-[16px] font-medium truncate hover:text-[#f1f1f1]/90">
+              <button onClick={() => v.channel_id && navigate({ name: "channel", id: v.channel_id })} className="block text-[16px] font-medium truncate hover:text-[var(--yt-text)]">
                 {v.channel || "Unknown"}
               </button>
-              <p className="text-[12px] text-[#aaa] truncate">{v.channel_subs || `${formatViews(v.views)} subscribers`}</p>
+              <p className="text-[12px] text-[var(--yt-text-2)] truncate">{v.channel_subs || `${formatViews(v.views)} subscribers`}</p>
             </div>
             <button
               onClick={() => toggleSub({ id: v.channel_id || v.channel, name: v.channel, avatar: v.channel_thumb || "", subscribers: v.channel_subs || "" })}
-              className={`ml-2 shrink-0 h-9 px-4 rounded-full text-[14px] font-medium flex items-center gap-2 transition-colors ${isSubbed ? "bg-[#272727] text-[#f1f1f1] hover:bg-[#3f3f3f]" : "bg-[#f1f1f1] text-[#0f0f0f] hover:bg-[#d9d9d9]"}`}
+              className={`ml-2 shrink-0 h-9 px-4 rounded-full text-[14px] font-medium flex items-center gap-2 transition-colors ${isSubbed ? "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]" : "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)] hover:bg-[var(--yt-invert-hover)]"}`}
             >
               {isSubbed && <Bell className="w-4 h-4" />}
               {isSubbed ? "Subscribed" : "Subscribe"}
@@ -209,39 +275,39 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
 
           {/* actions — YouTube mobile pattern: pill row, horizontally scrollable */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
-            <div className="flex bg-[#272727] rounded-full h-9 shrink-0">
+            <div className="flex bg-[var(--yt-bg-elev2)] rounded-full h-9 shrink-0">
               <button
                 onClick={() => v.title && toggleLike({ id: v.id, title: v.title, channel: v.channel, channel_id: v.channel_id, thumb: v.thumb_lg || "", views: String(v.views ?? ""), duration: "", published: "" })}
-                className={`flex items-center gap-2 px-4 rounded-l-full text-[14px] hover:bg-[#3f3f3f] ${isLiked ? "text-[#3ea6ff]" : "text-[#f1f1f1]"}`}
+                className={`flex items-center gap-2 px-4 rounded-l-full text-[14px] hover:bg-[var(--yt-hover)] ${isLiked ? "text-[var(--yt-blue)]" : "text-[var(--yt-text)]"}`}
                 aria-pressed={isLiked}
               >
-                <ThumbsUp className="w-5 h-5" fill={isLiked ? "#3ea6ff" : "none"} />
+                <ThumbsUp className="w-5 h-5" style={isLiked ? { fill: "var(--yt-blue)" } : undefined} />
                 {likeCount && <span className="tabular-nums">{likeCount}</span>}
               </button>
               <div className="w-px bg-white/15 my-2" />
               <button
                 onClick={() => toggleDislike(v.id)}
-                className={`px-4 rounded-r-full hover:bg-[#3f3f3f] ${isDisliked ? "text-[#3ea6ff]" : "text-[#f1f1f1]"}`}
+                className={`px-4 rounded-r-full hover:bg-[var(--yt-hover)] ${isDisliked ? "text-[var(--yt-blue)]" : "text-[var(--yt-text)]"}`}
                 aria-label="Dislike"
               >
-                <ThumbsDown className="w-5 h-5" fill={isDisliked ? "#3ea6ff" : "none"} />
+                <ThumbsDown className="w-5 h-5" style={isDisliked ? { fill: "var(--yt-blue)" } : undefined} />
               </button>
             </div>
             <button
               onClick={() => { navigator.clipboard?.writeText(`${location.origin}/?v=${v.id}`).catch(() => {}); }}
-              className="flex items-center gap-2 h-9 px-4 rounded-full bg-[#272727] text-[14px] hover:bg-[#3f3f3f] shrink-0"
+              className="flex items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
             >
               <Share2 className="w-5 h-5" /> Share
             </button>
             <button
               onClick={() => { window.open(`https://www.youtube.com/watch?v=${v.id}`, "_blank", "noopener"); }}
-              className="hidden sm:flex items-center gap-2 h-9 px-4 rounded-full bg-[#272727] text-[14px] hover:bg-[#3f3f3f] shrink-0"
+              className="hidden sm:flex items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
               title="Open on YouTube"
             >
               <Download className="w-5 h-5" /> Download
             </button>
             <button
-              className="flex sm:hidden items-center gap-2 h-9 px-4 rounded-full bg-[#272727] text-[14px] hover:bg-[#3f3f3f] shrink-0"
+              className="flex sm:hidden items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
               onClick={() => { navigator.clipboard?.writeText(`https://www.youtube.com/watch?v=${v.id}`).catch(() => {}); }}
               title="Copy video link"
             >
@@ -249,7 +315,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             </button>
             <button
               onClick={() => v.title && toggleLater({ id: v.id, title: v.title, channel: v.channel, channel_id: v.channel_id, thumb: v.thumb_lg || "", views: String(v.views ?? ""), duration: "", published: "" })}
-              className={`flex items-center gap-2 h-9 px-4 rounded-full text-[14px] shrink-0 ${isLater ? "bg-[#f1f1f1] text-[#0f0f0f]" : "bg-[#272727] text-[#f1f1f1] hover:bg-[#3f3f3f]"}`}
+              className={`flex items-center gap-2 h-9 px-4 rounded-full text-[14px] shrink-0 ${isLater ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]"}`}
             >
               <BookmarkPlus className="w-5 h-5" /> {isLater ? "Saved" : "Save"}
             </button>
@@ -258,7 +324,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
 
         {/* description */}
         <div
-          className="px-3 sm:px-0 mt-3 rounded-xl bg-[#272727]/70 p-3 cursor-pointer hover:bg-[#272727]"
+          className="px-3 sm:px-0 mt-3 rounded-xl bg-[var(--yt-elev2-70)] p-3 cursor-pointer hover:bg-[var(--yt-bg-elev2)]"
           onClick={() => setDescOpen(o => !o)}
         >
           <p className="text-[14px] font-medium">
@@ -267,20 +333,20 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             {v.embed_fallback ? "" : " · streaming ad-free"}
           </p>
           {v.description && (
-            <p className={`mt-2 text-[14px] leading-[22px] whitespace-pre-wrap text-[#ddd] ${descOpen ? "" : "clamp-2"}`}>
+            <p className={`mt-2 text-[14px] leading-[22px] whitespace-pre-wrap text-[var(--yt-text-2)] ${descOpen ? "" : "clamp-2"}`}>
               {v.description}
             </p>
           )}
           {(v.chapters?.length || 0) > 0 && descOpen && (
             <div className="mt-3 space-y-1">
               {v.chapters.map((c, i) => (
-                <button key={i} className="block text-[13px] text-[#3ea6ff] hover:underline" onClick={(e) => e.stopPropagation()}>
+                <button key={i} className="block text-[13px] text-[var(--yt-blue)] hover:underline" onClick={(e) => e.stopPropagation()}>
                   {Math.floor(c.start / 60)}:{String(Math.floor(c.start % 60)).padStart(2, "0")} — {c.title}
                 </button>
               ))}
             </div>
           )}
-          <button className="mt-1 text-[14px] font-medium text-[#f1f1f1]">{descOpen ? "Show less" : "…more"}</button>
+          <button className="mt-1 text-[14px] font-medium text-[var(--yt-text)]">{descOpen ? "Show less" : "…more"}</button>
         </div>
 
         {/* comments */}
@@ -293,7 +359,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
       <aside className="w-full xl:w-[402px] shrink-0 px-3 sm:px-0 mt-6 xl:mt-0">
         <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
           {["All", "From this channel", "Related", "Recently uploaded", "Watched"].map((chip, i) => (
-            <span key={chip} className={`shrink-0 h-8 px-3 rounded-lg text-[13px] font-medium flex items-center ${i === 0 ? "bg-[#f1f1f1] text-[#0f0f0f]" : "bg-[#272727] text-[#f1f1f1]"}`}>{chip}</span>
+            <span key={chip} className={`shrink-0 h-8 px-3 rounded-lg text-[13px] font-medium flex items-center ${i === 0 ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)]"}`}>{chip}</span>
           ))}
         </div>
         <div className="space-y-2">

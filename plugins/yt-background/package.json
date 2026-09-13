@@ -1,0 +1,20 @@
+{
+  "name": "yt-background",
+  "version": "1.0.0",
+  "description": "ytapp local Capacitor plugin — background media playback (foreground service + MediaSession + lock-screen notification with Play/Pause/Next/Close)",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "files": [
+    "android",
+    "dist"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^7.0.0"
+  }
+}

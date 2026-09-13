@@ -62,32 +62,56 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   signature), always-on Next-video button, Autoplay toggle in the player
   settings menu, PiP button, refreshed app icon (10/10 VLM-rated), search
   channel-header overlap fix, and this handover/worklog discipline.
+- **Phase 9 — Premium features + theme system + Releases** (2026-09-13,
+  latest): background playback (Android foreground-service plugin), audio
+  mode, app-level player bar (the skip-feature discoverability fix), the
+  YouTube IFrame API for embed autoplay, full dark/light/device theming, and
+  GitHub Releases automation (v1.0.0 + v1.1.0 published). See §3.
 
-## 3. Current state (as of 2026-09-13, end of phase 8)
+## 3. Current state (as of 2026-09-13, end of phase 9)
 
 - ✅ **Standalone mode is the default story on Android**: home/search/watch/
   comments/channels/Shorts/suggestions all hit YouTube InnerTube directly
   from the device via CapacitorHttp. Infinite scroll verified 172+ videos.
+- ✅ **Premium-style background playback (Android)**: while a direct-stream
+  video plays, the local `yt-background` Capacitor plugin runs a
+  `mediaPlayback` foreground service — the WebView keeps streaming when the
+  app is backgrounded or the screen is off; a MediaStyle lock-screen
+  notification (Play/Pause/Next/Close) + native MediaSession round-trip
+  control into the WebView player (`src/lib/yt-native.ts`). Toggle: Settings
+  → Playback → Background play (default on). Verified to the fullest extent
+  possible off-device: the APK with the plugin builds and carries both
+  classes + merged manifest entries (local SDK build + CI).
+- ✅ **Audio mode (Premium data saver)**: player settings menu + Settings
+  toggle — swaps to the best audio-only stream (m4a/webm opus), keeps
+  position, shows thumbnail + chip. E2E-verified itag 18 → 251 live swap.
+- ✅ **Skip-video discoverability**: an app-level player bar under the player
+  in BOTH modes (custom player AND official embed): `Autoplay` switch +
+  `Skip video →` button (next related video). The YouTube IFrame API
+  (`enablejsapi=1`, `src/lib/yt-embed-api.ts`) observes embed ENDED so
+  autoplay-next works for embed-fallback videos too. This fixed the user's
+  "can't find the skip feature" — those controls used to live only inside
+  the custom player, which never renders in embed mode.
+- ✅ **Theme system**: dark / light / device-theme with YouTube's exact
+  palettes (CSS vars in globals.css, `html.yt-light` overrides, Appearance
+  setting, pre-paint boot script). 292 colors converted across 13 components
+  via `scripts/theme-convert.py`. Player internals + Shorts stay black by
+  design (YouTube does the same).
 - ✅ **Playback ladder (per video)**: server-mode direct streams → standalone
   ANDROID_VR direct googlevideo (combined-codec detection + TVHTML5
   visitorData recovery) → progressive MP4 → official embed (bot-gated videos;
-  honest "ads may appear" notice). Verified: direct playback of
-  `dQw4w9WgXcQ` playing with advancing playhead; gated video mounts embed.
-- ✅ **Shorts**: vertical snap feed, true 9:16 sizing (`min(100%, vh*9/16)`),
-  immersive (no header/bottom nav), per-short resolution (direct player
-  first, embed fallback), oEmbed pre-validation drops dead cards, red
-  Subscribe pill, rail with counts.
-- ✅ **Player UX**: double-tap left/right = ±10s seek with expanding ripple
-  (E2E-verified both directions); tap = show-controls/pause (touch) vs
-  click/dblclick semantics (desktop); Next button always skips to the next
-  related video; settings menu has Quality / Playback speed / Subtitles /
-  **Autoplay toggle**; PiP button (desktop); keyboard shortcuts.
-- ✅ **Responsive**: landscape phones get a theater player
-  (height-filling, 16:9-derived width — measured exact fit); MiniSidebar
-  hidden on watch below xl; search channel header no longer overlaps;
-  feed titles regular-weight (YouTube hierarchy).
-- ✅ App icon v3: white tile + flat red play button (VLM 10/10).
-- ✅ CI: `build-android.yml` + `build-macos.yml` build APKs + DMG per push.
+  honest "ads may appear" notice).
+- ✅ **Shorts**: vertical snap feed, true 9:16 sizing, immersive, per-short
+  resolution (direct player first, embed fallback), oEmbed pre-validation.
+- ✅ **Player UX**: double-tap ±10s seek with ripple; tap = show/pause;
+  Next always skips the whole video; settings menu = Quality / Speed /
+  Subtitles / Autoplay / Background play (native) / Audio mode; PiP
+  (desktop); keyboard shortcuts; W3C MediaSession on web.
+- ✅ **Releases**: `v*` tag push → `.github/workflows/release.yml` builds
+  Android + macOS and attaches `ytapp-<v>-debug.apk`,
+  `-release-unsigned.apk`, `-macos-intel.dmg/.zip` to a GitHub Release
+  (versionCode stamped from the tag). `workflow_dispatch` inputs
+  `tag_name`+`ref` backfill older commits. v1.0.0 + v1.1.0 published.
 - ⚠️ **Datacenter-IP caveat (sandbox only, NOT user devices)**: from this
   sandbox all InnerTube player clients are bot-gated for most videos and
   some embeds throw Error 153. On real phone IPs, direct streams flow
@@ -131,6 +155,22 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 12. **Dev relay pattern**: `server/index.mjs` `/api/ytb-relay` +
     `/api/ytb-suggest` + `/api/ytb-oembed` let the EXACT on-device parsing
     code run in a normal browser for E2E (`?src=standalone`).
+13. **Local Capacitor plugin (phase 9)**: `plugins/yt-background` is a
+    `file:` dependency (name in package.json deps = how `cap sync`
+    discovers it; `capacitor.plugins.json` + `capacitor.settings.gradle`
+    are generated). The plugin's AndroidManifest MERGES into the app —
+    permissions + the `mediaPlayback` service come from there, no CI
+    patching. Keep `bun.lock` in sync (`bun install`) after touching it.
+14. **Theme rule (phase 9)**: page-level colors must use the `--yt-*` CSS
+    variables (see globals.css). `text-white`/`bg-black` are allowed ONLY on
+    always-dark surfaces (player internals, Shorts, overlays on black).
+    When adding UI, use vars — a hardcoded `text-white` made the wordmark
+    invisible in light mode once. Run
+    `rg -n "text-\[#f1f1f1\]|bg-\[#272727\]" src/components/yt` to audit.
+15. **Releases (phase 9)**: tag `v*` → `release.yml` publishes. To backfill
+    an older commit: create the tag on it, push, then dispatch `release.yml`
+    with `tag_name` + `ref` (the tag's commit predates the workflow file,
+    so the push alone triggers nothing).
 
 ## 5. Gotchas & known issues
 
@@ -202,9 +242,14 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   `?src=` debug override, continuation APIs, suggestions.
 - `src/lib/community.ts` — Piped failover adapter + `resolveDataSource()`.
 - `src/components/yt/VideoPlayer.tsx` — the player: HLS/progressive/embed
-  ladder, settings menus (quality/speed/captions/autoplay), double-tap seek
-  + ripple, minimal (Shorts) mode, SB markers, keyboard shortcuts. Touch
-  events own the seek gesture; mouse owns click/dblclick semantics.
+  ladder, settings menus (quality/speed/captions/autoplay/background-play/
+  audio-mode), double-tap seek + ripple, minimal (Shorts) mode, SB markers,
+  keyboard shortcuts, MediaSession + native background-service wiring.
+  Touch events own the seek gesture; mouse owns click/dblclick semantics.
+  NOTE: `audioOnly` is in the load-effect deps on purpose — toggling it
+  re-runs the loader, and `loadedVideoRef` makes it preserve position.
+  Effect ORDER matters: the control-handlers effect must stay BELOW the
+  `poke`/`seekBy`/`userStart` useCallback definitions (TDZ).
 - `src/components/yt/ShortsPage.tsx` — snap feed, per-short resolution
   (direct player → embed), oEmbed drop of dead cards, immersive chrome.
 - `src/components/yt/WatchPage.tsx` — watch layout, action pills,
@@ -218,7 +263,25 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 - `electron/main.cjs` — port resolution + health waits + child lifecycle.
 - `scripts/with-server.sh` — the sandbox-reaper-safe way to run E2E.
 - `scripts/critic.py` — blind VLM A/B judgment harness.
-- `scripts/generate-icons.py` — icon set v3 (flat, white tile + red button).
+- `src/lib/yt-native.ts` — native bridge wrapper: yt-background plugin calls
+  + W3C MediaSession helpers. Web = silent no-ops.
+- `src/lib/yt-embed-api.ts` — official YouTube IFrame API loader (embed
+  autoplay-next on ENDED). All failures silent — the embed plays regardless.
+- `src/lib/yt-theme.ts` — theme engine (apply/watch/boot-script) + the
+  `THEME_BOOT_SCRIPT` inline in layout.tsx.
+- `plugins/yt-background/` — the local Capacitor plugin (Android ONLY):
+  `YtBackgroundPlugin.java` (bridge) + `MediaPlaybackService.java` (FGS +
+  MediaSessionCompat + MediaStyle notification). JS dist is hand-written
+  pure JS (no build step) — keep it ES5-ish, webpack resolves `module`.
+- `scripts/theme-convert.py` — one-shot color→var conversion pass (rerun if
+  new hardcoded colors creep in).
+- `scripts/e2e-premium.sh` — the premium-feature E2E suite (14 checks).
+- `.github/workflows/release.yml` — tag-driven release builds (see §4.15).
+- Local Android toolchain in the sandbox: Temurin JDK 21 at `/home/z/jdk21`,
+  SDK at `/home/z/android-sdk` (platform 35 + build-tools 35). Use
+  `JAVA_HOME=/home/z/jdk21 ANDROID_HOME=/home/z/android-sdk`, write
+  `android/local.properties` (sdk.dir) after `cap add android`. Full
+  `assembleDebug` takes ~4 min. `android/` is gitignored — CI regenerates.
 - `.github/workflows/*` — keep Node 22 / Java 21 / Bun pins in sync with
   Capacitor major.
 

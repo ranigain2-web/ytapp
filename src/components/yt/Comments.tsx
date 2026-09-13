@@ -65,12 +65,12 @@ export default function Comments({ videoId }: { videoId: string }) {
   return (
     <section aria-label="Comments">
       <div className="flex items-center gap-4 mb-5">
-        <h2 className="text-[16px] font-medium text-[#f1f1f1]">
+        <h2 className="text-[16px] font-medium text-[var(--yt-text)]">
           {count !== null && count > 0 ? `${count.toLocaleString()} Comments` : "Comments"}
         </h2>
         <button
           onClick={() => setSort(sort === "top" ? "new" : "top")}
-          className="flex items-center gap-1.5 text-[14px] text-[#aaa] hover:text-[#f1f1f1]"
+          className="flex items-center gap-1.5 text-[14px] text-[var(--yt-text-2)] hover:text-[var(--yt-text)]"
           aria-label={sort === "top" ? "Sort by newest first" : "Sort by top comments"}
         >
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 5h18M6 12h12M10 19h4" /></svg>
@@ -81,8 +81,8 @@ export default function Comments({ videoId }: { videoId: string }) {
 
       {/* comment composer (visual only — anonymous) */}
       <div className="flex gap-4 mb-8">
-        <span className="w-10 h-10 rounded-full bg-[#3ea6ff]/20 text-[#3ea6ff] font-bold flex items-center justify-center shrink-0">Y</span>
-        <div className="flex-1 border-b border-[#303030] pb-2">
+        <span className="w-10 h-10 rounded-full bg-[var(--yt-blue)]/20 text-[var(--yt-blue)] font-bold flex items-center justify-center shrink-0">Y</span>
+        <div className="flex-1 border-b border-[var(--yt-border)] pb-2">
           <input
             placeholder="Add a comment..."
             className="w-full bg-transparent text-[14px] outline-none placeholder:text-[#888]"
@@ -105,9 +105,9 @@ export default function Comments({ videoId }: { videoId: string }) {
           ))}
         </div>
       ) : error ? (
-        <p className="text-[#aaa] text-sm">Comments are turned off.</p>
+        <p className="text-[var(--yt-text-2)] text-sm">Comments are turned off.</p>
       ) : !comments || comments.length === 0 ? (
-        <p className="text-[#aaa] text-sm">Comments are turned off.</p>
+        <p className="text-[var(--yt-text-2)] text-sm">Comments are turned off.</p>
       ) : (
         <div className="space-y-6">
           {comments.map((c, i) => (
@@ -120,21 +120,21 @@ export default function Comments({ videoId }: { videoId: string }) {
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-[13px]">
-                  <span className="font-medium text-[#f1f1f1] truncate">{c.author}</span>
-                  <span className="text-[#aaa] shrink-0">{c.time}</span>
+                  <span className="font-medium text-[var(--yt-text)] truncate">{c.author}</span>
+                  <span className="text-[var(--yt-text-2)] shrink-0">{c.time}</span>
                 </div>
-                <p className="mt-1 text-[14px] leading-[21px] text-[#ddd] whitespace-pre-wrap break-words">{c.text}</p>
-                <div className="flex items-center gap-4 mt-2 text-[#aaa]">
-                  <button className="flex items-center gap-1.5 hover:text-[#f1f1f1]" aria-label="Like comment">
+                <p className="mt-1 text-[14px] leading-[21px] text-[var(--yt-text-2)] whitespace-pre-wrap break-words">{c.text}</p>
+                <div className="flex items-center gap-4 mt-2 text-[var(--yt-text-2)]">
+                  <button className="flex items-center gap-1.5 hover:text-[var(--yt-text)]" aria-label="Like comment">
                     <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 10v11M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" /></svg>
                     {c.likes > 0 && formatCount(c.likes)}
                   </button>
-                  <button className="hover:text-[#f1f1f1]" aria-label="Dislike comment">
+                  <button className="hover:text-[var(--yt-text)]" aria-label="Dislike comment">
                     <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 14V3M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" /></svg>
                   </button>
-                  <button className="text-[12px] font-medium hover:text-[#f1f1f1]">Reply</button>
+                  <button className="text-[12px] font-medium hover:text-[var(--yt-text)]">Reply</button>
                   {c.replies > 0 && (
-                    <button className="text-[13px] font-medium text-[#3ea6ff] hover:text-[#6bc1ff]">
+                    <button className="text-[13px] font-medium text-[var(--yt-blue)] hover:text-[#6bc1ff]">
                       {c.replies} {c.replies === 1 ? "reply" : "replies"}
                     </button>
                   )}
@@ -147,7 +147,7 @@ export default function Comments({ videoId }: { videoId: string }) {
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="px-5 py-2.5 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-[14px] text-[#f1f1f1] disabled:opacity-60"
+                className="px-5 py-2.5 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[14px] text-[var(--yt-text)] disabled:opacity-60"
                 data-testid="comments-load-more"
               >
                 {loadingMore ? "Loading…" : "Show more comments"}

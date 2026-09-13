@@ -39,9 +39,9 @@ export function clearRecentSearches() {
 function SuggestionText({ text, query }: { text: string; query: string }) {
   const clean = text.replace(/\u200b/g, "");
   const idx = query && clean.toLowerCase().startsWith(query.toLowerCase()) ? query.length : 0;
-  if (idx === 0) return <span className="text-[15px] text-[#f1f1f1] truncate pr-2">{clean}</span>;
+  if (idx === 0) return <span className="text-[15px] text-[var(--yt-text)] truncate pr-2">{clean}</span>;
   return (
-    <span className="text-[15px] text-[#f1f1f1] truncate pr-2">
+    <span className="text-[15px] text-[var(--yt-text)] truncate pr-2">
       <span className="font-normal">{clean.slice(0, idx)}</span>
       <span className="font-medium">{clean.slice(idx)}</span>
     </span>
@@ -121,20 +121,20 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
 
   return (
     <div
-      className="fixed inset-0 z-[70] bg-[#0f0f0f] yt-search-overlay"
+      className="fixed inset-0 z-[70] bg-[var(--yt-bg)] yt-search-overlay"
       role="dialog"
       aria-label="Search"
     >
       {/* top bar */}
-      <div className="h-14 flex items-center gap-2 px-2 border-b border-[#272727]/60">
+      <div className="h-14 flex items-center gap-2 px-2 border-b border-[var(--yt-border)]">
         <button
           onClick={onClose}
           aria-label="Close search"
-          className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-[#272727] active:bg-[#3f3f3f] shrink-0"
+          className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-[var(--yt-bg-elev2)] active:bg-[var(--yt-hover)] shrink-0"
         >
-          <ArrowLeft className="w-6 h-6 text-[#f1f1f1]" />
+          <ArrowLeft className="w-6 h-6 text-[var(--yt-text)]" />
         </button>
-        <div className="flex-1 flex items-center h-11 rounded-full border border-[#303030] bg-[#121212] min-w-0">
+        <div className="flex-1 flex items-center h-11 rounded-full border border-[var(--yt-border)] bg-[var(--yt-bg-input)] min-w-0">
           <input
             ref={inputRef}
             value={q}
@@ -145,7 +145,7 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
             autoComplete="off"
             autoCorrect="off"
             enterKeyHint="search"
-            className="flex-1 min-w-0 bg-transparent text-[16px] text-[#f1f1f1] placeholder:text-[#888] outline-none px-4"
+            className="flex-1 min-w-0 bg-transparent text-[16px] text-[var(--yt-text)] placeholder:text-[#888] outline-none px-4"
           />
           {q && (
             <button
@@ -153,15 +153,15 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
               aria-label="Clear search"
               className="w-11 h-11 rounded-full flex items-center justify-center shrink-0"
             >
-              <X className="w-5 h-5 text-[#aaa]" />
+              <X className="w-5 h-5 text-[var(--yt-text-2)]" />
             </button>
           )}
         </div>
         <button
           aria-label="Search with your voice"
-          className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-[#272727] shrink-0"
+          className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-[var(--yt-bg-elev2)] shrink-0"
         >
-          <Mic className="w-5 h-5 text-[#f1f1f1]" />
+          <Mic className="w-5 h-5 text-[var(--yt-text)]" />
         </button>
       </div>
 
@@ -174,10 +174,10 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
         )}
         {!q.trim() && recents.length > 0 && (
           <div className="px-4 pt-4 pb-1 flex items-center justify-between">
-            <span className="text-[13px] font-medium text-[#aaa]">Recent searches</span>
+            <span className="text-[13px] font-medium text-[var(--yt-text-2)]">Recent searches</span>
             <button
               onClick={() => { clearRecentSearches(); setRecents([]); }}
-              className="text-[13px] text-[#3ea6ff] px-2 py-1"
+              className="text-[13px] text-[var(--yt-blue)] px-2 py-1"
             >
               Clear
             </button>
@@ -187,12 +187,12 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
           <button
             key={`${item.text}-${i}`}
             onClick={() => submit(item.text)}
-            className="w-full flex items-center gap-4 px-4 py-3 hover:bg-[#272727]/60 active:bg-[#272727] text-left"
+            className="w-full flex items-center gap-4 px-4 py-3 hover:bg-[var(--yt-elev2-60)] active:bg-[var(--yt-bg-elev2)] text-left"
             data-testid={item.exact ? "suggestion-exact" : "suggestion-item"}
           >
             {("recent" in item && item.recent)
-              ? <Clock className="w-5 h-5 text-[#aaa] shrink-0" />
-              : <Search className="w-5 h-5 text-[#aaa] shrink-0" />}
+              ? <Clock className="w-5 h-5 text-[var(--yt-text-2)] shrink-0" />
+              : <Search className="w-5 h-5 text-[var(--yt-text-2)] shrink-0" />}
             <SuggestionText text={item.text} query={q.trim()} />
           </button>
         ))}

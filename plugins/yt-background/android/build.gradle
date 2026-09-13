@@ -1,0 +1,21 @@
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.robonuggets.ytbackground'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 23
+        targetSdk 35
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+    implementation 'androidx.media:media:1.7.0'
+}

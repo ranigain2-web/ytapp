@@ -7,8 +7,12 @@ import { absStream, fetchSponsorBlock } from "@/lib/yt-api";
 import { formatTime } from "@/lib/yt-format";
 import { useYt } from "@/lib/yt-store";
 import {
+  addControlListener, nativeBackgroundDisable, nativeBackgroundEnable, nativeBackgroundUpdate, isNativeApp,
+  setMediaHandlers, setMediaMetadata, setMediaPlaybackState, setMediaPositionState, clearMediaHandlers,
+} from "@/lib/yt-native";
+import {
   Play, Pause, SkipForward, Volume2, Volume1, VolumeX, Maximize, Minimize,
-  Settings, Subtitles, ArrowLeft, Gauge, Check, ChevronRight, ChevronLeft, PictureInPicture2,
+  Settings, Subtitles, ArrowLeft, Gauge, Check, ChevronRight, ChevronLeft, PictureInPicture2, Headphones,
 } from "lucide-react";
 
 interface Props {
@@ -68,13 +72,34 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
   // autoplay preference (also switchable from the settings menu, like YouTube)
   const autoplay = useYt(s => s.prefs.autoplay);
   const setAutoplay = useYt(s => s.setPrefs);
+  // Premium-style preferences: background playback + audio-only mode
+  const backgroundPlay = useYt(s => s.prefs.backgroundPlay);
+  const audioOnly = useYt(s => s.prefs.audioOnly);
+
+  // stable next-video handle for media-session / notification actions
+  const onNextRef = useRef(onNext);
+  useEffect(() => { onNextRef.current = onNext; }, [onNext]);
+  // native background service bookkeeping
+  const bgActiveRef = useRef(false);
+  const positionRef = useRef(0);
+  const durationRef = useRef(0);
+  const lastSyncRef = useRef(0);
+  // last video id seen by the load effect — distinguishes "new video" from
+  // "same video, source toggled (audio mode)" so playback position survives
+  const loadedVideoRef = useRef<string>("");
 
   const fallbackFormat = useMemo(() => {
     // progressive fallback: pick best combined mp4 up to 720p
     const combined = video.formats.filter(f => f.has_video && f.has_audio && /mp4/.test(f.mime));
     return combined.sort((a, b) => (b.height || 0) - (a.height || 0)).find(f => (f.height || 0) <= 720) || combined[0] || video.formats.find(f => f.has_video && f.has_audio);
   }, [video.formats]);
-  const noSource = !video.hls && !fallbackFormat?.url;
+  // Premium "audio mode": best audio-only stream (m4a/webm) — saves data and
+  // is the source used for pure listening / background audio.
+  const audioFormat = useMemo(() => {
+    const audio = video.formats.filter(f => f.has_audio && !f.has_video && /mp4|webm/.test(f.mime));
+    return audio.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0] || null;
+  }, [video.formats]);
+  const noSource = !video.hls && !fallbackFormat?.url && !(audioOnly && audioFormat?.url);
 
   // no directly-playable stream at all → hand off to the embed player
   useEffect(() => {
@@ -87,6 +112,24 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     if (!el) return;
     let hls: Hls | null = null;
     manifestOkRef.current = false;
+
+    // audio-mode toggle for the SAME video: keep position + playing state
+    const isToggle = loadedVideoRef.current === video.id;
+    loadedVideoRef.current = video.id;
+    const keepPos = isToggle && el.readyState >= 1 ? el.currentTime : 0;
+    const wasPlaying = isToggle ? !el.paused : true;
+    const resumeAfterLoad = () => {
+      if (keepPos > 0.5) {
+        const apply = () => {
+          try { el.currentTime = keepPos; } catch { /* not seekable yet */ }
+          if (wasPlaying) el.play().catch(() => {});
+        };
+        if (el.readyState >= 1) apply();
+        else el.addEventListener("loadedmetadata", apply, { once: true });
+      } else if (wasPlaying) {
+        el.play().catch(() => {});
+      }
+    };
 
     // progressive fallback switcher: used when HLS dies before levels load
     // (CORS-blocked manifests, gated IPs, …)
@@ -101,7 +144,13 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       }
     };
 
-    if (video.hls && Hls.isSupported()) {
+    const useAudio = audioOnly && audioFormat?.url;
+    if (useAudio) {
+      // Premium audio mode: audio-only stream + poster art — saves data
+      const src = absStream(audioFormat!.url!);
+      el.src = `${src}${src.includes("?") ? "&" : "?"}_=${Date.now()}`;
+      resumeAfterLoad();
+    } else if (video.hls && Hls.isSupported()) {
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
@@ -151,8 +200,10 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     } else if (video.hls && el.canPlayType("application/vnd.apple.mpegurl")) {
       const src2 = absStream(video.hls);
       el.src = `${src2}${src2.includes("?") ? "&" : "?"}_=${Date.now()}`; // Safari native HLS
+      resumeAfterLoad();
     } else if (fallbackFormat?.url) {
       el.src = absStream(fallbackFormat.url);
+      resumeAfterLoad();
     }
     // no-source case is handled in render via derived noSource flag
 
@@ -160,7 +211,7 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       hls?.destroy();
       if (hlsRef.current === hls) hlsRef.current = null;
     };
-  }, [video.id, video.hls, fallbackFormat]);
+  }, [video.id, video.hls, fallbackFormat, audioOnly, audioFormat]);
 
   // --- Captions tracks (native <track>) ---
   useEffect(() => {
@@ -206,8 +257,18 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     if (!el) return;
     const onTime = () => {
       setCurrent(el.currentTime);
+      positionRef.current = el.currentTime;
+      durationRef.current = el.duration || durationRef.current;
       if (el.buffered.length) setBuffered(el.buffered.end(el.buffered.length - 1));
       onProgress?.(el.currentTime, el.duration || 0);
+      // Premium sync: lock-screen position + native notification (throttled ~5s)
+      if (Math.abs(el.currentTime - lastSyncRef.current) > 5) {
+        lastSyncRef.current = el.currentTime;
+        if (bgActiveRef.current) {
+          nativeBackgroundUpdate({ playing: !el.paused, position: el.currentTime, duration: el.duration || 0 });
+        }
+        setMediaPositionState(el.currentTime, el.duration || 0, el.playbackRate);
+      }
       // SponsorBlock auto-skip
       if (sbSegments.length) {
         for (const s of sbSegments) {
@@ -270,6 +331,49 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       else el.addEventListener("loadedmetadata", apply, { once: true });
     }
   }, [startAt]);
+
+  // --- Premium: MediaSession metadata / state / handlers + native controls ---
+  // Lock screen (web + Android WebView via W3C API) and the yt-background
+  // notification / headset buttons both land here.
+  useEffect(() => {
+    setMediaMetadata({
+      title: video.title || "YouTube",
+      artist: video.channel || "",
+      artwork: video.thumb_lg || video.thumb || "",
+      duration: duration || video.duration || 0,
+    });
+  }, [video.id, video.title, video.channel, video.thumb_lg, video.thumb, video.duration, duration]);
+
+  useEffect(() => {
+    setMediaPlaybackState(playing);
+    if (bgActiveRef.current) {
+      nativeBackgroundUpdate({ playing, position: positionRef.current, duration: durationRef.current, title: video.title, artist: video.channel });
+    }
+  }, [playing, video.title, video.channel]);
+
+  // native foreground service: alive while playing (and pref on), gone otherwise
+  useEffect(() => {
+    const want = playing && backgroundPlay;
+    if (want && !bgActiveRef.current) {
+      bgActiveRef.current = true;
+      nativeBackgroundEnable({
+        title: video.title || "YouTube",
+        artist: video.channel || "",
+        artwork: video.thumb_lg || video.thumb || "",
+        duration: durationRef.current || video.duration || 0,
+      });
+    } else if (!want && bgActiveRef.current) {
+      bgActiveRef.current = false;
+      nativeBackgroundDisable();
+    }
+  }, [playing, backgroundPlay, video.id, video.title, video.channel, video.thumb_lg, video.thumb, video.duration]);
+
+  useEffect(() => () => {
+    if (bgActiveRef.current) {
+      bgActiveRef.current = false;
+      nativeBackgroundDisable();
+    }
+  }, []);
 
   // --- Controls auto-hide ---
   const poke = useCallback(() => {
@@ -403,6 +507,28 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     return () => window.removeEventListener("keydown", onKey);
   }, [togglePlay, seekBy, toggleFullscreen, toggleMute, setVol, volume, poke]);
 
+  // --- Premium: lock-screen / notification / headset control handlers ---
+  // W3C MediaSession (browser lock screens + media keys) AND the yt-background
+  // notification / MediaSession buttons land here.
+  useEffect(() => {
+    setMediaHandlers({
+      play: () => { const el = videoRef.current; if (el && el.paused) { if (!started) userStart(); else el.play().catch(() => {}); } },
+      pause: () => videoRef.current?.pause(),
+      next: () => onNextRef.current?.(),
+      seek: (to) => { const el = videoRef.current; if (el && isFinite(to)) { el.currentTime = Math.max(0, Math.min((el.duration || 0) - 0.2, to)); poke(); } },
+      seekBy: (d) => seekBy(d),
+    });
+    const off = addControlListener((e) => {
+      const el = videoRef.current;
+      if (e.action === "play") { if (el) { if (!started) userStart(); else el.play().catch(() => {}); } }
+      else if (e.action === "pause") el?.pause();
+      else if (e.action === "next") onNextRef.current?.();
+      else if (e.action === "stop") el?.pause();
+      else if (e.action === "seek" && e.seekTo != null && el) { el.currentTime = Math.max(0, Math.min((el.duration || 0) - 0.2, e.seekTo)); poke(); }
+    });
+    return () => { off(); clearMediaHandlers(); };
+  }, [started, userStart, seekBy, poke]);
+
   // --- Seek bar ---
   const pct = duration > 0 ? (current / duration) * 100 : 0;
   const bufPct = duration > 0 ? Math.min(100, (buffered / duration) * 100) : 0;
@@ -511,6 +637,13 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
         >
           <VolumeX className="w-5 h-5" /> Tap to unmute
         </button>
+      )}
+
+      {/* audio-mode indicator (Premium audio mode active) */}
+      {audioOnly && audioFormat && !error && (
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-black/80 text-white text-[12px] font-medium pointer-events-none">
+          <Headphones className="w-4 h-4" /> Audio mode
+        </div>
       )}
 
       {/* sponsorblock toast */}
@@ -647,7 +780,7 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
                     )}
                     <button
                       onClick={() => { setAutoplay({ autoplay: !autoplay }); }}
-                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10 border-t border-white/10 mt-1"
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10"
                       role="switch"
                       aria-checked={autoplay}
                     >
@@ -657,6 +790,34 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
                         <span className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white transition-all ${autoplay ? "left-[22px]" : "left-[3px]"}`} />
                       </span>
                     </button>
+                    {isNativeApp() && (
+                      <button
+                        onClick={() => { setAutoplay({ backgroundPlay: !backgroundPlay }); }}
+                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10"
+                        role="switch"
+                        aria-checked={backgroundPlay}
+                        title="Keep playing when you switch apps or turn the screen off"
+                      >
+                        <span>Background play</span>
+                        <span className={`relative w-10 h-5 rounded-full transition-colors ${backgroundPlay ? "bg-[#3ea6ff]" : "bg-white/25"}`}>
+                          <span className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white transition-all ${backgroundPlay ? "left-[22px]" : "left-[3px]"}`} />
+                        </span>
+                      </button>
+                    )}
+                    {audioFormat && (
+                      <button
+                        onClick={() => { setAutoplay({ audioOnly: !audioOnly }); }}
+                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10"
+                        role="switch"
+                        aria-checked={audioOnly}
+                        title="Play the audio-only stream and show the thumbnail — saves data"
+                      >
+                        <span className="flex items-center gap-3"><Headphones className="w-4 h-4" /> Audio mode</span>
+                        <span className={`relative w-10 h-5 rounded-full transition-colors ${audioOnly ? "bg-[#3ea6ff]" : "bg-white/25"}`}>
+                          <span className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white transition-all ${audioOnly ? "left-[22px]" : "left-[3px]"}`} />
+                        </span>
+                      </button>
+                    )}
                   </>
                 )}
                 {menu === "quality" && (

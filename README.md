@@ -9,6 +9,23 @@ custom HLS player — **no ads, no tracking**. One React codebase, three targets
 | **Android APK** | Capacitor 7 wrap → GitHub Actions builds debug + release APKs | ✅ CI on every push |
 | **macOS (Intel x64)** | Electron bundle — **fully self-contained** (frontend + backend + PO-token provider inside the .app) | ✅ CI on every push |
 
+## 📦 Downloads (Releases)
+
+Versioned releases with ready-to-install artifacts live at
+**[github.com/ranigain2-web/ytapp/releases](https://github.com/ranigain2-web/ytapp/releases)**:
+
+- `ytapp-<version>-debug.apk` — install directly on Android (fully standalone:
+  no server, no proxy, no setup). Background play, audio mode, playback
+  settings, Shorts, comments — all included.
+- `ytapp-<version>-release-unsigned.apk` — same app, release build.
+- `ytapp-<version>-macos-intel.dmg` / `.zip` — self-contained macOS app
+  (unsigned: right-click → Open on first launch).
+
+Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which builds both platforms and attaches everything to a GitHub Release with
+auto-generated notes.
+
+
 ```
 ┌──────────────────────────┐        ┌───────────────────────────────────┐
 │   React app (frontend)   │  HTTP  │        yt-api backend             │

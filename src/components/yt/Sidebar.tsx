@@ -58,20 +58,20 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
   ];
 
   const renderSection = (title: string | undefined, items: NavItem[]) => (
-    <div className="py-2 border-b border-[#272727]/60">
-      {title && <h3 className="px-6 pt-2 pb-1 text-[16px] font-medium text-[#f1f1f1]">{title}</h3>}
+    <div className="py-2 border-b border-[var(--yt-border)]">
+      {title && <h3 className="px-6 pt-2 pb-1 text-[16px] font-medium text-[var(--yt-text)]">{title}</h3>}
       {items.map((item) => {
         const active = isActive(item.route);
         return (
           <button
             key={item.label}
             onClick={() => item.route && go(item.route)}
-            className={`w-full flex items-center gap-6 px-6 h-10 rounded-lg text-[14px] transition-colors ${active ? "bg-[#272727] font-medium" : "hover:bg-[#272727]/70"}`}
+            className={`w-full flex items-center gap-6 px-6 h-10 rounded-lg text-[14px] transition-colors ${active ? "bg-[var(--yt-bg-elev2)] font-medium" : "hover:bg-[var(--yt-elev2-70)]"}`}
           >
-            <item.icon className="w-6 h-6 shrink-0 text-[#f1f1f1]" />
+            <item.icon className="w-6 h-6 shrink-0 text-[var(--yt-text)]" />
             <span className="truncate">{item.label}</span>
             {item.label === "History" && historyCount > 0 && (
-              <span className="ml-auto text-xs text-[#aaa]">{historyCount}</span>
+              <span className="ml-auto text-xs text-[var(--yt-text-2)]">{historyCount}</span>
             )}
           </button>
         );
@@ -84,19 +84,19 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
       {renderSection(undefined, main)}
 
       {subs.length > 0 && (
-        <div className="py-2 border-b border-[#272727]/60">
-          <h3 className="px-6 pt-2 pb-1 text-[16px] font-medium text-[#f1f1f1]">Subscriptions</h3>
+        <div className="py-2 border-b border-[var(--yt-border)]">
+          <h3 className="px-6 pt-2 pb-1 text-[16px] font-medium text-[var(--yt-text)]">Subscriptions</h3>
           {subs.slice(0, 12).map((ch) => (
             <button
               key={ch.id}
               onClick={() => go({ name: "channel", id: ch.id })}
-              className="w-full flex items-center gap-6 px-6 h-10 rounded-lg text-[14px] hover:bg-[#272727]/70"
+              className="w-full flex items-center gap-6 px-6 h-10 rounded-lg text-[14px] hover:bg-[var(--yt-elev2-70)]"
             >
               {ch.avatar ? (
 
                 <img src={ch.avatar} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
               ) : (
-                <span className="w-6 h-6 rounded-full bg-[#3ea6ff] text-[#0f0f0f] text-xs font-bold flex items-center justify-center shrink-0">
+                <span className="w-6 h-6 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] text-xs font-bold flex items-center justify-center shrink-0">
                   {(ch.name || "?")[0]?.toUpperCase()}
                 </span>
               )}
@@ -110,11 +110,11 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
       {renderSection("Explore", explore)}
       {renderSection(undefined, settings)}
 
-      <div className="px-6 pt-6 pb-4 border-b border-[#272727]/60">
-        <p className="text-[13px] leading-5 text-[#aaa] mb-3">
+      <div className="px-6 pt-6 pb-4 border-b border-[var(--yt-border)]">
+        <p className="text-[13px] leading-5 text-[var(--yt-text-2)] mb-3">
           Sign in to like videos, comment, and subscribe.
         </p>
-        <button className="flex items-center gap-2 h-9 px-4 rounded-full border border-[#3ea6ff] text-[14px] text-[#3ea6ff] hover:bg-[#3ea6ff]/10">
+        <button className="flex items-center gap-2 h-9 px-4 rounded-full border border-[var(--yt-blue)] text-[14px] text-[var(--yt-blue)] hover:bg-[var(--yt-blue)]/10">
           <UserRound className="w-5 h-5" /> Sign in
         </button>
       </div>
@@ -147,10 +147,10 @@ export function MiniSidebar() {
           <button
             key={item.label}
             onClick={() => item.route && navigate(item.route)}
-            className={`flex flex-col items-center justify-center gap-1 w-full py-4 rounded-lg text-[10px] ${active ? "bg-[#272727]" : "hover:bg-[#272727]/70"}`}
+            className={`flex flex-col items-center justify-center gap-1 w-full py-4 rounded-lg text-[10px] ${active ? "bg-[var(--yt-bg-elev2)]" : "hover:bg-[var(--yt-elev2-70)]"}`}
           >
-            <item.icon className="w-6 h-6 text-[#f1f1f1]" />
-            <span className="text-[#f1f1f1]">{item.label.split(" ")[0]}</span>
+            <item.icon className="w-6 h-6 text-[var(--yt-text)]" />
+            <span className="text-[var(--yt-text)]">{item.label.split(" ")[0]}</span>
           </button>
         );
       })}
@@ -169,20 +169,20 @@ export function SidebarDrawer({ open, onClose }: { open: boolean; onClose: () =>
         aria-hidden
       />
       <aside
-        className={`fixed left-0 top-0 bottom-0 z-[60] w-60 bg-[#0f0f0f] overflow-y-auto transition-transform duration-200 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed left-0 top-0 bottom-0 z-[60] w-60 bg-[var(--yt-bg)] overflow-y-auto transition-transform duration-200 ${open ? "translate-x-0" : "-translate-x-full"}`}
         aria-label="Guide"
         aria-hidden={!open}
       >
-        <div className="h-14 flex items-center gap-4 px-4 sticky top-0 bg-[#0f0f0f] z-10">
-          <button onClick={onClose} aria-label="Close guide" className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-[#272727]">
-            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="#f1f1f1" strokeWidth="1.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        <div className="h-14 flex items-center gap-4 px-4 sticky top-0 bg-[var(--yt-bg)] z-10">
+          <button onClick={onClose} aria-label="Close guide" className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-[var(--yt-bg-elev2)]">
+            <svg viewBox="0 0 24 24" className="w-6 h-6 text-[var(--yt-text)]" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
           <div className="flex items-center gap-[5px]">
             <svg viewBox="0 0 28 20" className="h-[20px] w-[28px]">
               <path d="M27.4 3.1s-.3-2-1.1-2.9c-1-1.1-2.2-1.1-2.7-1.2C19.5-1.2 14-1.2 14-1.2h-.1s-5.5 0-9.6.2c-.5.1-1.7.1-2.7 1.2C.8 1.1.5 3.1.5 3.1S.2 5.5.2 8v4c0 2.5.3 4.9.3 4.9s.3 2 1.1 2.9c1 1.1 2.4 1 3 1.2 1.4.1 9.4.2 9.4.2s5.5 0 9.6-.3c.5-.1 1.7-.1 2.7-1.2.8-.9 1.1-2.9 1.1-2.9s.3-2.4.3-4.9V8c0-2.5-.3-4.9-.3-4.9z" fill="#ff0000" />
               <path d="M11.2 13.3V5.7l7.6 3.8-7.6 3.8z" fill="#fff" />
             </svg>
-            <span className="text-white text-[18px] font-bold tracking-[-0.7px]">YouTube</span>
+            <span className="text-[var(--yt-text)] text-[18px] font-bold tracking-[-0.7px]">YouTube</span>
           </div>
         </div>
         <SidebarNavItems onNavigate={onClose} />

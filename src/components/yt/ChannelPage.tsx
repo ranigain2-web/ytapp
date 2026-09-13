@@ -48,9 +48,9 @@ export default function ChannelPage({ channelId }: { channelId: string }) {
   if (err) {
     return (
       <div className="py-20 text-center">
-        <p className="text-[#aaa] mb-2">Couldn&apos;t load this channel</p>
+        <p className="text-[var(--yt-text-2)] mb-2">Couldn&apos;t load this channel</p>
         <p className="text-sm text-[#717171] mb-6">{err}</p>
-        <button onClick={() => setRetry(r => r + 1)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-sm">
+        <button onClick={() => setRetry(r => r + 1)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-sm">
           <RefreshCw className="w-4 h-4" /> Retry
         </button>
       </div>
@@ -76,20 +76,20 @@ export default function ChannelPage({ channelId }: { channelId: string }) {
 
           <img src={c.avatar} alt={c.name} className="w-20 h-20 sm:w-32 sm:h-32 rounded-full object-cover shrink-0" />
         ) : (
-          <span className="w-20 h-20 sm:w-32 sm:h-32 rounded-full bg-[#3ea6ff] text-[#0f0f0f] text-4xl font-bold flex items-center justify-center shrink-0">
+          <span className="w-20 h-20 sm:w-32 sm:h-32 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] text-4xl font-bold flex items-center justify-center shrink-0">
             {(c.name || "?")[0]?.toUpperCase()}
           </span>
         )}
         <div className="min-w-0 flex-1">
           <h1 className="text-[24px] sm:text-[32px] font-bold truncate">{c.name || "Channel"}</h1>
-          <p className="text-[14px] text-[#aaa] mt-1">
-            <span className="text-[#f1f1f1] font-medium">@{(c.name || "").toLowerCase().replace(/\s+/g, "")}</span>
+          <p className="text-[14px] text-[var(--yt-text-2)] mt-1">
+            <span className="text-[var(--yt-text)] font-medium">@{(c.name || "").toLowerCase().replace(/\s+/g, "")}</span>
             {c.subscribers ? ` · ${c.subscribers}` : ""} · {c.videos.length} videos
           </p>
-          <p className="text-[14px] text-[#aaa] clamp-1 mt-1 max-w-[600px]">{c.description?.slice(0, 120)}</p>
+          <p className="text-[14px] text-[var(--yt-text-2)] clamp-1 mt-1 max-w-[600px]">{c.description?.slice(0, 120)}</p>
           <button
             onClick={() => toggleSub({ id: channelId, name: c.name, avatar: c.avatar, subscribers: c.subscribers })}
-            className={`mt-3 inline-flex items-center gap-2 h-10 px-4 rounded-full text-[14px] font-medium ${isSubbed ? "bg-[#272727] hover:bg-[#3f3f3f]" : "bg-[#f1f1f1] text-[#0f0f0f] hover:bg-[#d9d9d9]"}`}
+            className={`mt-3 inline-flex items-center gap-2 h-10 px-4 rounded-full text-[14px] font-medium ${isSubbed ? "bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)]" : "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)] hover:bg-[var(--yt-invert-hover)]"}`}
           >
             {isSubbed && <Bell className="w-4 h-4" />}
             {isSubbed ? "Subscribed" : "Subscribe"}
@@ -98,12 +98,12 @@ export default function ChannelPage({ channelId }: { channelId: string }) {
       </div>
 
       {/* tabs */}
-      <div className="flex gap-8 border-b border-[#272727] mb-6">
+      <div className="flex gap-8 border-b border-[var(--yt-border)] mb-6">
         {tabs.map((t, i) => (
           <button
             key={t}
             onClick={() => setTab(i)}
-            className={`pb-3 text-[16px] font-medium border-b-2 -mb-px ${i === tab ? "border-[#f1f1f1] text-[#f1f1f1]" : "border-transparent text-[#aaa] hover:text-[#ddd]"}`}
+            className={`pb-3 text-[16px] font-medium border-b-2 -mb-px ${i === tab ? "border-[var(--yt-text)] text-[var(--yt-text)]" : "border-transparent text-[var(--yt-text-2)] hover:text-[var(--yt-text-2)]"}`}
           >
             {t}
           </button>
@@ -114,12 +114,12 @@ export default function ChannelPage({ channelId }: { channelId: string }) {
         c.videos.length ? (
           <VideoGrid videos={c.videos.map(v => ({ ...v, channel: c.name, channel_id: channelId }))} />
         ) : (
-          <p className="text-[#aaa] text-sm py-10 text-center">No public videos found.</p>
+          <p className="text-[var(--yt-text-2)] text-sm py-10 text-center">No public videos found.</p>
         )
       ) : (
         <div className="max-w-[720px]">
           <h3 className="text-[16px] font-medium mb-3">Description</h3>
-          <p className="text-[14px] leading-[22px] text-[#ddd] whitespace-pre-wrap">{c.description || "No description."}</p>
+          <p className="text-[14px] leading-[22px] text-[var(--yt-text-2)] whitespace-pre-wrap">{c.description || "No description."}</p>
         </div>
       )}
     </div>

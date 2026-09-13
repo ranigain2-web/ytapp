@@ -1,0 +1,185 @@
+name: Release (APK + macOS)
+
+# Versioned releases. Two triggers:
+#  1. push a tag "v*"        → builds THAT tag's commit, attaches artifacts to
+#                               a GitHub Release for the tag (auto notes).
+#  2. workflow_dispatch      → backfill: build an arbitrary older commit and
+#                               attach its artifacts to an existing tag
+#                               (inputs: tag_name + ref). Used to publish
+#                               versions whose commits predate this workflow.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing tag to attach this release to (e.g. v1.0.0)"
+        required: true
+      ref:
+        description: "Commit SHA / branch to BUILD from (defaults to the tag_name ref)"
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  TAG_NAME: ${{ inputs.tag_name || github.ref_name }}
+
+jobs:
+  android:
+    name: Android APKs (${{ inputs.tag_name || github.ref_name }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (build ref)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install frontend deps (includes Capacitor + local yt-background plugin)
+        run: bun install --frozen-lockfile
+
+      - name: Build web app (static export)
+        env:
+          BUILD_MODE: static
+          NEXT_PUBLIC_API_BASE: ${{ vars.API_BASE || '' }}
+        run: bunx next build
+
+      - name: Add + sync Android platform
+        run: |
+          [ -d android ] || bunx cap add android
+          bunx cap sync android
+
+      - name: Apply app icons
+        run: cp -r icons/android/res/* android/app/src/main/res/
+
+      - name: Stamp version from tag
+        run: |
+          V="${TAG_NAME#v}"
+          MAJOR="${V%%.*}"; REST="${V#*.}"; MINOR="${REST%%.*}"; PATCH="${REST#*.}"
+          [ "$V" = "$REST" ] && { MINOR=0; PATCH=0; }
+          [ "$REST" = "$MINOR" ] && PATCH=0
+          CODE=$((MAJOR*10000 + MINOR*100 + PATCH))
+          sed -i "s/versionCode .*/versionCode $CODE/" android/app/build.gradle
+          sed -i "s/versionName .*/versionName \"$V\"/" android/app/build.gradle
+          echo "Android version: $V (code $CODE)"
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Build release APK (unsigned)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APKs for the release
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk "ytapp-${TAG_NAME#v}-debug.apk"
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk "ytapp-${TAG_NAME#v}-release-unsigned.apk"
+
+      - name: Attach APKs to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ytapp-${{ env.TAG_NAME }}-debug.apk
+            ytapp-${{ env.TAG_NAME }}-release-unsigned.apk
+          generate_release_notes: true
+          body: |
+            **ytapp ${{ env.TAG_NAME }}** — ad-free YouTube client.
+
+            📱 **Android (fully standalone)**: install `*-debug.apk` directly. No server,
+            no proxy, no setup — the app talks to YouTube directly from the device
+            (InnerTube via CapacitorHttp). Background play, audio mode, and the full
+            playback settings ship inside.
+
+            🍎 **macOS (Intel, self-contained)**: grab the DMG from the same release
+            (uploaded by the parallel job). Unsigned — right-click → Open on first launch.
+
+            🖥️ **Web**: `bun install && bun run build:static` from the source at this tag.
+
+            This release also builds on every push to `main` — see the Actions tab.
+
+      - name: Summary
+        run: |
+          echo "## Android release artifacts ($TAG_NAME)" >> $GITHUB_STEP_SUMMARY
+          echo "- ytapp-${TAG_NAME#v}-debug.apk (install directly)" >> $GITHUB_STEP_SUMMARY
+          echo "- ytapp-${TAG_NAME#v}-release-unsigned.apk" >> $GITHUB_STEP_SUMMARY
+
+  macos:
+    name: macOS DMG + ZIP (${{ inputs.tag_name || github.ref_name }})
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Checkout (build ref)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend deps
+        run: bun install --frozen-lockfile
+
+      - name: Build web app (static export)
+        run: BUILD_MODE=static bunx next build
+
+      - name: Install backend deps (yt-api)
+        run: cd server && npm install --omit=dev --no-audit --no-fund
+
+      - name: Install PO-token provider deps
+        run: cd pot-provider && npm install --omit=dev --no-audit --no-fund
+
+      - name: Install Electron toolchain
+        run: cd electron && npm install --no-audit --no-fund
+
+      - name: Build unsigned macOS app (Intel x64)
+        run: cd electron && npx electron-builder --mac --x64 --config builder.yml --publish never
+
+      - name: Rename for the release
+        run: |
+          V="${TAG_NAME#v}"
+          cd electron/release
+          for f in *.dmg; do [ -f "$f" ] && cp "$f" "../../ytapp-${V}-macos-intel.dmg"; done
+          for f in *.zip; do [ -f "$f" ] && cp "$f" "../../ytapp-${V}-macos-intel.zip"; done
+          cd ../..
+
+      - name: Attach DMG + ZIP to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ytapp-${{ env.TAG_NAME }}-macos-intel.dmg
+            ytapp-${{ env.TAG_NAME }}-macos-intel.zip
+          generate_release_notes: true
+
+      - name: Summary
+        run: |
+          echo "## macOS release artifacts ($TAG_NAME)" >> $GITHUB_STEP_SUMMARY
+          echo "- ytapp-${TAG_NAME#v}-macos-intel.dmg" >> $GITHUB_STEP_SUMMARY
+          echo "- ytapp-${TAG_NAME#v}-macos-intel.zip" >> $GITHUB_STEP_SUMMARY

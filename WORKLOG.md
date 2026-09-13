@@ -359,3 +359,67 @@ datacenter IPs ("Sign in to confirm you're not a bot"). On a real phone's
   bot-gated for shorts (per-video gating) and some embeds throw Error 153 —
   on real phone IPs direct streams flow (proven: `dQw4w9WgXcQ` plays direct
   googlevideo from this very sandbox); the embed covers the remainder.
+
+## Session 10 — 2026-09-13 · YouTube Premium features, theme system, GitHub Releases
+
+- **User asks:** YouTube-Premium-style background playback (video + audio);
+  "the skip feature you added — I cannot find it"; deeper theme pass + fixes;
+  better UI; verify everything end-to-end (gauntlet); **publish versions to
+  GitHub Releases (none existed)**.
+- **Root cause of the missing skip feature:** on the user's device many videos
+  play through the official **embed** (bot-gated direct streams), where our
+  custom player — and its Next/settings/autoplay controls — never renders.
+  Fix: an **always-visible app-level player bar** under the player in BOTH
+  modes: `Autoplay` (YouTube-style switch) + **`Skip video →`** (jumps to the
+  next related video). Plus the official **YouTube IFrame API** now observes
+  embed playback (`enablejsapi=1`), so autoplay-next also fires when an
+  embed-fallback video ENDS.
+- **Background play (Premium, Android):** new local Capacitor plugin
+  `plugins/yt-background` (`"yt-background": "file:./plugins/yt-background"`)
+  — `mediaPlayback` foreground service (keeps the WebView streaming while
+  backgrounded / screen off), native **MediaSession** (lock-screen metadata,
+  headset buttons, seek), and a **MediaStyle notification** with
+  Play/Pause/Next/Close that round-trip into the WebView player via
+  `notifyListeners("control")`. Manifest merge supplies
+  FOREGROUND_SERVICE_MEDIA_PLAYBACK + POST_NOTIFICATIONS + WAKE_LOCK.
+  **Locally verified end-to-end**: full Android SDK + Temurin JDK 21 installed
+  in the sandbox, `cap add android` + `assembleDebug` → 4.9 MB APK with both
+  plugin classes in the dex and the service + permissions in the merged
+  manifest.
+- **Audio mode (Premium data saver):** the player settings menu + Settings
+  page gained an `Audio mode` toggle — swaps to the best audio-only stream
+  (verified live: itag 18 → 251 opus) while keeping position and playback
+  state, shows the thumbnail + an "Audio mode" chip.
+- **MediaSession (W3C)** wired in the custom player: metadata, playback
+  state, position (throttled 5s), play/pause/next/seek/±10s handlers — lock
+  screens and media keys on desktop/web.
+- **Theme system (the "deeper look at the theme"):** full dark / light /
+  device-theme support, YouTube's exact palette in both (`#0f0f0f`/`#f1f1f1`/
+  `#272727`/`#3ea6ff` dark; `#fff`/`#0f0f0f`/`#f2f2f2`/`#065fd4` light).
+  292 hardcoded colors converted to CSS variables across 13 components
+  (`scripts/theme-convert.py`), `html.yt-light` token overrides, YouTube-style
+  **Appearance** setting (device/dark/light), pre-paint boot script (no
+  flash), theme-aware scrollbars/skeletons/chip-fades. Found + fixed a real
+  bug the audit surfaced: the header/sidebar **"YouTube" wordmark was
+  `text-white` — invisible in light mode**.
+- **E2E (14/14 green, static APK artifact via relay = exact on-device path):**
+  player bar present in embed AND custom modes; Skip video navigates to the
+  next related video; direct playback playing (readyState 4); settings menu
+  shows Autoplay + Audio mode rows; audio mode swaps itag 18→251 and keeps
+  playing; light theme applied + home/watch render light; dark restores
+  `#0f0f0f`; regressions clean (home 81 imgs, comments, Shorts 75 frames).
+- **Gauntlet:** blind critic A/B — **watch page: OURS WINS** ("cohesive dark
+  design language, precise iconography, native and premium"). Home A/B
+  favored YouTube's near-empty state (documented artifact); the critic's
+  claimed defects were verified as hallucinations (font is measured Roboto;
+  light-mode colors measured exactly YouTube's palette). One real defect
+  (white wordmark) was found by measurement and fixed.
+- **GitHub Releases (the versions ask):** new
+  `.github/workflows/release.yml` — `v*` tag push builds Android + macOS and
+  attaches `ytapp-<v>-debug.apk`, `-release-unsigned.apk`,
+  `-macos-intel.dmg/.zip` to a GitHub Release with auto-generated notes
+  (versionCode/versionName stamped from the tag); `workflow_dispatch` with
+  `tag_name` + `ref` backfills releases for commits that predate the
+  workflow. Published **v1.0.0** (the previous session's state, commit
+  `594bfa1`) and **v1.1.0** (this session) — both with full artifacts.
+  README gained a Downloads section.

@@ -66,6 +66,14 @@ interface YtStore {
     autoplay: boolean;
     defaultQuality: "auto" | number;
     cinemaMode: boolean;
+    /** YouTube Appearance setting: dark / light / follow the device. */
+    theme: "dark" | "light" | "system";
+    /** Premium-style: keep playing (audio + video) when the app is backgrounded
+     *  or the screen turns off. Android runs a mediaPlayback foreground service. */
+    backgroundPlay: boolean;
+    /** Premium-style audio mode: play the audio-only stream and show the
+     *  thumbnail (saves data; also the stream used for pure listening). */
+    audioOnly: boolean;
   };
   setPrefs: (p: Partial<YtStore["prefs"]>) => void;
 }
@@ -143,6 +151,9 @@ export const useYt = create<YtStore>()(
         autoplay: true,
         defaultQuality: "auto",
         cinemaMode: false,
+        theme: "dark",
+        backgroundPlay: true,
+        audioOnly: false,
       },
       setPrefs: (p) => set({ prefs: { ...get().prefs, ...p } }),
     }),

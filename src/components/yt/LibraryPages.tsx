@@ -10,7 +10,7 @@ import { Trash2, Play, ListPlus, X } from "lucide-react";
 function PageTitle({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <div className="flex items-center gap-4 mb-6 flex-wrap">
-      <h1 className="text-[24px] sm:text-[36px] font-bold text-[#f1f1f1]">{children}</h1>
+      <h1 className="text-[24px] sm:text-[36px] font-bold text-[var(--yt-text)]">{children}</h1>
       <div className="flex-1" />
       {actions}
     </div>
@@ -20,9 +20,9 @@ function PageTitle({ children, actions }: { children: React.ReactNode; actions?:
 function EmptyState({ title, sub, cta }: { title: string; sub: string; cta?: { label: string; onClick: () => void } }) {
   return (
     <div className="py-24 text-center">
-      <p className="text-[#f1f1f1] text-lg mb-2">{title}</p>
-      <p className="text-[#aaa] text-sm mb-6">{sub}</p>
-      {cta && <button onClick={cta.onClick} className="px-6 py-2.5 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-sm">{cta.label}</button>}
+      <p className="text-[var(--yt-text)] text-lg mb-2">{title}</p>
+      <p className="text-[var(--yt-text-2)] text-sm mb-6">{sub}</p>
+      {cta && <button onClick={cta.onClick} className="px-6 py-2.5 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-sm">{cta.label}</button>}
     </div>
   );
 }
@@ -32,7 +32,7 @@ function HistoryRow({ e, onRemove }: { e: HistoryEntry; onRemove: () => void }) 
   const pct = e.length ? Math.min(100, ((e.progress || 0) / e.length) * 100) : 0;
   return (
     <div className="group cursor-pointer" onClick={() => navigate({ name: "watch", v: e.id, t: e.progress && e.progress > 5 ? e.progress : 0 })}>
-      <div className="relative aspect-video rounded-xl overflow-hidden bg-[#212121] mb-3">
+      <div className="relative aspect-video rounded-xl overflow-hidden bg-[var(--yt-bg-elev)] mb-3">
         { }
         <img src={e.thumb} alt={e.title} className="w-full h-full object-cover" loading="lazy" />
         {e.duration && <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[12px] font-medium px-1 rounded">{formatTime(e.length || 0) || e.duration}</span>}
@@ -49,8 +49,8 @@ function HistoryRow({ e, onRemove }: { e: HistoryEntry; onRemove: () => void }) 
           <X className="w-4 h-4 text-white" />
         </button>
       </div>
-      <h3 className="text-[15px] font-medium clamp-2 text-[#f1f1f1]">{e.title}</h3>
-      <p className="text-[13px] text-[#aaa] mt-1 truncate">{e.channel}</p>
+      <h3 className="text-[15px] font-medium clamp-2 text-[var(--yt-text)]">{e.title}</h3>
+      <p className="text-[13px] text-[var(--yt-text-2)] mt-1 truncate">{e.channel}</p>
     </div>
   );
 }
@@ -64,7 +64,7 @@ export function HistoryPage() {
   return (
     <div className="px-2 sm:px-6 pb-16 pt-2">
       <PageTitle actions={history.length > 0 ? (
-        <button onClick={clearHistory} className="flex items-center gap-2 px-4 h-9 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-[14px]">
+        <button onClick={clearHistory} className="flex items-center gap-2 px-4 h-9 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[14px]">
           <Trash2 className="w-4 h-4" /> Clear all
         </button>
       ) : undefined}>
@@ -105,21 +105,21 @@ export function SubscriptionsPage() {
               <button
                 key={ch.id}
                 onClick={() => navigate({ name: "channel", id: ch.id })}
-                className="shrink-0 w-[120px] flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-[#272727]/60"
+                className="shrink-0 w-[120px] flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-[var(--yt-elev2-60)]"
               >
                 {ch.avatar ? (
 
                   <img src={ch.avatar} alt="" className="w-16 h-16 rounded-full object-cover" />
                 ) : (
-                  <span className="w-16 h-16 rounded-full bg-[#3ea6ff] text-[#0f0f0f] text-2xl font-bold flex items-center justify-center">
+                  <span className="w-16 h-16 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] text-2xl font-bold flex items-center justify-center">
                     {(ch.name || "?")[0]?.toUpperCase()}
                   </span>
                 )}
-                <span className="text-[13px] text-[#f1f1f1] truncate w-full text-center">{ch.name}</span>
+                <span className="text-[13px] text-[var(--yt-text)] truncate w-full text-center">{ch.name}</span>
               </button>
             ))}
           </div>
-          <p className="text-[#aaa] text-sm mb-6">Open a channel to browse its videos.</p>
+          <p className="text-[var(--yt-text-2)] text-sm mb-6">Open a channel to browse its videos.</p>
         </>
       )}
     </div>
@@ -174,9 +174,9 @@ export function PlaylistsPage() {
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="New playlist name"
-          className="flex-1 h-10 px-4 rounded-lg bg-[#121212] border border-[#303030] text-[14px] outline-none focus:border-[#3ea6ff]"
+          className="flex-1 h-10 px-4 rounded-lg bg-[var(--yt-bg-input)] border border-[var(--yt-border)] text-[14px] outline-none focus:border-[var(--yt-blue)]"
         />
-        <button type="submit" className="h-10 px-5 rounded-full bg-[#3ea6ff] text-[#0f0f0f] text-[14px] font-medium flex items-center gap-2">
+        <button type="submit" className="h-10 px-5 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] text-[14px] font-medium flex items-center gap-2">
           <ListPlus className="w-4 h-4" /> Create
         </button>
       </form>
@@ -186,9 +186,9 @@ export function PlaylistsPage() {
         <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {playlists.map(p => (
             <div key={p.id} className="group cursor-pointer" onClick={() => navigate({ name: "later" })}>
-              <div className="aspect-video rounded-xl bg-[#272727] flex flex-col items-center justify-center gap-2 mb-3 relative">
-                <Play className="w-10 h-10 text-[#aaa]" fill="#aaa" />
-                <span className="text-[13px] text-[#aaa]">{p.videoIds.length} videos</span>
+              <div className="aspect-video rounded-xl bg-[var(--yt-bg-elev2)] flex flex-col items-center justify-center gap-2 mb-3 relative">
+                <Play className="w-10 h-10 text-[var(--yt-text-2)]" fill="#aaa" />
+                <span className="text-[13px] text-[var(--yt-text-2)]">{p.videoIds.length} videos</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); deletePlaylist(p.id); }}
                   className="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/70 hover:bg-black hidden group-hover:flex items-center justify-center"
@@ -198,7 +198,7 @@ export function PlaylistsPage() {
                 </button>
               </div>
               <h3 className="text-[15px] font-medium truncate">{p.name}</h3>
-              <p className="text-[13px] text-[#aaa]">Created {new Date(p.createdAt).toLocaleDateString()}</p>
+              <p className="text-[13px] text-[var(--yt-text-2)]">Created {new Date(p.createdAt).toLocaleDateString()}</p>
             </div>
           ))}
         </div>

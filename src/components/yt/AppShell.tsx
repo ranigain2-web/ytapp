@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "@/lib/yt-router";
+import { useYt } from "@/lib/yt-store";
+import { applyTheme, watchSystemTheme } from "@/lib/yt-theme";
 import Header from "./Header";
 import { SidebarDrawer, MiniSidebar } from "./Sidebar";
 import HomePage from "./HomePage";
@@ -16,6 +18,14 @@ export default function AppShell() {
   const { route, navigate } = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [persistentSidebar, setPersistentSidebar] = useState(true);
+  const theme = useYt(s => s.prefs.theme);
+
+  // Theme engine: apply on every change and follow the OS while "system".
+  // Lives here so it is active on every page, not just Settings.
+  useEffect(() => {
+    applyTheme(theme);
+    return watchSystemTheme(() => theme);
+  }, [theme]);
 
   const onToggleSidebar = useCallback(() => {
     if (window.innerWidth >= 1280) setPersistentSidebar(v => !v);
@@ -68,7 +78,7 @@ export default function AppShell() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f]">
+    <div className="min-h-screen bg-[var(--yt-bg)]">
       {/* Shorts is immersive full-screen: no header, no bottom nav (YouTube behavior) */}
       {route.name !== "shorts" && (
         <Header onToggleSidebar={onToggleSidebar} onSearch={onSearch} />
@@ -133,14 +143,14 @@ const NAV_ICONS: { label: string; routeName: string; outline: string; filled: st
 function MobileNav() {
   const { route, navigate } = useRouter();
   return (
-    <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0f0f0f] border-t border-[#272727]/70 flex pb-[env(safe-area-inset-bottom)]" aria-label="Mobile navigation">
+    <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-[var(--yt-bg)] border-t border-[var(--yt-border)]/70 flex pb-[env(safe-area-inset-bottom)]" aria-label="Mobile navigation">
       {NAV_ICONS.map((it) => {
         const active = route.name === it.routeName;
         return (
           <button
             key={it.label}
             onClick={() => navigate({ name: it.routeName } as never)}
-            className={`flex-1 flex flex-col items-center gap-1 pt-2 pb-1.5 transition-colors ${active ? "text-[#f1f1f1]" : "text-[#aaaaaa]"}`}
+            className={`flex-1 flex flex-col items-center gap-1 pt-2 pb-1.5 transition-colors ${active ? "text-[var(--yt-text)]" : "text-[var(--yt-text-2)]"}`}
             aria-current={active ? "page" : undefined}
           >
             <svg
