@@ -16,7 +16,7 @@ on:
         description: "Existing tag to attach this release to (e.g. v1.0.0)"
         required: true
       ref:
-        description: "Commit SHA / branch to BUILD from (defaults to the tag_name ref)"
+        description: "FULL 40-char SHA, tag, or branch to BUILD from (defaults to the tag) — abbreviated SHAs are NOT accepted by actions/checkout"
         required: false
 
 permissions:
@@ -126,6 +126,7 @@ jobs:
 
   macos:
     name: macOS DMG + ZIP (${{ inputs.tag_name || github.ref_name }})
+    needs: android # android creates the release; macos appends its files
     runs-on: macos-latest
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -176,7 +177,6 @@ jobs:
           files: |
             ytapp-${{ env.TAG_NAME }}-macos-intel.dmg
             ytapp-${{ env.TAG_NAME }}-macos-intel.zip
-          generate_release_notes: true
 
       - name: Summary
         run: |
