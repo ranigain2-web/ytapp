@@ -14,11 +14,11 @@ custom HLS player — **no ads, no tracking**. One React codebase, three targets
 Versioned releases with ready-to-install artifacts live at
 **[github.com/ranigain2-web/ytapp/releases](https://github.com/ranigain2-web/ytapp/releases)**:
 
-- `ytapp-<version>-debug.apk` — install directly on Android (fully standalone:
+- `ytapp-v<version>-debug.apk` — install directly on Android (fully standalone:
   no server, no proxy, no setup). Background play, audio mode, playback
   settings, Shorts, comments — all included.
-- `ytapp-<version>-release-unsigned.apk` — same app, release build.
-- `ytapp-<version>-macos-intel.dmg` / `.zip` — self-contained macOS app
+- `ytapp-v<version>-release-unsigned.apk` — same app, release build.
+- `ytapp-v<version>-macos-intel.dmg` / `.zip` — self-contained macOS app
   (unsigned: right-click → Open on first launch).
 
 Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
