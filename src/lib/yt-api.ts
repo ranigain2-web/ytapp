@@ -230,6 +230,8 @@ export interface YtVideoFull extends Partial<YtVideo> {
   chapters: YtChapter[];
   playability_reason?: string | null;
   embed_blocked?: boolean;
+  /** hard-unplayable (deleted / geo-blocked / offline live) — full error page */
+  unavailable?: boolean;
 }
 
 export interface YtComment {

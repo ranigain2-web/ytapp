@@ -35,6 +35,16 @@ const VR_CTX = {
     osName: "Android", osVersion: "12L", androidSdkVersion: 32, hl: "en", gl: "US",
   },
 };
+// TVHTML5 smart-TV client with the web session's visitorData — used as a
+// best-effort second attempt when ANDROID_VR is bot-gated (LOGIN_REQUIRED).
+// On residential IPs this combination recovers direct streams most of the time.
+const TV_CTX_VERSION = "7.20260909.12.00"; // current version shipped by youtube.com/tv
+const tvCtx = (visitorData?: string) => ({
+  client: {
+    clientName: "TVHTML5", clientVersion: TV_CTX_VERSION, hl: "en", gl: "US",
+    ...(visitorData ? { visitorData } : {}),
+  },
+});
 
 export class ItError extends Error {
   status: number;
@@ -565,7 +575,7 @@ export async function itSearch(q: string): Promise<ItSearchPage> {
 // Watch page: next (metadata + related + comments token) + player (streams)
 // ---------------------------------------------------------------------------
 
-function parseNextMetadata(json: AnyObj): Partial<YtVideoFull> & { commentsToken?: string | null } {
+function parseNextMetadata(json: AnyObj): Partial<YtVideoFull> & { commentsToken?: string | null; relatedToken?: string | null } {
   const tc = (json.contents as AnyObj | undefined)?.twoColumnWatchNextResults as AnyObj | undefined;
   const results = (tc?.results as { results?: { contents?: unknown[] } } | undefined)?.results?.contents as AnyObj[] | undefined;
   let primary: AnyObj | undefined;
@@ -650,6 +660,11 @@ function parsePlayerStreams(json: AnyObj): {
   const sd = (json.streamingData as { formats?: unknown[]; adaptiveFormats?: unknown[]; hlsManifestUrl?: string }) || {};
   const vd = (json.videoDetails as { lengthSeconds?: string; viewCount?: string; title?: string; isLiveContent?: boolean }) || {};
   const formats: YtVideoFull["formats"] = [];
+  // combined (A+V in one file) detection: itag 18/22 mimes are
+  // `video/mp4; codecs="avc1…, mp4a…"` — the mime says "video" only, so the
+  // audio track must be sniffed from the codecs list, not the container type.
+  const AUDIO_CODEC = /mp4a|opus|ac-3|ec-3|vorbis|flac/i;
+  const VIDEO_CODEC = /avc1|avc3|vp9|vp09|vp8|av01|hev1|hvc1|mp4v|theora/i;
   const toFmt = (f: AnyObj) => {
     const mime = (f.mimeType as string) || "";
     const itag = (f.itag as number) || 0;
@@ -662,7 +677,8 @@ function parsePlayerStreams(json: AnyObj): {
       quality_label: (f.qualityLabel as string) || "",
       height: (f.height as number) || 0, width: (f.width as number) || 0,
       fps: (f.fps as number) || 0, bitrate: (f.bitrate as number) || 0,
-      has_video: /video/.test(mime), has_audio: /audio/.test(mime),
+      has_video: VIDEO_CODEC.test(codecs) || /video/.test(mime),
+      has_audio: AUDIO_CODEC.test(codecs) || /audio/.test(mime),
       url,
     });
   };
@@ -704,18 +720,25 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
     views: 0, likes: 0, duration: 0, published: "", description: "",
     formats: [], hls: null, captions: [], storyboard: null, related: [], chapters: [],
   };
-  // next() first — always works, gives metadata + related even when gated
+  // next() first — always works, gives metadata + related even when gated.
+  // The response also carries the session's visitorData, which we reuse for
+  // the TV player attempt (session continuity defeats a chunk of the
+  // "confirm you're not a bot" gating).
   let nextMeta: ReturnType<typeof parseNextMetadata> = {};
+  let visitorData: string | undefined;
   try {
     const nextJson = await ytPost("next", { context: WEB_CTX, videoId: id });
     nextMeta = parseNextMetadata(nextJson);
+    visitorData = (nextJson.responseContext as { visitorData?: string } | undefined)?.visitorData || undefined;
   } catch { /* metadata optional */ }
 
   if (nextMeta.channel_id && nextMeta.channel_thumb) {
     rememberAvatar(nextMeta.channel_id as string, nextMeta.channel_thumb as string);
   }
 
-  // player() with ANDROID_VR — direct streams on-device (residential IP)
+  // --- player attempt 1: ANDROID_VR (direct streams, no PO token needed).
+  // Its playability verdict is the source of truth for flags (blocked /
+  // unavailable / bot-gated) — later attempts only try to *recover* streams.
   let streams: ReturnType<typeof parsePlayerStreams> | null = null;
   let playability_reason: string | null = null;
   let embed_blocked = false;
@@ -727,10 +750,37 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
     if (streams.playability === "ERROR" && /blocked it from display on this website|embed/i.test(streams.reason || "")) embed_blocked = true;
     if (streams.playability === "ERROR" || streams.playability === "UNPLAYABLE") unavailable = true;
     if (streams.playability === "LIVE_STREAM_OFFLINE") unavailable = true;
-  } catch { /* embed fallback */ }
+  } catch { /* try TV below */ }
+
+  // --- player attempt 2 (recovery, only when gated / no streams):
+  // TVHTML5 + visitorData. On gated IPs this often still returns streams;
+  // when it succeeds we keep attempt 1's flags but use its streams.
+  if (!streams?.ok) {
+    try {
+      const tvJson = await ytPost("player", { context: tvCtx(visitorData), videoId: id, contentCheckOk: true, racyCheckOk: true }, WEB_KEY);
+      const tvStreams = parsePlayerStreams(tvJson);
+      if (tvStreams.ok && (tvStreams.hls || tvStreams.formats.length > 0)) {
+        streams = {
+          ...tvStreams,
+          // prefer whichever attempt produced captions/duration/views
+          captions: tvStreams.captions.length ? tvStreams.captions : (streams?.captions || []),
+          duration: tvStreams.duration || streams?.duration || 0,
+          views: tvStreams.views || streams?.views || 0,
+        };
+        playability_reason = null; // recovered: the video IS playable
+        unavailable = false;
+      }
+    } catch { /* embed fallback */ }
+  }
 
   const title = nextMeta.title || streams?.title || "";
   const views = nextMeta.views || (streams && streams.views ? formatViews(streams.views) : 0);
+
+  // A direct stream is only actually playable by our <video>/hls.js stack if
+  // there is an HLS manifest or at least one combined (A+V) format. Anything
+  // else (adaptive-only, ciphered-only) degrades to the official embed player,
+  // which always plays — same mechanism the Shorts feed uses.
+  const directPlayable = !!streams?.ok && (!!streams.hls || streams.formats.some(f => f.has_video && f.has_audio));
 
   const result: ItVideoResult = {
     ...base,
@@ -754,7 +804,7 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
     chapters: (nextMeta.chapters as never[]) || [],
     relatedToken: nextMeta.relatedToken ?? null,
     commentsToken: nextMeta.commentsToken ?? null,
-    embed_fallback: !streams?.ok, // no direct streams → embed plays it
+    embed_fallback: !directPlayable, // no directly playable stream → embed plays it
     playability_reason,
     embed_blocked,
     unavailable: unavailable && !title,

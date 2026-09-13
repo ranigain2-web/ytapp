@@ -15,6 +15,11 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const [data, setData] = useState<YtVideoFull | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [descOpen, setDescOpen] = useState(false);
+  // set when the direct-stream player proves unplayable (bot-gated HLS, dead
+  // CDN URLs, …): swaps in the official embed player, which always plays —
+  // the same mechanism the Shorts feed uses. Stable identity on purpose.
+  const [forceEmbed, setForceEmbed] = useState(false);
+  const handlePlayerFallback = useCallback(() => setForceEmbed(true), []);
   const loading = data === null && err === null;
 
   // local store
@@ -107,11 +112,12 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const source = getActiveSource();
   const communityMode = source === "community";
   const standaloneMode = source === "standalone";
-  // Hard-blocked video (copyright/geo/embed-blocked with no playable stream),
-  // or a network-gated player response (bot-check) where the embed would only
-  // surface YouTube's own anti-bot wall — show OUR clean state instead.
-  const botGated = !!v.playability_reason && /sign in|not a bot|confirm you/i.test(v.playability_reason);
-  const blockedMessage = v.embed_fallback && v.playability_reason && (v.embed_blocked || v.unavailable || botGated)
+  // Hard-blocked video (copyright/geo/embed-blocked with no playable stream)
+  // → OUR clean state, because the embed player can't play it either.
+  // Bot-gated videos (LOGIN_REQUIRED "confirm you're not a bot") are NOT here:
+  // the official embed still plays them (the Shorts feed proves it), so they
+  // fall through to the embed player below.
+  const blockedMessage = v.embed_fallback && v.playability_reason && (v.embed_blocked || v.unavailable)
     ? v.playability_reason
     : null;
 
@@ -138,7 +144,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               Watch on YouTube
             </a>
           </div>
-        ) : v.embed_fallback ? (
+        ) : v.embed_fallback || forceEmbed ? (
           <div
             className="relative w-full aspect-video bg-black rounded-none sm:rounded-xl overflow-hidden"
             style={{ backgroundImage: v.thumb_lg || v.thumb ? `url(${v.thumb_lg || v.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
@@ -153,9 +159,9 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             <div className="sm:hidden absolute bottom-0 inset-x-0 h-1 bg-transparent" />
           </div>
         ) : (
-          <VideoPlayer video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onProgress={onProgress} />
+          <VideoPlayer video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onProgress={onProgress} onFallback={handlePlayerFallback} />
         )}
-        {v.embed_fallback && !blockedMessage && (
+        {(v.embed_fallback || forceEmbed) && !blockedMessage && (
           <p className="px-4 sm:px-0 py-2 text-[12px] text-[#aaa] bg-[#1a1a1a] sm:rounded-lg sm:mt-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#ffb13b]" />
             {standaloneMode

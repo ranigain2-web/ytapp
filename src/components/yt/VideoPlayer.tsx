@@ -15,14 +15,22 @@ interface Props {
   startAt?: number;
   onEnded?: () => void;
   onProgress?: (current: number, duration: number) => void;
+  /** Called when no direct stream is loadable (e.g. bot-gated HLS) — lets the
+   *  host swap in the official embed player instead of showing an error. */
+  onFallback?: () => void;
 }
 
-export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress }: Props) {
+export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, onFallback }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekHoverRef = useRef<HTMLDivElement>(null);
+  const manifestOkRef = useRef(false);
+  // keep the fallback callback out of the load-effect deps — an inline arrow
+  // from the host would otherwise re-run the whole loader on every re-render
+  const onFallbackRef = useRef(onFallback);
+  useEffect(() => { onFallbackRef.current = onFallback; }, [onFallback]);
 
   const [playing, setPlaying] = useState(false);
   const [waiting, setWaiting] = useState(true);
@@ -52,11 +60,30 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress }:
   }, [video.formats]);
   const noSource = !video.hls && !fallbackFormat?.url;
 
+  // no directly-playable stream at all → hand off to the embed player
+  useEffect(() => {
+    if (noSource) onFallbackRef.current?.();
+  }, [noSource]);
+
   // --- Load source ---
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     let hls: Hls | null = null;
+    manifestOkRef.current = false;
+
+    // progressive fallback switcher: used when HLS dies before levels load
+    // (CORS-blocked manifests, gated IPs, …)
+    const useProgressive = () => {
+      hls?.destroy();
+      if (hlsRef.current === hls) hlsRef.current = null;
+      if (fallbackFormat?.url) {
+        el.src = absStream(fallbackFormat.url);
+        el.play().catch(() => {});
+      } else {
+        onFallbackRef.current?.();
+      }
+    };
 
     if (video.hls && Hls.isSupported()) {
       hls = new Hls({
@@ -72,6 +99,7 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress }:
       hls.loadSource(`${src}${src.includes("?") ? "&" : "?"}_=${Date.now()}`);
       hls.attachMedia(el);
       hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
+        manifestOkRef.current = true;
         const lv = data.levels
           .map((l, i) => ({ index: i, label: l.height ? `${l.height}p` : `${Math.round((l.bitrate || 0) / 1000)}kbps`, height: l.height || 0 }))
           .sort((a, b) => b.height - a.height);
@@ -79,10 +107,28 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress }:
         hlsRef.current?.startLoad(-1);
       });
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => setCurrentLevel(hlsRef.current?.autoLevelEnabled ? -1 : data.level));
+      let netErrors = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls?.startLoad();
-          else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls?.recoverMediaError();
+        if (!data.fatal) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          netErrors++;
+          // manifest/playlist load failed and never produced levels → the
+          // stream is unusable in this context (usually CORS): switch to the
+          // progressive file instead of retrying forever.
+          if (!manifestOkRef.current) {
+            if (netErrors >= 2 || data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) {
+              useProgressive();
+              return;
+            }
+            hls?.startLoad();
+            return;
+          }
+          if (netErrors <= 2) { hls?.startLoad(); return; }
+          useProgressive();
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          hls?.recoverMediaError();
+        } else {
+          if (onFallbackRef.current) onFallbackRef.current();
           else { setError("Playback error — try reloading"); setWaiting(false); }
         }
       });
@@ -96,7 +142,7 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress }:
 
     return () => {
       hls?.destroy();
-      hlsRef.current = null;
+      if (hlsRef.current === hls) hlsRef.current = null;
     };
   }, [video.id, video.hls, fallbackFormat]);
 
@@ -332,7 +378,7 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress }:
       onDoubleClick={(e) => { if ((e.target as HTMLElement).dataset.playerSurface) toggleFullscreen(); }}
     >
       {/* error / no stream */}
-      {(error || noSource) && (
+      {(error || noSource) && !onFallback && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/90" data-player-surface="1">
           <p className="text-[#aaa] text-sm">{error || "No playable stream found"}</p>
           <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-full bg-[#272727] text-sm hover:bg-[#3f3f3f]">Reload</button>
@@ -346,7 +392,6 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress }:
         playsInline
         autoPlay
         muted
-        crossOrigin="anonymous"
         poster={video.thumb_lg || video.thumb}
       />
 
