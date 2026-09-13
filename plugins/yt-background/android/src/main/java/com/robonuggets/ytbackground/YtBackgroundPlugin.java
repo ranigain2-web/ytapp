@@ -1,6 +1,8 @@
 package com.robonuggets.ytbackground;
 
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -47,12 +49,31 @@ public class YtBackgroundPlugin extends Plugin {
             call.reject("no context");
             return;
         }
+        // Android 13+: the MediaStyle notification needs POST_NOTIFICATIONS
+        // granted at runtime, otherwise the FGS runs but silently. Ask once
+        // when background playback first starts.
+        requestNotificationsPermissionIfNeeded();
         String title = call.getString("title", "YouTube");
         String artist = call.getString("artist", "");
         String artwork = call.getString("artwork", "");
         Double duration = call.getDouble("duration", 0.0);
         MediaPlaybackService.start(ctx, title, artist, artwork, duration == null ? 0.0 : duration);
         call.resolve();
+    }
+
+    private void requestNotificationsPermissionIfNeeded() {
+        try {
+            if (Build.VERSION.SDK_INT >= 33
+                    && getContext() != null
+                    && getContext().checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED
+                    && getActivity() != null) {
+                getActivity().requestPermissions(
+                        new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 4242);
+            }
+        } catch (Throwable ignored) {
+            // permission flow is best-effort — the FGS itself works regardless
+        }
     }
 
     @PluginMethod

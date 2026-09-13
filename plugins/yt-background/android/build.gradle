@@ -18,4 +18,7 @@ android {
 dependencies {
     implementation project(':capacitor-android')
     implementation 'androidx.media:media:1.7.0'
+    // Plugin.getActivity() returns AppCompatActivity — needed at compile time
+    // for the POST_NOTIFICATIONS runtime request on Android 13+.
+    implementation 'androidx.appcompat:appcompat:1.7.0'
 }

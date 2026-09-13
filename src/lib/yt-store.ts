@@ -160,6 +160,18 @@ export const useYt = create<YtStore>()(
     {
       name: "yt-app-store",
       storage: createJSONStorage(() => localStorage),
+      // Deep-merge prefs: installs upgrading from older app versions have a
+      // persisted prefs object WITHOUT the newer keys (theme, backgroundPlay,
+      // audioOnly). zustand's default shallow merge would drop the defaults,
+      // silently disabling background play for upgrading users.
+      merge: (persisted, current) => {
+        const p = (persisted || {}) as Partial<YtStore>;
+        return {
+          ...current,
+          ...p,
+          prefs: { ...current.prefs, ...(p.prefs || {}) },
+        };
+      },
     }
   )
 );

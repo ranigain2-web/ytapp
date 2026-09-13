@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Menu, Search, Mic, Video, Bell, Cast, UserRound, Clock } from "lucide-react";
+import { Menu, Search, Mic, Video, Bell, Cast, UserRound, Clock, Moon, Sun, Monitor } from "lucide-react";
 import { useRouter, type Route } from "@/lib/yt-router";
 import SearchOverlay, { addRecentSearch, getRecentSearches } from "./SearchOverlay";
 import { fetchSuggestions } from "@/lib/yt-api";
+import { useYt } from "@/lib/yt-store";
+import { resolveIsLight } from "@/lib/yt-theme";
 
 export function YouTubeLogo({ onClick }: { onClick?: () => void }) {
   return (
@@ -23,6 +25,9 @@ export default function Header({ onToggleSidebar, onSearch }: {
   onSearch: (q: string) => void;
 }) {
   const { route } = useRouter();
+  const theme = useYt(s => s.prefs.theme);
+  const setPrefs = useYt(s => s.setPrefs);
+  const isLight = resolveIsLight(theme);
   const [q, setQ] = useState(() => {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("q") || "";
@@ -126,6 +131,24 @@ export default function Header({ onToggleSidebar, onSearch }: {
           <div className="flex-1" />
         )}
         <div className="flex items-center gap-1 shrink-0 sm:hidden">
+          {/* Theme quick-toggle — always one tap away on mobile too */}
+          <button
+            onClick={() => {
+              // dark → light → system → dark (YouTube's Appearance cycle)
+              const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
+              setPrefs({ theme: next });
+            }}
+            aria-label={`Theme: ${theme === "system" ? "device theme" : theme}. Tap to change`}
+            title={`Appearance: ${theme === "system" ? "Use device theme" : theme === "light" ? "Light theme" : "Dark theme"} — tap to change`}
+            data-testid="theme-toggle"
+            className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-[var(--yt-bg-elev2)] active:bg-[var(--yt-hover)]"
+          >
+            {theme === "system"
+              ? <Monitor className="w-6 h-6 text-[var(--yt-text)]" />
+              : isLight
+              ? <Sun className="w-6 h-6 text-[var(--yt-text)]" />
+              : <Moon className="w-6 h-6 text-[var(--yt-text)]" />}
+          </button>
           <button
             onClick={() => setOverlayOpen(true)}
             aria-label="Search"
@@ -210,6 +233,22 @@ export default function Header({ onToggleSidebar, onSearch }: {
 
         {/* DESKTOP right: actions */}
         <div className="hidden sm:flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => {
+              const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
+              setPrefs({ theme: next });
+            }}
+            aria-label={`Theme: ${theme === "system" ? "device theme" : theme}. Tap to change`}
+            title={`Appearance: ${theme === "system" ? "Use device theme" : theme === "light" ? "Light theme" : "Dark theme"} — tap to change (Settings → Appearance for more)`}
+            data-testid="theme-toggle-desktop"
+            className="hidden md:flex w-10 h-10 rounded-full items-center justify-center hover:bg-[var(--yt-bg-elev2)]"
+          >
+            {theme === "system"
+              ? <Monitor className="w-6 h-6 text-[var(--yt-text)]" />
+              : isLight
+              ? <Sun className="w-6 h-6 text-[var(--yt-text)]" />
+              : <Moon className="w-6 h-6 text-[var(--yt-text)]" />}
+          </button>
           <button className="hidden md:flex w-10 h-10 rounded-full items-center justify-center hover:bg-[var(--yt-bg-elev2)]" aria-label="Cast">
             <Cast className="w-6 h-6 text-[var(--yt-text)]" />
           </button>

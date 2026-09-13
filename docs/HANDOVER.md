@@ -62,14 +62,36 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   signature), always-on Next-video button, Autoplay toggle in the player
   settings menu, PiP button, refreshed app icon (10/10 VLM-rated), search
   channel-header overlap fix, and this handover/worklog discipline.
-- **Phase 9 — Premium features + theme system + Releases** (2026-09-13,
-  latest): background playback (Android foreground-service plugin), audio
+- **Phase 9 — Premium features + theme system + Releases** (2026-09-13):
+  background playback (Android foreground-service plugin), audio
   mode, app-level player bar (the skip-feature discoverability fix), the
   YouTube IFrame API for embed autoplay, full dark/light/device theming, and
   GitHub Releases automation (v1.0.0 + v1.1.0 published). See §3.
+- **Phase 10 — v1.2.0: “the missing features” round** (2026-09-13,
+  latest): user-reported issues root-caused to THREE things: (1) the user
+  was still running the v1.0.0-era APK (community mode, no Premium
+  features) — solved with a once-per-version What's-new tour + version
+  display; (2) the embed player's own end-screen/pause “More videos” grid
+  deep-links into the YouTube app — solved with an ENDED overlay that
+  covers the iframe (Up next + Replay + Next, all in-app); (3) real gaps in
+  the custom player — YouTube-mobile CENTER CONTROLS ([◀◀10] [⏯] [10▶▶]
+  [+ ⏭]) added, theme quick-toggle in the header (moon/sun/monitor cycle),
+  Audio button in the player bar, Share fixed to youtu.be (was
+  `https://localhost/...` on Android!), fake Download pill removed,
+  POST_NOTIFICATIONS runtime request (Android 13+, notification was
+  invisible), and a CRITICAL upgrade bug: zustand persist's shallow merge
+  dropped new pref keys for old installs → deep `merge` added (upgraders
+  would have had background play silently OFF). E2E suite
+  `scripts/e2e-v12.sh` (19 checks) + old suite still 14/14; blind critic:
+  watch page OURS WINS.
 
-## 3. Current state (as of 2026-09-13, end of phase 9)
+## 3. Current state (as of 2026-09-13, end of phase 10 — v1.2.0)
 
+- ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
+  center skip controls on the player, What's-new tour on each version bump,
+  theme toggle in the top bar, Audio button under the player, and the
+  Settings → About version line (the user's “am I missing something?”
+  question is answered in-app).
 - ✅ **Standalone mode is the default story on Android**: home/search/watch/
   comments/channels/Shorts/suggestions all hit YouTube InnerTube directly
   from the device via CapacitorHttp. Infinite scroll verified 172+ videos.
@@ -111,11 +133,18 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   Android + macOS and attaches `ytapp-<v>-debug.apk`,
   `-release-unsigned.apk`, `-macos-intel.dmg/.zip` to a GitHub Release
   (versionCode stamped from the tag). `workflow_dispatch` inputs
-  `tag_name`+`ref` backfill older commits. v1.0.0 + v1.1.0 published.
+  `tag_name`+`ref` backfill older commits. v1.0.0 + v1.1.0 + v1.2.0
+  published.
 - ⚠️ **Datacenter-IP caveat (sandbox only, NOT user devices)**: from this
   sandbox all InnerTube player clients are bot-gated for most videos and
-  some embeds throw Error 153. On real phone IPs, direct streams flow
-  (architecture-verified; the user confirms playback on-device).
+  some embeds throw Error 153; the browse/home endpoint additionally
+  throttles intermittently (`Precondition check failed` 400) after heavy
+  testing. On real phone IPs, direct streams flow (architecture-verified;
+  the user confirms playback on-device).
+- ⚠️ **The sandbox cannot drive a real embed to ENDED** (bot-gated inside
+  headless Chrome): the ENDED-overlay E2E uses the `window.__ytEmbedEnded`
+  debug hook to verify the render + routing path; the IFrame-API event
+  wiring (state 0 → overlay) is code-verified and fires on real devices.
 
 ## 4. The decisions that matter most
 
@@ -266,7 +295,8 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 - `src/lib/yt-native.ts` — native bridge wrapper: yt-background plugin calls
   + W3C MediaSession helpers. Web = silent no-ops.
 - `src/lib/yt-embed-api.ts` — official YouTube IFrame API loader (embed
-  autoplay-next on ENDED). All failures silent — the embed plays regardless.
+  autoplay-next on ENDED, ENDED → our overlay when autoplay is off). All
+  failures are silent — the embed plays regardless.
 - `src/lib/yt-theme.ts` — theme engine (apply/watch/boot-script) + the
   `THEME_BOOT_SCRIPT` inline in layout.tsx.
 - `plugins/yt-background/` — the local Capacitor plugin (Android ONLY):
@@ -276,6 +306,17 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 - `scripts/theme-convert.py` — one-shot color→var conversion pass (rerun if
   new hardcoded colors creep in).
 - `scripts/e2e-premium.sh` — the premium-feature E2E suite (14 checks).
+- `scripts/e2e-v12.sh` — the v1.2.0 E2E suite (19 checks: whats-new, theme
+  cycle + persistence, center controls, audio button, embed-ended overlay
+  + in-app routing, related-card routing, home regression). Uses the
+  `waitdom` poll helper — fixed sleeps are NOT reliable for hydration.
+- `src/components/yt/WhatsNew.tsx` — once-per-version feature tour (checks
+  `yt_whatsnew_seen` in localStorage against APP_VERSION). Update the
+  feature list on every version bump.
+- `src/lib/yt-store.ts` — persist has a custom deep `merge` for `prefs`:
+  old installs lack newer keys (theme/backgroundPlay/audioOnly) and the
+  default shallow merge would silently disable them. Keep it when adding
+  prefs.
 - `.github/workflows/release.yml` — tag-driven release builds (see §4.15).
 - Local Android toolchain in the sandbox: Temurin JDK 21 at `/home/z/jdk21`,
   SDK at `/home/z/android-sdk` (platform 35 + build-tools 35). Use

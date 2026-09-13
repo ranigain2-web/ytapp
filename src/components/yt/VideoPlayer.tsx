@@ -13,6 +13,7 @@ import {
 import {
   Play, Pause, SkipForward, Volume2, Volume1, VolumeX, Maximize, Minimize,
   Settings, Subtitles, ArrowLeft, Gauge, Check, ChevronRight, ChevronLeft, PictureInPicture2, Headphones,
+  RotateCcw, RotateCw,
 } from "lucide-react";
 
 interface Props {
@@ -653,18 +654,53 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
         </div>
       )}
 
-      {/* CENTER big play */}
-      {!playing && !waiting && !error && (
-        <button
-          onClick={togglePlay}
-          aria-label="Play"
-          className="absolute inset-0 z-20 flex items-center justify-center"
-          data-player-surface="1"
-        >
-          <span className="w-[68px] h-[68px] rounded-full bg-[#ff0000] flex items-center justify-center shadow-[0_4px_24px_rgba(255,0,0,0.45)]">
-            <Play className="w-9 h-9 text-white ml-1" fill="white" />
-          </span>
-        </button>
+      {/* CENTER CONTROLS — the YouTube mobile signature: rewind 10s · pause ·
+          forward 10s (+ next video). Always present while the controls are
+          visible, so skip/pause is impossible to miss. */}
+      {!minimal && !waiting && !error && (controlsVisible || !playing) && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center gap-7 sm:gap-10 pointer-events-none" data-testid="center-controls">
+          <button
+            onClick={() => { seekBy(-10); showRipple("back"); }}
+            aria-label="Rewind 10 seconds"
+            title="Rewind 10 seconds"
+            className="pointer-events-auto w-14 h-14 flex items-center justify-center text-white active:scale-90 transition-transform"
+          >
+            <span className="relative flex items-center justify-center">
+              <RotateCcw className="w-12 h-12 sm:w-[52px] sm:h-[52px]" strokeWidth={1.6} />
+              <span className="absolute text-[13px] font-semibold pt-1.5">10</span>
+            </span>
+          </button>
+          <button
+            onClick={togglePlay}
+            aria-label={playing ? "Pause (k)" : "Play (k)"}
+            className="pointer-events-auto w-14 h-14 flex items-center justify-center text-white active:scale-90 transition-transform"
+          >
+            {playing
+              ? <Pause className="w-12 h-12 sm:w-[52px] sm:h-[52px]" fill="white" strokeWidth={1} />
+              : <Play className="w-12 h-12 sm:w-[52px] sm:h-[52px] ml-1" fill="white" strokeWidth={1} />}
+          </button>
+          <button
+            onClick={() => { seekBy(10); showRipple("fwd"); }}
+            aria-label="Forward 10 seconds"
+            title="Forward 10 seconds"
+            className="pointer-events-auto w-14 h-14 flex items-center justify-center text-white active:scale-90 transition-transform"
+          >
+            <span className="relative flex items-center justify-center">
+              <RotateCw className="w-12 h-12 sm:w-[52px] sm:h-[52px]" strokeWidth={1.6} />
+              <span className="absolute text-[13px] font-semibold pt-1.5">10</span>
+            </span>
+          </button>
+          {onNext && (
+            <button
+              onClick={() => onNext()}
+              aria-label="Next video"
+              title="Next video"
+              className="pointer-events-auto w-14 h-14 flex items-center justify-center text-white active:scale-90 transition-transform"
+            >
+              <SkipForward className="w-11 h-11 sm:w-12 sm:h-12" fill="white" strokeWidth={1.4} />
+            </button>
+          )}
+        </div>
       )}
 
       {/* CONTROLS — in minimal (Shorts) mode: thin progress bar only, always visible */}

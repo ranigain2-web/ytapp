@@ -13,6 +13,7 @@ import ChannelPage from "./ChannelPage";
 import SettingsPage from "./SettingsPage";
 import { HistoryPage, SubscriptionsPage, LikedPage, LaterPage, PlaylistsPage } from "./LibraryPages";
 import ShortsPage from "./ShortsPage";
+import WhatsNew from "./WhatsNew";
 
 export default function AppShell() {
   const { route, navigate } = useRouter();
@@ -104,6 +105,9 @@ export default function AppShell() {
 
       {/* mobile bottom nav */}
       {route.name !== "shorts" && <MobileNav />}
+
+      {/* once-per-version feature tour */}
+      <WhatsNew />
     </div>
   );
 }

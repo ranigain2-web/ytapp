@@ -9,7 +9,7 @@ import { loadYouTubeIframeAPI } from "@/lib/yt-embed-api";
 import VideoPlayer from "./VideoPlayer";
 import { VideoCard } from "./VideoCard";
 import Comments from "./Comments";
-import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Download, Scissors, Bell, AlertTriangle, SkipForward } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Scissors, Bell, AlertTriangle, SkipForward, Headphones, Play, RotateCcw } from "lucide-react";
 
 export default function WatchPage({ videoId, startAt }: { videoId: string; startAt?: number }) {
   const { navigate } = useRouter();
@@ -36,6 +36,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const setProgress = useYt(s => s.setProgress);
   const autoplay = useYt(s => s.prefs.autoplay);
   const setPrefs = useYt(s => s.setPrefs);
+  const audioOnly = useYt(s => s.prefs.audioOnly);
 
   const isSubbed = subs.some(s => s.id === (data?.channel_id || ""));
   const isLiked = liked.some(l => l.id === videoId);
@@ -74,18 +75,25 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
 
   // ---- Embed player: YouTube IFrame API wiring ----
   // Embed-fallback videos play inside YouTube's own iframe; the IFrame API
-  // lets us observe its state so "Autoplay next video" also works there.
+  // lets us observe its state so "Autoplay next video" also works there, AND
+  // when a video ends without autoplay we drop our own overlay on top of the
+  // iframe — YouTube's end screen ("More videos") deep-links into the YouTube
+  // app, which would kick the user out of ytapp.
   const embedActive = !!(data
     && (data.embed_fallback || forceEmbed)
     && !(data.embed_fallback && data.playability_reason && (data.embed_blocked || data.unavailable)));
   const embedIframeRef = useRef<HTMLIFrameElement | null>(null);
   const autoplayRef = useRef(autoplay);
   const goNextRef = useRef(goNext);
+  const [embedEnded, setEmbedEnded] = useState(false);
+  const embedPlayerRef = useRef<{ seekTo?: (s: number, allowSeekAhead: boolean) => void; playVideo?: () => void; destroy: () => void } | null>(null);
   useEffect(() => { autoplayRef.current = autoplay; goNextRef.current = goNext; }, [autoplay, goNext]);
   useEffect(() => {
     if (!embedActive || !embedIframeRef.current) return;
-    let player: { destroy: () => void } | null = null;
+    let player: { destroy: () => void; seekTo?: (s: number, allowSeekAhead: boolean) => void; playVideo?: () => void } | null = null;
     let dead = false;
+    // note: embedEnded needs no manual reset — WatchPage remounts per video id
+    // (AppShell keys it on route.v), so a fresh video starts with a fresh state.
     loadYouTubeIframeAPI()
       .then(YT => {
         if (dead || !embedIframeRef.current) return;
@@ -93,18 +101,37 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           player = new YT.Player(embedIframeRef.current, {
             events: {
               onStateChange: (e: { data: number }) => {
-                if (e.data === 0 && autoplayRef.current) goNextRef.current(); // ENDED
+                if (e.data === 0) { // ENDED
+                  if (autoplayRef.current) goNextRef.current();
+                  else setEmbedEnded(true); // cover YouTube's escape-trap end screen
+                } else {
+                  setEmbedEnded(false);
+                }
               },
             },
           });
+          embedPlayerRef.current = player;
+          if (typeof window !== "undefined") {
+            (window as unknown as { __ytEmbedPlayer?: unknown }).__ytEmbedPlayer = player;
+            // E2E hook: sandboxed headless browsers can't drive the real embed
+            // (bot-gated), so tests force the ended state to verify the overlay.
+            (window as unknown as { __ytEmbedEnded?: (v: boolean) => void }).__ytEmbedEnded = (v: boolean) => setEmbedEnded(v);
+          }
         } catch { /* API attach failed — embed still plays */ }
       })
       .catch(() => { /* script blocked — embed still plays */ });
     return () => {
       dead = true;
+      embedPlayerRef.current = null;
       try { player?.destroy(); } catch { /* iframe already gone */ }
     };
   }, [embedActive, data?.id]);
+
+  const replayEmbed = useCallback(() => {
+    embedPlayerRef.current?.seekTo?.(0, true);
+    embedPlayerRef.current?.playVideo?.();
+    setEmbedEnded(false);
+  }, []);
 
   if (loading) {
     return (
@@ -194,6 +221,43 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               allowFullScreen
             />
+            {/* ENDED overlay — sits ON TOP of YouTube's end screen so its
+                "More videos" grid (which deep-links into the YouTube app)
+                never kicks the user out of ytapp. */}
+            {embedEnded && (
+              <div className="absolute inset-0 z-20 bg-black/95 flex flex-col items-center justify-center gap-5 px-4" data-testid="embed-ended-overlay">
+                <p className="text-white/60 text-[12px] font-medium uppercase tracking-[0.12em]">Up next</p>
+                {v.related?.[0] && (
+                  <button
+                    onClick={goNext}
+                    className="w-full max-w-[420px] flex items-center gap-3 text-left rounded-xl hover:bg-white/10 p-2 transition-colors"
+                    data-testid="embed-ended-next"
+                  >
+                    {v.related[0].thumb && <img src={v.related[0].thumb} alt="" className="w-[120px] aspect-video rounded-lg object-cover shrink-0" />}
+                    <span className="min-w-0">
+                      <span className="block text-white text-[14px] font-medium leading-[18px] line-clamp-2">{v.related[0].title}</span>
+                      <span className="block text-white/60 text-[12px] mt-1">{v.related[0].channel} · {v.related[0].views}</span>
+                    </span>
+                  </button>
+                )}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={replayEmbed}
+                    className="flex items-center gap-2 h-10 px-5 rounded-full bg-[var(--yt-bg-elev2)] text-white text-[14px] font-medium hover:bg-[#3f3f3f]"
+                  >
+                    <RotateCcw className="w-5 h-5" /> Replay
+                  </button>
+                  {v.related?.[0] && (
+                    <button
+                      onClick={goNext}
+                      className="flex items-center gap-2 h-10 px-5 rounded-full bg-white text-black text-[14px] font-medium hover:bg-white/90"
+                    >
+                      <Play className="w-5 h-5" fill="black" /> Next video
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="sm:hidden absolute bottom-0 inset-x-0 h-1 bg-transparent" />
           </div>
         ) : (
@@ -203,40 +267,59 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           <p className="px-4 sm:px-0 py-2 text-[12px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev)] sm:rounded-lg sm:mt-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#ffb13b] shrink-0" />
             {standaloneMode
-              ? "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one."
+              ? "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Background play works when a video streams directly."
               : communityMode
-              ? "Community mode — playing via the official embed (ads may appear on monetized videos). Use Skip video below to jump to the next one."
-              : "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one."}
+              ? "Community mode — playing via the official embed (ads may appear on monetized videos). Use Skip video below to jump to the next one. Background play works when a video streams directly."
+              : "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Background play works when a video streams directly."}
           </p>
         )}
 
         {/* PLAYER BAR — always visible in BOTH player modes so playback
-            controls (autoplay + skip-entire-video) are always discoverable,
-            even when the video plays inside YouTube's own embed iframe. */}
-        {!blockedMessage && (
-          <div className="flex items-center justify-between gap-3 px-3 sm:px-0 py-2 mt-1 border-b border-[var(--yt-border)]">
+            controls (autoplay + audio mode + skip-entire-video) are always
+            discoverable, even inside YouTube's own embed iframe. */}
+        {!blockedMessage && (() => {
+          const hasAudioStream = !(v.embed_fallback || forceEmbed)
+            && (v.formats || []).some(f => f.has_audio && !f.has_video);
+          return (
+          <div className="flex items-center justify-between gap-3 px-3 sm:px-0 py-2 mt-1 border-b border-[var(--yt-border)] overflow-x-auto no-scrollbar">
             <button
               onClick={() => setPrefs({ autoplay: !autoplay })}
               role="switch"
               aria-checked={autoplay}
               aria-label="Autoplay next video"
-              className="flex items-center gap-2.5 py-1"
+              className="flex items-center gap-2.5 py-1 shrink-0"
             >
               <span className="text-[13px] font-medium text-[var(--yt-text)]">Autoplay</span>
               <span className={`relative w-10 h-5 rounded-full transition-colors ${autoplay ? "bg-[var(--yt-blue)]" : "bg-[var(--yt-switch)]"}`}>
                 <span className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white transition-all ${autoplay ? "left-[22px]" : "left-[3px]"}`} />
               </span>
             </button>
-            <button
-              onClick={goNext}
-              disabled={!v.related?.[0]}
-              className={`flex items-center gap-2 h-8 px-3.5 rounded-full text-[13px] font-medium shrink-0 ${v.related?.[0] ? "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]" : "opacity-40 pointer-events-none"}`}
-              title="Skip to the next video"
-            >
-              <SkipForward className="w-4 h-4" /> Skip video
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {hasAudioStream && (
+                <button
+                  onClick={() => setPrefs({ audioOnly: !audioOnly })}
+                  role="switch"
+                  aria-checked={audioOnly}
+                  aria-label="Audio mode (data saver)"
+                  title="Audio mode — play sound only, save data"
+                  data-testid="audio-mode-toggle"
+                  className={`flex items-center gap-2 h-8 px-3.5 rounded-full text-[13px] font-medium transition-colors ${audioOnly ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]"}`}
+                >
+                  <Headphones className="w-4 h-4" /> Audio
+                </button>
+              )}
+              <button
+                onClick={goNext}
+                disabled={!v.related?.[0]}
+                className={`flex items-center gap-2 h-8 px-3.5 rounded-full text-[13px] font-medium shrink-0 ${v.related?.[0] ? "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]" : "opacity-40 pointer-events-none"}`}
+                title="Skip to the next video"
+              >
+                <SkipForward className="w-4 h-4" /> Skip video
+              </button>
+            </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* title */}
         <h1 className="px-3 sm:px-0 mt-2 text-[18px] sm:text-[20px] font-medium leading-[26px] text-[var(--yt-text)]">{v.title || "Untitled"}</h1>
@@ -294,22 +377,16 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               </button>
             </div>
             <button
-              onClick={() => { navigator.clipboard?.writeText(`${location.origin}/?v=${v.id}`).catch(() => {}); }}
+              onClick={() => { navigator.clipboard?.writeText(`https://youtu.be/${v.id}`).catch(() => {}); }}
               className="flex items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
+              title="Copy video link"
             >
               <Share2 className="w-5 h-5" /> Share
             </button>
             <button
-              onClick={() => { window.open(`https://www.youtube.com/watch?v=${v.id}`, "_blank", "noopener"); }}
-              className="hidden sm:flex items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
-              title="Open on YouTube"
-            >
-              <Download className="w-5 h-5" /> Download
-            </button>
-            <button
-              className="flex sm:hidden items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
               onClick={() => { navigator.clipboard?.writeText(`https://www.youtube.com/watch?v=${v.id}`).catch(() => {}); }}
-              title="Copy video link"
+              className="hidden sm:flex items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
+              title="Copy YouTube link"
             >
               <Scissors className="w-5 h-5" /> Clip
             </button>

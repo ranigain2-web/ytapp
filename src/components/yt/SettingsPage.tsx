@@ -149,6 +149,7 @@ export default function SettingsPage() {
       {/* Appearance — YouTube's exact setting */}
       <section className="mb-10">
         <h2 className="text-[16px] font-medium mb-2">Appearance</h2>
+        <p className="text-[12px] text-[var(--yt-text-2)] mb-2 -mt-1">Also one tap away: the moon / sun button in the top bar</p>
         <div className="rounded-xl bg-[var(--yt-elev2-60)] p-1">
           {([
             { id: "system", label: "Use device theme", icon: Monitor },
@@ -180,7 +181,7 @@ export default function SettingsPage() {
           <Toggle
             label="Background play"
             labelIcon={<PlayCircle className="w-4 h-4" />}
-            desc="Keep playing when you switch apps or turn the screen off — a lock-screen notification with pause and skip appears while a video plays"
+            desc="Minimize the app or turn the screen off and playback keeps going, with a lock-screen notification (pause / next / close). Works while a video streams directly; videos inside YouTube's own player follow YouTube's rules"
             value={prefs.backgroundPlay}
             onChange={v => setPrefs({ backgroundPlay: v })}
           />
@@ -194,7 +195,7 @@ export default function SettingsPage() {
         <Toggle
           label="Audio mode (data saver)"
           labelIcon={<Headphones className="w-4 h-4" />}
-          desc="Play the audio-only stream with the thumbnail on screen — uses much less data and is ideal for music and listening"
+          desc="Play the audio-only stream with the thumbnail on screen — much less data, ideal for music. Toggle it with the Audio button under any playing video, or in the player's settings (⚙) menu"
           value={prefs.audioOnly}
           onChange={v => setPrefs({ audioOnly: v })}
         />

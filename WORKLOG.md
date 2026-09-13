@@ -423,3 +423,71 @@ datacenter IPs ("Sign in to confirm you're not a bot"). On a real phone's
   workflow. Published **v1.0.0** (the previous session's state, commit
   `594bfa1`) and **v1.1.0** (this session) — both with full artifacts.
   README gained a Downloads section.
+
+## Session 11 — 2026-09-13 · v1.2.0: "the missing features" round (user-issue triage)
+
+**User report:** "the skip feature (pause middle, skip left/right on the main
+screen) is not appearing"; "clicking more videos under the playing video
+opens inside original YouTube"; "background play not working — minimizing
+stops playback"; "audio mode / theme — cannot find them"; "verify everything
+end-to-end; I guess you are missing something, or I am missing something."
+
+**Root-cause analysis (from the user's 6 screenshots):** the Settings screen
+in their screenshots matches the **v1.0.0-era APK** (no Appearance section,
+no Audio mode, no version line) running **community mode** — every
+"missing" Premium feature shipped in v1.1.0, which they never installed. On
+top of that, four REAL bugs/gaps existed regardless of version.
+
+**Fixes:**
+1. **Center controls (the headline ask):** YouTube-mobile's signature center
+   cluster — rewind 10s (curved-arrow + "10"), big pause/play, forward 10s,
+   plus next-video — rendered whenever player controls are visible. The old
+   red-circle big-play button was replaced by this cluster.
+2. **Embed end-screen escape blocker:** YouTube's embed shows its own
+   "More videos" grid at the end of a video (and while paused on mobile),
+   and every tile deep-links into the YouTube app — the exact "opens inside
+   original YouTube" the user hit. Now, on IFrame-API ENDED with autoplay
+   off, OUR overlay covers the iframe: Up-next card + Replay + Next video,
+   all routing in-app. (Autoplay on already navigated in-app.)
+3. **Discoverability hardening:** What's-new dialog once per version
+   (`yt_whatsnew_seen` vs APP_VERSION) listing each feature and WHERE it
+   lives + "confirm you're on v1.2.0 in Settings → About"; header
+   theme quick-toggle (moon → sun → monitor cycle, mobile + desktop);
+   **Audio** button in the player bar (direct-stream videos); Settings copy
+   now says where every toggle is.
+4. **Share fix:** copied `location.origin/?v=…` = `https://localhost/…` on
+   Android — now `https://youtu.be/<id>`. Fake "Download" pill (which
+   actually opened youtube.com) removed; Clip copies the real YouTube link.
+5. **Android 13+ notification visibility:** the background-play foreground
+   service ran, but POST_NOTIFICATIONS was never requested at runtime → the
+   MediaStyle notification was invisible. The plugin now requests it on
+   `enable` (and the plugin gained the appcompat dependency that
+   `Plugin.getActivity()` requires at compile time).
+6. **CRITICAL upgrade bug:** zustand persist's default shallow merge
+   replaces the whole `prefs` object — installs upgrading from v1.0.0 (prefs
+   without `theme`/`backgroundPlay`/`audioOnly`) would have had background
+   play silently OFF. Custom deep `merge` added to the persist config.
+
+**Verification:**
+- New E2E suite `scripts/e2e-v12.sh` (19 checks, `waitdom` polling for
+  hydration — fixed sleeps proved flaky): whats-new shows/dismisses/persists,
+  theme full cycle + pre-paint persistence across reload, center cluster
+  present + forward-10/rewind-10 seek deltas + pause verified, Audio button
+  + live audio-only swap, embed IFrame-API attach + ENDED overlay + in-app
+  next routing + zero external escapes, related cards route internally,
+  player bar regression. **18/19 green** — the single red is the home-feed
+  check hitting YouTube's intermittent browse throttling from this
+  datacenter IP (endpoint probe: 400 "Precondition check failed"; the same
+  feed served 74 images earlier in the session — sandbox artifact, works on
+  device).
+- Old premium suite still **14/14**; blind critic on the watch page:
+  **OURS WINS** ("sophisticated dark-mode design language, precise icon
+  alignment"); VLM confirmed the center cluster matches YouTube's pattern.
+- Real `assembleDebug` with the new plugin code: BUILD SUCCESSFUL (5.2MB),
+  POST_NOTIFICATIONS code + new web bundle verified inside the APK.
+- **v1.2.0 released** (tag push → release.yml; APK/DMG artifacts attached).
+
+**Lesson for future sessions:** when a user "cannot find" a feature that
+supposedly shipped, FIRST verify which build they're running (Settings →
+About / screenshots) — version skew was the root cause here, and the fix
+isn't just code, it's an in-app version beacon + upgrade tour.
