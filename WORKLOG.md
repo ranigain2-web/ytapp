@@ -6,6 +6,29 @@ file is the curated repository copy.)
 
 ---
 
+## Project motive (north star)
+
+**What we are building:** a personal YouTube client ("ytapp") that feels like
+real YouTube — same content, familiar UI patterns — but runs on the user's own
+devices without a Google account, and is **fully standalone on Android**:
+no proxy, no external computer, no setup.
+
+- **Deliverables:** Android APK (Capacitor), macOS app (Electron self-hosting
+  the backend), and web build. CI builds all of them on every push.
+- **Data-source priority (honest layering):** own server (PO tokens → ad-free
+  direct googlevideo streams) → **standalone on-device InnerTube**
+  (CapacitorHttp = native HTTP, no CORS — the NewPipe approach) → community
+  Piped instances → official IFrame embed (always plays, may show ads).
+- **Method:** gauntlet loop — builder, blind VLM critic, direct comparison
+  against m.youtube.com as the bar; every claim E2E-verified with
+  agent-browser + screenshots before it is called done.
+- **Known constraint (IP reputation, not app bugs):** YouTube bot-gates
+datacenter IPs ("Sign in to confirm you're not a bot"). On a real phone's
+  residential IP direct streams work; from flagged IPs the app degrades to
+  the embed player instead of failing.
+
+---
+
 ## Session 1 — 2026-09-11/12 · Deep research + prototype (Phase 1)
 
 - Loaded web-search / web-reader / agent-browser / VLM skills; ran 13
@@ -192,3 +215,94 @@ file is the curated repository copy.)
   on monetized videos; direct ad-free streams need the user's own server
   or the macOS app which self-hosts). noembed fallback shows "0 views"
   until a healthy instance serves /streams.
+
+## Session 6 — 2026-09-13 · Fully standalone Android + YouTube-parity UX
+
+- **User-reported issues (5):** home infinite scroll stalls; some videos
+  blocked; search icon needs 3–4 taps; no search suggestions; demand for a
+  **fully standalone Android app** (no server/proxy).
+- **Root causes found in code:** HomePage/SearchPage were one-shot fetches
+  (no pagination API at all), no suggestions endpoint, cramped mobile
+  search input, and community mode depended on external Piped instances.
+- **InnerTube probing from the sandbox:** search + continuation, watch-next
+  (related + comments token), channel videos tab
+  (`params=EgZ2aWRlb3NyBgQKAjoA`), and the legacy suggest endpoint (JSONP)
+  all work keyless; FEtrending is dead; ANDROID_VR player is gated from
+  datacenter IPs (fine from a phone's residential IP). Browser fetch to
+  youtube.com is CORS-blocked → **on-device transport = CapacitorHttp**
+  (native HTTP, no CORS) — the NewPipe-equivalent standalone path.
+- **Engine built:** `src/lib/innertube.ts` — transport layer
+  (CapacitorHttp / dev relay / direct), parsers (videoRenderer,
+  lockupViewModel, richItemRenderer, commentEntityPayload, channel
+  metadata, shortsLockupViewModel), and endpoints (home with 4-seed merge
+  + rotation, search + continuation, suggestions, video next+player,
+  comments + continuation, channel + videos tab). Dev relay
+  (`server/index.mjs` `/api/ytb-relay`, `/api/ytb-suggest`) lets the exact
+  on-device parsing code run in the browser for E2E.
+- **UX overhaul:** `yt-api.ts` source layering (server > standalone >
+  community) with `?src=` debug override; IntersectionObserver infinite
+  scroll (rootMargin 2000px, cross-page dedupe, skeleton append, retry UI);
+  full-screen 1-tap mobile SearchOverlay with debounced live suggestions +
+  recents; query bar on search results; blocked-video YouTube-style error
+  screens with poster art; Shorts page (vertical snap-scroll feed, 87+
+  shorts, active-only iframe mounting, continuation); YouTube bottom-nav IA
+  (Home / Shorts / Subscriptions / You).
+- **Gauntlet: 3 critic rounds vs m.youtube.com, all defects fixed** —
+  poster behind embed/blocked UI, "131 watching views" text bug,
+  abbreviated feed counts, LIVE badge double-render, avatar cache
+  (localStorage LRU 240, real channel photos warm from watch/channel
+  visits), comment timestamps, compact timeAgo, real `<a>` anchors on
+  cards, 44px touch targets.
+- **Final E2E regression on the static APK artifact (`?src=standalone`):**
+  infinite scroll 78→172 videos deep, 12 live suggestions, watch page clean
+  (0 ops leaks, 0 unknown channels), comments with timestamps, Shorts snap
+  working, channel page (MrBeast) 30 videos, correct nav labels.
+- Commit `a2b381d` → CI → APK works out-of-the-box standalone.
+
+## Session 7 — 2026-09-13 · Bot-check playback fix ("Sign in to confirm you're not a bot")
+
+- **User report:** Shorts play fine, but regular videos show "Sign in to
+  confirm you're not a bot". Root-caused and fixed.
+- **Probing (5 player clients × 2 videos + live page scrapes):** ANDROID_VR
+  is per-video gated from this IP; TVHTML5_SIMPLY_EMBEDDED_PLAYER v2.0 is
+  retired server-side; live TVHTML5 7.20260909 + visitorData still gated
+  from datacenter IPs (expected to work from phone IPs).
+- **Three stacked bugs found:** (1) WatchPage treated bot-gated
+  (LOGIN_REQUIRED) videos as hard errors instead of mounting the official
+  embed — the same embed that Shorts prove plays on user devices;
+  (2) `parsePlayerStreams` marked combined itag 18/22 (video+audio in one
+  mp4) as `has_audio=false`, so the progressive fallback never engaged;
+  (3) VideoPlayer set `crossOrigin="anonymous"` — googlevideo sends no ACAO
+  to foreign origins, so the CORS-forced media fetch failed.
+- **Fixes:** player client chain ANDROID_VR → TVHTML5 7.20260909 +
+  visitorData recovery (captured from next() responseContext) with
+  combined-codec detection via codec sniffing; `directPlayable` gate drives
+  `embed_fallback`; bot-gated videos now mount the embed player (Shorts
+  mechanism) with autoplay — error screen reserved for truly
+  embed-blocked/unavailable videos; removed `crossOrigin`; HLS →
+  progressive MP4 → embed degradation chain with bounded retries and a
+  stable `onFallback` ref (no playback restarts on host re-render).
+- **E2E verified:** `dQw4w9WgXcQ` plays **direct googlevideo bytes**
+  (playhead advancing, readyState 4, no error; description-toggle does not
+  restart playback); gated `aqz-KE-bpKQ` mounts the embed cleanly; search →
+  click → watch intact for gated videos; invalid IDs get the clean error
+  screen; home 75 thumbs + Shorts unregressed. Engine test suite all green.
+- Commit `41b80c1` → pushed → CI green.
+- **Accepted tradeoff:** from flagged IPs direct streams may degrade to the
+  embed (ads on monetized videos); PO-token generation stays server-mode
+  only (needs the BotGuard node).
+
+## Session 8 — 2026-09-13 · Worklog consolidation + new user feedback
+
+- **New user feedback (active focus for next session): "The UI is looking
+  very cheap."** Recorded as the top open item. Functional layer is now
+  stable (playback, standalone mode, infinite scroll, suggestions, Shorts,
+  comments, channels all E2E-green), so the next pass is a **premium visual
+  polish round**: richer surfaces/materiality (subtle gradients, depth,
+  elevation), refined typography scale and spacing rhythm, better dark-mode
+  palette fidelity vs YouTube (#0f0f0f true-black discipline), polished
+  chips/cards/hover/pressed states, branded splash/icons, and VLM-blind
+  comparison against m.youtube.com until the critic rates it at parity or
+  better.
+- This file was synced with the live agent worklog (Sessions 6–7 added,
+  motive section added) and pushed to the repo.
