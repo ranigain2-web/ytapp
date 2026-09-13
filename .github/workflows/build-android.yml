@@ -85,4 +85,4 @@ jobs:
           echo "- Debug APK (install directly): artifact \`ytapp-debug-apk\`" >> $GITHUB_STEP_SUMMARY
           echo "- Release APK (unsigned): artifact \`ytapp-release-unsigned-apk\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The APK needs a yt-api backend URL — set it in the app's **Settings** page, or bake one at build time with the \`api_base\` workflow input / \`API_BASE\` repo variable. See docs/BUILD_GUIDE.md." >> $GITHUB_STEP_SUMMARY
+          echo "The APK is **fully standalone** — it talks to YouTube directly from the device (InnerTube API via CapacitorHttp, no companion server, no proxy). A personal yt-api server is optional (Settings → Your server) and unlocks ad-free direct streams." >> $GITHUB_STEP_SUMMARY

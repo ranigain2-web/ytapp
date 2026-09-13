@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchHome, getActiveSource, setApiBase, type YtVideo } from "@/lib/yt-api";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { fetchHome, fetchHomeMore, getActiveSource, setApiBase, type YtVideo } from "@/lib/yt-api";
 import { VideoGrid } from "./VideoCard";
 import ChipsBar from "./ChipsBar";
 import { useRouter } from "@/lib/yt-router";
@@ -39,7 +39,7 @@ function SetupPanel({ onRetry }: { onRetry: () => void }) {
         <h2 className="text-[22px] font-bold text-[#f1f1f1] mb-2">Can&apos;t reach YouTube</h2>
         <p className="text-[14px] leading-[21px] text-[#aaa] mb-6">
           The app couldn&apos;t connect to any video source. This usually fixes itself — tap Retry below.
-          If it keeps happening, connect the app to your own server.
+          Your own server is optional: it unlocks ad-free direct streams.
         </p>
 
         <label htmlFor="server-url" className="block text-[13px] text-[#aaa] mb-2 font-medium">
@@ -97,11 +97,18 @@ export default function HomePage({ category = "all" }: { category?: string }) {
   const [noSource, setNoSource] = useState(false);
   const [sourceLabel, setSourceLabel] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  const [continuation, setContinuation] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreErr, setMoreErr] = useState(false);
   const { navigate } = useRouter();
   const loading = videos === null && err === null && !noSource;
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const seenRef = useRef<Set<string>>(new Set());
 
   const load = () => {
     setVideos(null); setErr(null); setNoSource(false); setSourceLabel(null);
+    setContinuation(null); setLoadingMore(false); setMoreErr(false);
+    seenRef.current = new Set();
     setRetry(r => r + 1);
   };
 
@@ -111,7 +118,10 @@ export default function HomePage({ category = "all" }: { category?: string }) {
       try {
         const d = await fetchHome(category);
         if (!alive) return;
-        setVideos(d.results || []);
+        const results = d.results || [];
+        seenRef.current = new Set(results.map(v => v.id));
+        setVideos(results);
+        setContinuation(d.continuation || null);
         setSourceLabel(getActiveSource() === "community" ? "Community servers" : null);
       } catch (e) {
         if (!alive) return;
@@ -122,6 +132,38 @@ export default function HomePage({ category = "all" }: { category?: string }) {
     })();
     return () => { alive = false; };
   }, [category, retry]);
+
+  const loadMore = useCallback(async () => {
+    if (!continuation || loadingMore || !videos) return;
+    setLoadingMore(true); setMoreErr(false);
+    try {
+      const page = await fetchHomeMore(category, continuation);
+      setVideos(prev => {
+        const list = prev || [];
+        const fresh = page.results.filter(v => v.id && !seenRef.current.has(v.id));
+        fresh.forEach(v => seenRef.current.add(v.id));
+        return [...list, ...fresh];
+      });
+      setContinuation(page.continuation || null);
+    } catch {
+      setMoreErr(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [continuation, loadingMore, videos, category]);
+
+  // Infinite scroll: watch the sentinel; retry on scroll after an error
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) loadMore();
+    }, { rootMargin: "2000px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore]);
+
+  const showSentinel = !!videos && videos.length > 0;
 
   return (
     <div>
@@ -152,7 +194,28 @@ export default function HomePage({ category = "all" }: { category?: string }) {
             <button onClick={() => navigate({ name: "search", q: "trending" })} className="text-[#3ea6ff] text-sm hover:underline">Try a search</button>
           </div>
         ) : (
-          <VideoGrid videos={videos} />
+          <>
+            <VideoGrid videos={videos} />
+            {/* infinite scroll sentinel */}
+            {showSentinel && (
+              <div id="feed-sentinel" ref={sentinelRef} className="py-6">
+                {loadingMore ? (
+                  <VideoGrid videos={[]} loading skeletonCount={4} />
+                ) : moreErr ? (
+                  <div className="text-center">
+                    <p className="text-[13px] text-[#aaa] mb-3">Couldn&apos;t load more videos</p>
+                    <button onClick={loadMore} className="px-4 py-2 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-[13px]">
+                      <RefreshCw className="w-4 h-4 inline mr-1" /> Retry
+                    </button>
+                  </div>
+                ) : continuation ? (
+                  <div className="text-center text-[12px] text-[#717171]">Loading more…</div>
+                ) : (
+                  <div className="text-center text-[12px] text-[#717171]">You&apos;ve reached the end of this feed</div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -1,6 +1,30 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* ---- Touch responsiveness (Android WebView) ----
+   Kill double-tap-zoom delays and tap highlight flashes so every control
+   responds on the FIRST tap, like a native app. */
+html { touch-action: manipulation; }
+* { -webkit-tap-highlight-color: transparent; }
+button, a, [role="button"], input[type="submit"] {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+input, textarea { -webkit-user-select: text; user-select: text; }
+
+/* ---- Mobile full-screen search overlay entrance ---- */
+.yt-search-overlay {
+  animation: yt-search-in 0.18s ease-out;
+}
+@keyframes yt-search-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .yt-search-overlay { animation: none; }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -213,3 +237,7 @@ input[type="range"].yt-vol::-moz-range-thumb {
 /* Hide focus rings for mouse users but keep for keyboard */
 :focus:not(:focus-visible) { outline: none; }
 :focus-visible { outline: 2px solid #3ea6ff; outline-offset: 2px; }
+
+/* Hide Next.js dev-tools overlay in dev screenshots (not present in prod builds) */
+nextjs-portal { display: none !important; }
+nextjs-portal::part(placeholder) { display: none !important; }

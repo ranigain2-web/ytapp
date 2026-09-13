@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchSearch, fetchChannel, type YtVideo, type YtChannelResult, type YtChannel } from "@/lib/yt-api";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { fetchSearch, fetchSearchMore, fetchChannel, type YtVideo, type YtChannelResult, type YtChannel } from "@/lib/yt-api";
 import { useRouter } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
 import { formatViews, timeAgo } from "@/lib/yt-format";
-import { VideoGrid } from "./VideoCard";
+import { VideoGrid, viewsText } from "./VideoCard";
 import { RefreshCw, SearchX, Bell, ChevronRight } from "lucide-react";
 
 export default function SearchPage({ query }: { query: string }) {
@@ -14,6 +14,10 @@ export default function SearchPage({ query }: { query: string }) {
   const [channelDetail, setChannelDetail] = useState<YtChannel | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  const [continuation, setContinuation] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const seenRef = useRef<Set<string>>(new Set());
   const { navigate } = useRouter();
   const subs = useYt(s => s.subs);
   const toggleSub = useYt(s => s.toggleSub);
@@ -26,8 +30,11 @@ export default function SearchPage({ query }: { query: string }) {
       try {
         const d = await fetchSearch(query);
         if (!alive) return;
-        setVideos(d.results || []);
+        const results = d.results || [];
+        seenRef.current = new Set(results.map(v => v.id));
+        setVideos(results);
         setChannel(d.channel || null);
+        setContinuation(d.continuation || null);
         // fetch channel details for the "Latest from" shelf
         if (d.channel?.id) {
           try {
@@ -41,6 +48,32 @@ export default function SearchPage({ query }: { query: string }) {
     })();
     return () => { alive = false; };
   }, [query, retry]);
+
+  const loadMore = useCallback(async () => {
+    if (!continuation || loadingMore || !videos) return;
+    setLoadingMore(true);
+    try {
+      const page = await fetchSearchMore(continuation);
+      setVideos(prev => {
+        const list = prev || [];
+        const fresh = page.results.filter(v => v.id && !seenRef.current.has(v.id));
+        fresh.forEach(v => seenRef.current.add(v.id));
+        return [...list, ...fresh];
+      });
+      setContinuation(page.continuation || null);
+    } catch { /* stop paging silently */ }
+    finally { setLoadingMore(false); }
+  }, [continuation, loadingMore, videos]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) loadMore();
+    }, { rootMargin: "2000px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore]);
 
   const filters = ["All", "Unwatched", "Recently uploaded", "Live", "Related to your search"];
   const [filter, setFilter] = useState(0);
@@ -147,11 +180,11 @@ export default function SearchPage({ query }: { query: string }) {
                   >
                     <div className="relative aspect-video rounded-lg overflow-hidden bg-[#212121] mb-2">
                       { }
-                      <img src={v.thumb} alt={v.title} loading="lazy" className="w-full h-full object-cover" />
+                      <img src={v.thumb} alt="" loading="lazy" className="w-full h-full object-cover" />
                       {v.duration && <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[11px] font-medium px-1 rounded">{v.duration}</span>}
                     </div>
                     <p className="text-[13px] font-medium clamp-2 text-[#f1f1f1]">{v.title}</p>
-                    <p className="text-[12px] text-[#aaa] mt-1">{v.views} · {v.published}</p>
+                    <p className="text-[12px] text-[#aaa] mt-1">{viewsText(v)}{viewsText(v) && v.published ? " · " : ""}{v.published}</p>
                   </button>
                 ))}
               </div>
@@ -160,11 +193,22 @@ export default function SearchPage({ query }: { query: string }) {
           {/* desktop: horizontal result cards like YouTube search */}
           <div className="hidden sm:block sm:space-y-4">
             {videos?.map(v => <ResultRow key={v.id} video={v} />)}
+            {loadingMore && [1, 2].map(i => (
+              <div key={`sk${i}`} className="flex gap-4 opacity-60">
+                <div className="w-[246px] lg:w-[360px] aspect-video rounded-xl yt-skeleton shrink-0" />
+                <div className="flex-1 space-y-2 pt-1"><div className="h-5 yt-skeleton rounded w-2/3" /><div className="h-3 yt-skeleton rounded w-1/3" /></div>
+              </div>
+            ))}
           </div>
           {/* mobile: grid */}
           <div className="sm:hidden">
             <VideoGrid videos={videos} />
+            {loadingMore && <VideoGrid videos={[]} loading skeletonCount={4} />}
           </div>
+          {/* infinite scroll sentinel */}
+          {continuation && (
+            <div id="search-sentinel" ref={sentinelRef} className="py-4" />
+          )}
         </div>
       )}
     </div>
@@ -190,8 +234,8 @@ function ResultRow({ video }: { video: YtVideo }) {
       <div className="flex-1 min-w-0">
         <h3 className="text-[18px] leading-[26px] clamp-2 text-[#f1f1f1]">{video.title}</h3>
         <p className="text-[12px] text-[#aaa] mt-1">
-          {formatViews(video.views) ? `${formatViews(video.views)} views` : ""}
-          {formatViews(video.views) && timeAgo(video.published) ? " · " : ""}
+          {viewsText(video)}
+          {viewsText(video) && timeAgo(video.published) ? " · " : ""}
           {timeAgo(video.published)}
         </p>
         {video.views && (

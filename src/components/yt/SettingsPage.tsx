@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getApiBase, setApiBase, fetchHealth, getActiveSourceLabel, invalidateDataSource, resolveDataSource } from "@/lib/yt-api";
 import { useYt } from "@/lib/yt-store";
-import { Check, X, RefreshCw, Globe, Server } from "lucide-react";
+import { Check, X, RefreshCw, Globe, Server, Smartphone } from "lucide-react";
 
 function Toggle({ label, desc, value, onChange }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -80,7 +80,9 @@ export default function SettingsPage() {
         <div className="rounded-xl bg-[#272727]/60 p-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
-              {sourceLabel.startsWith("community") ? <Globe className="w-5 h-5 text-[#ffb13b] shrink-0" /> : <Server className="w-5 h-5 text-[#3ea6ff] shrink-0" />}
+              {sourceLabel.startsWith("community") ? <Globe className="w-5 h-5 text-[#ffb13b] shrink-0" />
+                : sourceLabel.startsWith("on-device") ? <Smartphone className="w-5 h-5 text-[#2ba640] shrink-0" />
+                : <Server className="w-5 h-5 text-[#3ea6ff] shrink-0" />}
               <div className="min-w-0">
                 <p className="text-[14px] text-[#f1f1f1] truncate">{sourceLabel}</p>
                 <p className="text-[12px] text-[#aaa] mt-0.5">Active source for search, feeds and video pages</p>
@@ -91,18 +93,19 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className="text-[12px] leading-[18px] text-[#aaa] mt-3">
-            Your own server gives ad-free direct streams and full quality. Community servers are free public
-            instances — used automatically when no server is set, with playback through the official embed.
+            On this device the app talks to YouTube directly — no companion server or proxy needed.
+            Your own server is optional: it unlocks ad-free direct streams in every video.
+            Community servers are a last-resort fallback for browsers.
           </p>
         </div>
       </section>
 
-      {/* API server */}
+      {/* API server (optional) */}
       <section className="mb-10">
-        <h2 className="text-[16px] font-medium mb-4">API server</h2>
+        <h2 className="text-[16px] font-medium mb-4">Your server (optional)</h2>
         <div className="rounded-xl bg-[#272727]/60 p-4">
           <label htmlFor="api-base" className="block text-[13px] text-[#aaa] mb-2">
-            Backend URL (leave empty for same-origin / community fallback; used by the Android app)
+            Backend URL — leave empty to stay fully on-device. Setting a server unlocks ad-free direct streams.
           </label>
           <div className="flex gap-2">
             <input

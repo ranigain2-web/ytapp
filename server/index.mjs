@@ -577,11 +577,85 @@ app.disable('x-powered-by');
 // CORS (needed for Capacitor origin + deployed frontends)
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type');
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
+});
+
+// ----------------------------------------------------------------------------
+// InnerTube relay — lets the web build exercise the app's own standalone
+// (on-device InnerTube) code path in a normal browser. The Android APK does
+// NOT use this (CapacitorHttp talks to YouTube directly); this exists for
+// development/E2E and self-hosted web deployments that want it.
+// ----------------------------------------------------------------------------
+const IT_RELAY_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+const IT_RELAY_ALLOWED = new Set(['search', 'browse', 'next', 'player']);
+const IT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
+async function itRelay(endpoint, body, key) {
+  if (!IT_RELAY_ALLOWED.has(endpoint)) throw new Error('endpoint not allowed');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const r = await fetch(`https://www.youtube.com/youtubei/v1/${endpoint}?key=${key || IT_RELAY_KEY}&prettyPrint=false`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': IT_UA, 'Accept-Language': 'en-US,en;q=0.9' },
+      body: JSON.stringify(body || {}),
+      signal: ctrl.signal,
+    });
+    const text = await r.text();
+    return { status: r.status, text };
+  } finally { clearTimeout(timer); }
+}
+
+app.get('/api/ytb-relay', (req, res) => {
+  const e = String(req.query.e || '');
+  if (e === 'ping') return res.json({ ok: true });
+  if (!IT_RELAY_ALLOWED.has(e)) return res.status(400).json({ error: 'endpoint not allowed' });
+  let body = {};
+  try { body = JSON.parse(String(req.query.b || '{}')); } catch { return res.status(400).json({ error: 'bad body' }); }
+  itRelay(e, body, String(req.query.k || ''))
+    .then(({ status, text }) => { res.status(status).type('application/json').send(text); })
+    .catch(err => { warn('relay error', e, String(err.message || err).slice(0, 120)); res.status(502).json({ error: String(err.message || err).slice(0, 160) }); });
+});
+
+app.post('/api/ytb-relay', express.json({ limit: '256kb' }), (req, res) => {
+  const { endpoint, body, key } = req.body || {};
+  if (!IT_RELAY_ALLOWED.has(endpoint)) return res.status(400).json({ error: 'endpoint not allowed' });
+  itRelay(endpoint, body, key)
+    .then(({ status, text }) => { res.status(status).type('application/json').send(text); })
+    .catch(err => { warn('relay error', endpoint, String(err.message || err).slice(0, 120)); res.status(502).json({ error: String(err.message || err).slice(0, 160) }); });
+});
+
+// Search suggestions relay (legacy suggest endpoint returns JSONP)
+app.get('/api/ytb-suggest', (req, res) => {
+  const q = String(req.query.q || '').slice(0, 120);
+  if (!q) return res.json({ suggestions: [] });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  fetch(`https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&q=${encodeURIComponent(q)}`, {
+    headers: { 'User-Agent': IT_UA },
+    signal: ctrl.signal,
+  })
+    .then(r => r.text())
+    .then(text => {
+      const start = text.indexOf('(');
+      const end = text.lastIndexOf(')');
+      let suggestions = [];
+      if (start >= 0 && end > start) {
+        try {
+          const data = JSON.parse(text.slice(start + 1, end));
+          if (Array.isArray(data) && Array.isArray(data[1])) {
+            suggestions = data[1].map(item => String((Array.isArray(item) && item[0]) || '')).filter(s => s).slice(0, 12);
+          }
+        } catch { /* empty */ }
+      }
+      res.json({ suggestions });
+    })
+    .catch(() => res.json({ suggestions: [] }))
+    .finally(() => clearTimeout(timer));
 });
 
 const wrap = fn => (req, res) => fn(req, res).catch(e => {

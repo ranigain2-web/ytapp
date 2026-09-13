@@ -13,7 +13,19 @@ const nextConfig: NextConfig = {
         images: { unoptimized: true },
         distDir: "out",
       }
-    : { output: "standalone" }),
+    : {
+        output: "standalone",
+        // Dev/self-hosted: proxy /api to the yt-api gateway on :3001 so the
+        // app works both through the sandbox gateway (XTransformPort hint)
+        // and when accessed directly (localhost:3000). The Android static
+        // build never uses this — it talks to YouTube on-device.
+        async rewrites() {
+          const api = process.env.API_PROXY_TARGET || "http://127.0.0.1:3001";
+          return [
+            { source: "/api/:path*", destination: `${api}/api/:path*` },
+          ];
+        },
+      }),
   typescript: {
     ignoreBuildErrors: true,
   },

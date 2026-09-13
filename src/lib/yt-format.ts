@@ -27,9 +27,28 @@ export function formatTime(seconds: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
+// normalize InnerTube compact forms: "1mo", "2yrs", "19h", "3w" → full words
+export function normalizeCompactAge(s: string): string {
+  const m = /^(\d+)\s*(s|m|h|d|w|mo|y|yr|yrs)\s*(ago)?$/i.exec(s.trim());
+  if (!m) return s;
+  const n = parseInt(m[1], 10);
+  const unit = m[2].toLowerCase();
+  const map: Record<string, [string, string]> = {
+    s: ["second", "seconds"], m: ["minute", "minutes"], h: ["hour", "hours"],
+    d: ["day", "days"], w: ["week", "weeks"], mo: ["month", "months"],
+    y: ["year", "years"], yr: ["year", "years"], yrs: ["year", "years"],
+  };
+  const pair = map[unit];
+  if (!pair) return s;
+  return `${n} ${n === 1 ? pair[0] : pair[1]} ago`;
+}
+
 export function timeAgo(published: string | undefined | null): string {
   if (!published) return "";
-  const p = published.toLowerCase();
+  const p0 = published.toLowerCase();
+  const norm = normalizeCompactAge(published);
+  if (norm !== published) return norm;
+  const p = p0;
   // already relative ("3 weeks ago")
   if (/ago|streamed|premiere/.test(p)) return published.replace(/streamed|premiere[d]*/gi, "").trim();
   // absolute date ("Oct 25, 2009") — approximate

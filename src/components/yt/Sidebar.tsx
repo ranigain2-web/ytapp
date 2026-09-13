@@ -29,7 +29,7 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
 
   const main: NavItem[] = [
     { label: "Home", icon: Home, route: { name: "home" } },
-    { label: "Shorts", icon: Zap, route: { name: "home", category: "shorts" } },
+    { label: "Shorts", icon: Zap, route: { name: "shorts" } },
     { label: "Subscriptions", icon: Play, route: { name: "subscriptions" } },
   ];
 
@@ -119,7 +119,7 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
         </button>
       </div>
       <p className="px-6 pt-4 text-[13px] leading-5 text-[#717171]">
-        Ad-free client · streams via direct extraction.
+        YouTube client · data fetched on-device
       </p>
     </nav>
   );

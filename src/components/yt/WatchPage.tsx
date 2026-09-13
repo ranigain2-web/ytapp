@@ -8,7 +8,7 @@ import { formatViews, formatCount, timeAgo, fullDate } from "@/lib/yt-format";
 import VideoPlayer from "./VideoPlayer";
 import { VideoCard } from "./VideoCard";
 import Comments from "./Comments";
-import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Download, Scissors, Bell } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Download, Scissors, Bell, AlertTriangle } from "lucide-react";
 
 export default function WatchPage({ videoId, startAt }: { videoId: string; startAt?: number }) {
   const { navigate } = useRouter();
@@ -81,31 +81,72 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     );
   }
 
-  if (err) {
+  if (err || (data && data.ok === false && !data.title)) {
+    const reason = err || data?.playability_reason || "This video is unavailable";
     return (
-      <div className="max-w-[1280px] mx-auto px-6 pt-16 text-center">
-        <p className="text-[#aaa] mb-4">Couldn&apos;t load this video</p>
-        <p className="text-sm text-[#717171]">{err}</p>
-        <button onClick={() => navigate({ name: "home" })} className="mt-6 px-5 py-2.5 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-sm">Back to home</button>
+      <div className="max-w-[560px] mx-auto px-6 pt-20 pb-10 text-center">
+        <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[#272727] flex items-center justify-center">
+          <AlertTriangle className="w-8 h-8 text-[#aaa]" />
+        </div>
+        <h1 className="text-[20px] font-bold text-[#f1f1f1] mb-3">Video unavailable</h1>
+        <p className="text-[14px] leading-[20px] text-[#aaa] mb-8">{reason}</p>
+        <div className="flex items-center justify-center gap-3">
+          <button onClick={() => navigate({ name: "home" })} className="px-5 py-2.5 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-[14px]">Go to home</button>
+          {data?.id && (
+            <a href={`https://www.youtube.com/watch?v=${data.id}`} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 rounded-full bg-[#f1f1f1] text-[#0f0f0f] text-[14px] font-medium">
+              Watch on YouTube
+            </a>
+          )}
+        </div>
       </div>
     );
   }
 
   const v = data!;
   const likeCount = v.likes ? formatCount(v.likes) : "";
-  const communityMode = getActiveSource() === "community";
+  const source = getActiveSource();
+  const communityMode = source === "community";
+  const standaloneMode = source === "standalone";
+  // Hard-blocked video (copyright/geo/embed-blocked with no playable stream),
+  // or a network-gated player response (bot-check) where the embed would only
+  // surface YouTube's own anti-bot wall — show OUR clean state instead.
+  const botGated = !!v.playability_reason && /sign in|not a bot|confirm you/i.test(v.playability_reason);
+  const blockedMessage = v.embed_fallback && v.playability_reason && (v.embed_blocked || v.unavailable || botGated)
+    ? v.playability_reason
+    : null;
 
   return (
     <div className="max-w-[1754px] mx-auto px-0 sm:px-6 pt-0 sm:pt-6 pb-16 flex flex-col xl:flex-row gap-0 sm:gap-6">
       {/* main column */}
       <div className="flex-1 min-w-0 max-w-[1280px] mx-auto w-full">
         {/* PLAYER */}
-        {v.embed_fallback ? (
-          <div className="relative w-full aspect-video bg-black rounded-none sm:rounded-xl overflow-hidden">
+        {blockedMessage ? (
+          <div
+            className="w-full aspect-video bg-black rounded-none sm:rounded-xl flex flex-col items-center justify-center px-6 text-center bg-cover bg-center"
+            style={v.thumb_lg || v.thumb ? { backgroundImage: `linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.72)), url(${v.thumb_lg || v.thumb})` } : undefined}
+            data-testid="blocked-video"
+          >
+            <AlertTriangle className="w-10 h-10 text-[#ddd] mb-4" />
+            <h2 className="text-white text-[17px] font-medium mb-2">Video unavailable</h2>
+            <p className="text-[#ddd]/80 text-[13px] leading-[18px] max-w-[480px]">{blockedMessage}</p>
+            <a
+              href={`https://www.youtube.com/watch?v=${v.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-5 px-5 py-2.5 rounded-full bg-[#f1f1f1] text-[#0f0f0f] text-[14px] font-medium"
+            >
+              Watch on YouTube
+            </a>
+          </div>
+        ) : v.embed_fallback ? (
+          <div
+            className="relative w-full aspect-video bg-black rounded-none sm:rounded-xl overflow-hidden"
+            style={{ backgroundImage: v.thumb_lg || v.thumb ? `url(${v.thumb_lg || v.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
+          >
             <iframe
               src={`https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1&playsinline=1&rel=0&modestbranding=1${startAt ? `&start=${Math.floor(startAt)}` : ""}`}
               title={v.title}
-              className="w-full h-full border-0"
+              className="w-full h-full border-0 relative z-10"
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               allowFullScreen
             />
@@ -114,12 +155,14 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         ) : (
           <VideoPlayer video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onProgress={onProgress} />
         )}
-        {v.embed_fallback && (
+        {v.embed_fallback && !blockedMessage && (
           <p className="px-4 sm:px-0 py-2 text-[12px] text-[#aaa] bg-[#1a1a1a] sm:rounded-lg sm:mt-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#ffb13b]" />
-            {communityMode
-              ? "Community mode — playing via the official embed (ads may appear on monetized videos). Connect your own ytapp server in Settings for ad-free direct streams."
-              : "This video is protected on our server's IP — using official embed (ads may appear). Self-host the API on a residential IP to fix."}
+            {standaloneMode
+              ? "Playing via the official YouTube player — ads may appear on monetized videos."
+              : communityMode
+              ? "Community mode — playing via the official embed (ads may appear on monetized videos)."
+              : "Playing via the official YouTube player — ads may appear on monetized videos."}
           </p>
         )}
 

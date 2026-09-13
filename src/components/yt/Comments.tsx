@@ -1,14 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchComments, type YtComment } from "@/lib/yt-api";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { fetchComments, fetchCommentsMore, type YtComment } from "@/lib/yt-api";
 import { formatCount } from "@/lib/yt-format";
+
+function CommentAvatar({ name }: { name: string }) {
+  const colors = ["#3ea6ff", "#ff4e45", "#ffb13b", "#2ba640", "#9c4dcc", "#e91e63", "#00bcd4"];
+  const c = colors[((name || "?").charCodeAt(0) || 0) % colors.length];
+  return (
+    <span className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shrink-0" style={{ background: c }}>
+      {(name || "?").replace(/^@/, "")[0]?.toUpperCase() || "?"}
+    </span>
+  );
+}
 
 export default function Comments({ videoId }: { videoId: string }) {
   const [comments, setComments] = useState<YtComment[] | null>(null);
   const [sort, setSort] = useState<"top" | "new">("top");
   const [count, setCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [continuation, setContinuation] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const seenRef = useRef<Set<string>>(new Set());
   const loading = comments === null && error === null;
 
   useEffect(() => {
@@ -19,6 +32,8 @@ export default function Comments({ videoId }: { videoId: string }) {
         if (!alive) return;
         setComments(r.comments || []);
         setCount(r.count ?? (r.comments?.length || 0));
+        setContinuation(r.continuation || null);
+        seenRef.current = new Set((r.comments || []).map(c => `${c.author}::${c.text.slice(0, 60)}`));
         if (r.error) setError(r.error);
       } catch (e) {
         if (alive) setError(String(e instanceof Error ? e.message : e));
@@ -26,6 +41,26 @@ export default function Comments({ videoId }: { videoId: string }) {
     })();
     return () => { alive = false; };
   }, [videoId, sort]);
+
+  const loadMore = useCallback(async () => {
+    if (!continuation || loadingMore || !comments) return;
+    setLoadingMore(true);
+    try {
+      const r = await fetchCommentsMore(continuation);
+      setComments(prev => {
+        const list = prev || [];
+        const fresh = r.comments.filter(c => {
+          const key = `${c.author}::${c.text.slice(0, 60)}`;
+          if (seenRef.current.has(key)) return false;
+          seenRef.current.add(key);
+          return true;
+        });
+        return [...list, ...fresh];
+      });
+      setContinuation(r.continuation || null);
+    } catch { /* stop paging */ }
+    finally { setLoadingMore(false); }
+  }, [continuation, loadingMore, comments]);
 
   return (
     <section aria-label="Comments">
@@ -75,9 +110,9 @@ export default function Comments({ videoId }: { videoId: string }) {
           ))}
         </div>
       ) : error ? (
-        <p className="text-[#aaa] text-sm">{error}</p>
+        <p className="text-[#aaa] text-sm">Comments are turned off.</p>
       ) : !comments || comments.length === 0 ? (
-        <p className="text-[#aaa] text-sm">No comments yet.</p>
+        <p className="text-[#aaa] text-sm">Comments are turned off.</p>
       ) : (
         <div className="space-y-6">
           {comments.map((c, i) => (
@@ -86,9 +121,7 @@ export default function Comments({ videoId }: { videoId: string }) {
 
                 <img src={c.author_thumb} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" loading="lazy" />
               ) : (
-                <span className="w-10 h-10 rounded-full bg-[#444] text-[#ddd] font-bold flex items-center justify-center shrink-0">
-                  {(c.author || "?").replace(/^@/, "")[0]?.toUpperCase()}
-                </span>
+                <CommentAvatar name={c.author} />
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-[13px]">
@@ -114,6 +147,18 @@ export default function Comments({ videoId }: { videoId: string }) {
               </div>
             </article>
           ))}
+          {continuation && (
+            <div className="pt-2 pb-4">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-5 py-2.5 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-[14px] text-[#f1f1f1] disabled:opacity-60"
+                data-testid="comments-load-more"
+              >
+                {loadingMore ? "Loading…" : "Show more comments"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </section>

@@ -12,6 +12,7 @@ export type Route =
   | { name: "watch"; v: string; t?: number }
   | { name: "channel"; id: string }
   | { name: "subscriptions" }
+  | { name: "shorts" }
   | { name: "history" }
   | { name: "liked" }
   | { name: "later" }
@@ -28,6 +29,7 @@ export function parseRoute(): Route {
   const page = p.get("page");
   switch (page) {
     case "subscriptions": return { name: "subscriptions" };
+    case "shorts": return { name: "shorts" };
     case "history": return { name: "history" };
     case "liked": return { name: "liked" };
     case "later": return { name: "later" };

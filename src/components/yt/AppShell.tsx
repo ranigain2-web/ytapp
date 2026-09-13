@@ -10,6 +10,7 @@ import WatchPage from "./WatchPage";
 import ChannelPage from "./ChannelPage";
 import SettingsPage from "./SettingsPage";
 import { HistoryPage, SubscriptionsPage, LikedPage, LaterPage, PlaylistsPage } from "./LibraryPages";
+import ShortsPage from "./ShortsPage";
 
 export default function AppShell() {
   const { route, navigate } = useRouter();
@@ -43,6 +44,9 @@ export default function AppShell() {
       break;
     case "subscriptions":
       content = <SubscriptionsPage />;
+      break;
+    case "shorts":
+      content = <ShortsPage />;
       break;
     case "history":
       content = <HistoryPage />;
@@ -93,11 +97,12 @@ function SidebarInline() {
 
 function MobileNav() {
   const { route, navigate } = useRouter();
+  // YouTube mobile IA: Home / Subscriptions / History / You
   const items = [
-    { label: "Home", route: { name: "home" } as const, icon: "M4 10v11h6v-11M10 4h10v17h-6v-13" },
-    { label: "Subs", route: { name: "subscriptions" } as const, icon: "M7 4v16M3 8v8M17 4l4 4-4 4M11 19c6 0 8-4 8-7s-2-7-8-7-8 4-8 7 2 7 8 7Z" },
-    { label: "History", route: { name: "history" } as const, icon: "M12 8v5l4 2M3 12a9 9 0 1 0 3-6.7M3 4v5h5" },
-    { label: "Later", route: { name: "later" } as const, icon: "M5 4h14v17l-7-4-7 4V4z" },
+    { label: "Home", route: { name: "home" } as const, icon: "m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 12h6v10H9z" },
+    { label: "Shorts", route: { name: "shorts" } as const, icon: "M17.3 6.3a3.5 3.5 0 1 1 3.4 6L10 17.7a3.5 3.5 0 1 1-3.4-6l10.7-5.4zM10 8.3 6.6 10a3.5 3.5 0 0 0-1.3 4.8M14 15.7l3.4-1.7a3.5 3.5 0 0 0 1.3-4.8" },
+    { label: "Subscriptions", route: { name: "subscriptions" } as const, icon: "M4 6v12M8 4v16M21 5.6a1 1 0 0 0-1-.9H12v10.6h8a1 1 0 0 0 1-1z" },
+    { label: "You", route: { name: "history" } as const, icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21c1.5-3.5 4.5-5.5 8-5.5s6.5 2 8 5.5" },
   ];
   return (
     <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0f0f0f] border-t border-[#272727]/70 flex pb-[env(safe-area-inset-bottom)]" aria-label="Mobile navigation">

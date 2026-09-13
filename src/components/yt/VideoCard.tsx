@@ -1,13 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { YtVideo } from "@/lib/yt-api";
 import { useRouter } from "@/lib/yt-router";
 import { formatViews, timeAgo } from "@/lib/yt-format";
 import { BookmarkPlus } from "lucide-react";
 import { useYt } from "@/lib/yt-store";
+import { getAvatar } from "@/lib/yt-avatar";
+import { href } from "@/lib/yt-router";
 
-function ChannelAvatar({ name, size = 36 }: { name: string; size?: number }) {
+// "1.2M views" / "131 watching" — never "131 watching views"
+export function viewsText(video: { views?: string | number; is_live?: boolean }): string {
+  const v = video.views;
+  if (v === undefined || v === null || v === "") return "";
+  const s = String(v);
+  if (/watching/i.test(s)) return s.replace(/^\s*/, "");
+  const f = formatViews(s);
+  return f ? `${f} views` : "";
+}
+
+function ChannelAvatar({ name, channelId, url, size = 36 }: { name: string; channelId?: string; url?: string; size?: number }) {
+  const real = url || (channelId ? getAvatar(channelId) : "");
+  const [, bump] = useState(0);
+  useEffect(() => {
+    if (real || !channelId) return;
+    const onAvatars = () => bump(v => v + 1);
+    window.addEventListener("yt-avatars", onAvatars);
+    return () => window.removeEventListener("yt-avatars", onAvatars);
+  }, [real, channelId]);
+  if (real) {
+    return <img src={real} alt="" className="rounded-full object-cover shrink-0 select-none" style={{ width: size, height: size }} loading="lazy" />;
+  }
   const colors = ["#3ea6ff", "#ff4e45", "#ffb13b", "#2ba640", "#9c4dcc", "#e91e63", "#00bcd4"];
   const c = colors[(name.charCodeAt(0) || 0) % colors.length];
   return (
@@ -49,7 +72,7 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
 
             <img src={video.thumb} alt={video.title} loading="lazy" className="w-full h-full object-cover" onError={() => setImgFailed(true)} />
           ) : <div className="w-full h-full" />}
-          {video.duration && (
+          {video.duration && !video.is_live && (
             <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[11px] font-medium px-[3px] rounded-[3px]">{video.duration}</span>
           )}
         </div>
@@ -57,7 +80,7 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
           <h3 className="text-[14px] font-medium leading-[20px] clamp-2 text-[#f1f1f1]">{video.title}</h3>
           <p className="text-[12px] text-[#aaa] mt-1 truncate">{video.channel || "Unknown channel"}</p>
           <p className="text-[12px] text-[#aaa] truncate">
-            {formatViews(video.views) ? `${formatViews(video.views)} views · ` : ""}{timeAgo(video.published)}
+            {[viewsText(video), timeAgo(video.published)].filter(Boolean).join(" · ")}
           </p>
         </div>
       </button>
@@ -65,14 +88,12 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
   }
 
   return (
-    <div
-      className="group cursor-pointer"
-      onClick={open}
+    <a
+      href={href({ name: "watch", v: video.id })}
+      onClick={(e) => { e.preventDefault(); open(); }}
+      className="group cursor-pointer no-underline"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      role="link"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && open()}
       aria-label={video.title}
     >
       <div className="relative aspect-video rounded-xl overflow-hidden bg-[#212121] mb-3">
@@ -88,7 +109,7 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
         ) : (
           <div className="w-full h-full flex items-center justify-center text-[#717171] text-sm">no preview</div>
         )}
-        {video.duration && (
+        {video.duration && !video.is_live && (
           <span className="absolute bottom-[4px] right-[4px] bg-black/80 text-white text-[12px] font-medium px-1 rounded-[4px] tracking-[0.2px]">
             {video.duration}
           </span>
@@ -110,20 +131,18 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
         )}
       </div>
       <div className="flex gap-3">
-        <button onClick={openChannel} className="shrink-0 mt-0.5" aria-label={video.channel}>
-          <ChannelAvatar name={video.channel} />
+        <button onClick={openChannel} className="shrink-0 mt-0.5" aria-label={video.channel} type="button">
+          <ChannelAvatar name={video.channel} channelId={video.channel_id} url={video.channel_thumb} />
         </button>
         <div className="min-w-0 flex-1">
           <h3 className="text-[14px] font-medium leading-[20px] clamp-2 text-[#f1f1f1] min-h-[40px]">{video.title}</h3>
           <button onClick={openChannel} className="block mt-0.5 text-[12px] leading-[18px] text-[#aaa] hover:text-[#f1f1f1] truncate max-w-full">{video.channel || "Unknown channel"}</button>
           <p className="text-[12px] leading-[18px] text-[#aaa] truncate">
-            {formatViews(video.views) ? `${formatViews(video.views)} views` : ""}
-            {formatViews(video.views) && timeAgo(video.published) ? " · " : ""}
-            {timeAgo(video.published)}
+            {[viewsText(video), timeAgo(video.published)].filter(Boolean).join(" · ")}
           </p>
         </div>
       </div>
-    </div>
+    </a>
   );
 }
 
