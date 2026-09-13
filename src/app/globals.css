@@ -241,3 +241,76 @@ input[type="range"].yt-vol::-moz-range-thumb {
 /* Hide Next.js dev-tools overlay in dev screenshots (not present in prod builds) */
 nextjs-portal { display: none !important; }
 nextjs-portal::part(placeholder) { display: none !important; }
+
+/* ===== Premium polish layer (Session 9) ===== */
+
+/* Landscape phones: player becomes a theater shell — fills viewport height,
+   16:9 width derived from height, centered with black pillars. Matches
+   YouTube's landscape behavior (video never taller than the screen). */
+@media (orientation: landscape) and (max-height: 520px) {
+  .yt-player-shell {
+    width: auto;
+    height: calc(100vh - 56px); /* header height */
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .yt-player-shell.w-full { width: auto; }
+  /* the watch layout must not add its own top padding in theater mode */
+  .yt-player-col, .yt-watch-outer { padding-top: 0 !important; margin-top: 0 !important; }
+}
+
+/* Shorts frame: never wider than the viewport, never taller than it.
+   width = min(100%, viewport-height * 9/16) → true 9:16 with side margin
+   when the screen is wide, vertical centering when narrow. */
+.yt-short-frame {
+  width: min(100%, calc(100vh * 9 / 16));
+  height: 100%;
+  aspect-ratio: 9 / 16;
+  margin-inline: auto;
+}
+@supports (height: 100dvh) {
+  .yt-short-frame { width: min(100%, calc(100dvh * 9 / 16)); }
+}
+
+/* Chips rows: YouTube-style edge fades (right fade signals scrollability).
+   Applied as an overlay so the row itself keeps plain horizontal scroll. */
+.yt-chips-fade { position: relative; }
+.yt-chips-fade::after {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 36px;
+  background: linear-gradient(to right, transparent, #0f0f0f 82%);
+  pointer-events: none;
+}
+
+/* Double-tap seek ripple (YouTube signature). Two staggered rings expand
+   from center of the tapped zone while the chevrons pulse once. */
+@keyframes yt-seek-ring {
+  0% { transform: scale(0.55); opacity: 0.55; }
+  70% { transform: scale(1); opacity: 0.12; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.yt-seek-ring {
+  animation: yt-seek-ring 0.65s ease-out forwards;
+}
+@keyframes yt-seek-pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  25% { transform: scale(1.04); opacity: 1; }
+  80% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.yt-seek-pop { animation: yt-seek-pop 0.7s ease-out forwards; }
+
+/* Active bottom-nav icons (Material-style filled states) */
+.yt-nav-fill { fill: currentColor; }
+
+/* Refined skeleton: slightly warmer shimmer cadence */
+.yt-skeleton-v2 {
+  background: #1e1e1e;
+  background-image: linear-gradient(100deg, #1e1e1e 20%, #2c2c2c 42%, #1e1e1e 62%);
+  background-size: 340px 100%;
+  animation: shimmer 1.5s infinite linear;
+}

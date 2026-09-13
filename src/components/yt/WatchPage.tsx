@@ -122,9 +122,9 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     : null;
 
   return (
-    <div className="max-w-[1754px] mx-auto px-0 sm:px-6 pt-0 sm:pt-6 pb-16 flex flex-col xl:flex-row gap-0 sm:gap-6">
+    <div className="yt-watch-outer max-w-[1754px] mx-auto px-0 sm:px-6 pt-0 sm:pt-6 pb-16 flex flex-col xl:flex-row gap-0 sm:gap-6">
       {/* main column */}
-      <div className="flex-1 min-w-0 max-w-[1280px] mx-auto w-full">
+      <div className="yt-player-col flex-1 min-w-0 max-w-[1280px] mx-auto w-full">
         {/* PLAYER */}
         {blockedMessage ? (
           <div
@@ -146,7 +146,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           </div>
         ) : v.embed_fallback || forceEmbed ? (
           <div
-            className="relative w-full aspect-video bg-black rounded-none sm:rounded-xl overflow-hidden"
+            className="yt-player-shell relative w-full aspect-video bg-black rounded-none sm:rounded-xl overflow-hidden"
             style={{ backgroundImage: v.thumb_lg || v.thumb ? `url(${v.thumb_lg || v.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
           >
             <iframe
@@ -159,7 +159,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             <div className="sm:hidden absolute bottom-0 inset-x-0 h-1 bg-transparent" />
           </div>
         ) : (
-          <VideoPlayer video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onProgress={onProgress} onFallback={handlePlayerFallback} />
+          <VideoPlayer video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onNext={goNext} onProgress={onProgress} onFallback={handlePlayerFallback} />
         )}
         {(v.embed_fallback || forceEmbed) && !blockedMessage && (
           <p className="px-4 sm:px-0 py-2 text-[12px] text-[#aaa] bg-[#1a1a1a] sm:rounded-lg sm:mt-2 flex items-center gap-2">
@@ -172,11 +172,11 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           </p>
         )}
 
-        {/* TITLE */}
-        <h1 className="px-4 sm:px-0 mt-3 text-[18px] sm:text-[20px] font-bold leading-[26px] text-[#f1f1f1]">{v.title || "Untitled"}</h1>
+        {/* title */}
+        <h1 className="px-3 sm:px-0 mt-3 text-[18px] sm:text-[20px] font-medium leading-[26px] text-[#f1f1f1]">{v.title || "Untitled"}</h1>
 
         {/* channel + actions row */}
-        <div className="px-4 sm:px-0 mt-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="px-3 sm:px-0 mt-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <button
               onClick={() => v.channel_id && navigate({ name: "channel", id: v.channel_id })}
@@ -207,8 +207,8 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             </button>
           </div>
 
-          {/* actions */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          {/* actions — YouTube mobile pattern: pill row, horizontally scrollable */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
             <div className="flex bg-[#272727] rounded-full h-9 shrink-0">
               <button
                 onClick={() => v.title && toggleLike({ id: v.id, title: v.title, channel: v.channel, channel_id: v.channel_id, thumb: v.thumb_lg || "", views: String(v.views ?? ""), duration: "", published: "" })}
@@ -234,8 +234,22 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               <Share2 className="w-5 h-5" /> Share
             </button>
             <button
+              onClick={() => { window.open(`https://www.youtube.com/watch?v=${v.id}`, "_blank", "noopener"); }}
+              className="hidden sm:flex items-center gap-2 h-9 px-4 rounded-full bg-[#272727] text-[14px] hover:bg-[#3f3f3f] shrink-0"
+              title="Open on YouTube"
+            >
+              <Download className="w-5 h-5" /> Download
+            </button>
+            <button
+              className="flex sm:hidden items-center gap-2 h-9 px-4 rounded-full bg-[#272727] text-[14px] hover:bg-[#3f3f3f] shrink-0"
+              onClick={() => { navigator.clipboard?.writeText(`https://www.youtube.com/watch?v=${v.id}`).catch(() => {}); }}
+              title="Copy video link"
+            >
+              <Scissors className="w-5 h-5" /> Clip
+            </button>
+            <button
               onClick={() => v.title && toggleLater({ id: v.id, title: v.title, channel: v.channel, channel_id: v.channel_id, thumb: v.thumb_lg || "", views: String(v.views ?? ""), duration: "", published: "" })}
-              className={`flex items-center gap-2 h-9 px-4 rounded-full text-[14] shrink-0 ${isLater ? "bg-[#f1f1f1] text-[#0f0f0f]" : "bg-[#272727] text-[#f1f1f1] hover:bg-[#3f3f3f]"}`}
+              className={`flex items-center gap-2 h-9 px-4 rounded-full text-[14px] shrink-0 ${isLater ? "bg-[#f1f1f1] text-[#0f0f0f]" : "bg-[#272727] text-[#f1f1f1] hover:bg-[#3f3f3f]"}`}
             >
               <BookmarkPlus className="w-5 h-5" /> {isLater ? "Saved" : "Save"}
             </button>
@@ -244,7 +258,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
 
         {/* description */}
         <div
-          className="px-4 sm:px-0 mt-3 rounded-xl bg-[#272727]/70 p-3 cursor-pointer hover:bg-[#272727]"
+          className="px-3 sm:px-0 mt-3 rounded-xl bg-[#272727]/70 p-3 cursor-pointer hover:bg-[#272727]"
           onClick={() => setDescOpen(o => !o)}
         >
           <p className="text-[14px] font-medium">
@@ -270,13 +284,13 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         </div>
 
         {/* comments */}
-        <div className="mt-6 px-4 sm:px-0">
+        <div className="mt-6 px-3 sm:px-0">
           <Comments videoId={v.id} />
         </div>
       </div>
 
       {/* related sidebar */}
-      <aside className="w-full xl:w-[402px] shrink-0 px-4 sm:px-0 mt-6 xl:mt-0">
+      <aside className="w-full xl:w-[402px] shrink-0 px-3 sm:px-0 mt-6 xl:mt-0">
         <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
           {["All", "From this channel", "Related", "Recently uploaded", "Watched"].map((chip, i) => (
             <span key={chip} className={`shrink-0 h-8 px-3 rounded-lg text-[13px] font-medium flex items-center ${i === 0 ? "bg-[#f1f1f1] text-[#0f0f0f]" : "bg-[#272727] text-[#f1f1f1]"}`}>{chip}</span>

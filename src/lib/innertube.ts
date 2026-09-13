@@ -1044,3 +1044,37 @@ export async function itShortsFeed(continuation?: string): Promise<{ shorts: YtS
   }
   return { shorts: merged, continuation: token };
 }
+
+/**
+ * Validate short IDs via YouTube oEmbed (returns the set of PLAYABLE ids).
+ * Dead/private/embed-blocked videos return non-200 → they get dropped so the
+ * feed never opens on an "unavailable" card. Native: CapacitorHttp direct
+ * (no CORS). Web/dev: relayed through /api/ytb-oembed.
+ * Best-effort: on any transport failure the id is assumed valid.
+ */
+export async function itValidateShorts(ids: string[]): Promise<Set<string>> {
+  const valid = new Set(ids);
+  await Promise.all(ids.map(async id => {
+    try {
+      if (isNativeApp()) {
+        const { CapacitorHttp } = await import("@capacitor/core");
+        const res = await CapacitorHttp.get({
+          url: `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`,
+          connectTimeout: 6000,
+          readTimeout: 8000,
+        });
+        if (res.status < 200 || res.status >= 300) valid.delete(id);
+      } else {
+        if (!(await probeRelay())) return;
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 8000);
+        try {
+          const res = await fetch(`/api/ytb-oembed?XTransformPort=3001&id=${encodeURIComponent(id)}`, { signal: ctrl.signal });
+          const json = await res.json().catch(() => null) as { ok?: boolean } | null;
+          if (json && json.ok === false) valid.delete(id);
+        } finally { clearTimeout(timer); }
+      }
+    } catch { /* assume valid */ }
+  }));
+  return valid;
+}

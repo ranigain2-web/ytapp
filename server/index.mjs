@@ -629,6 +629,21 @@ app.post('/api/ytb-relay', express.json({ limit: '256kb' }), (req, res) => {
     .catch(err => { warn('relay error', endpoint, String(err.message || err).slice(0, 120)); res.status(502).json({ error: String(err.message || err).slice(0, 160) }); });
 });
 
+// oEmbed validation relay (is this video embeddable?) — used by the Shorts
+// feed to drop dead/unavailable cards before they hit the screen.
+app.get('/api/ytb-oembed', (req, res) => {
+  const id = String(req.query.id || '').slice(0, 24);
+  if (!/^[\w-]{5,24}$/.test(id)) return res.json({ ok: false });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`, {
+    headers: { 'User-Agent': IT_UA },
+    signal: ctrl.signal,
+  })
+    .then(r => { clearTimeout(timer); res.json({ ok: r.ok, status: r.status }); })
+    .catch(() => { clearTimeout(timer); res.json({ ok: true, assumed: true }); });
+});
+
 // Search suggestions relay (legacy suggest endpoint returns JSONP)
 app.get('/api/ytb-suggest', (req, res) => {
   const q = String(req.query.q || '').slice(0, 120);

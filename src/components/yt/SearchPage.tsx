@@ -131,36 +131,37 @@ export default function SearchPage({ query }: { query: string }) {
       ) : (
         <div className="mt-6 max-w-[1096px]">
           {channel && (
-            <div className="relative border-b border-[#303030]/70 pb-6 mb-6">
+            <div className="border-b border-[#303030]/70 pb-6 mb-6">
             <button
               onClick={() => navigate({ name: "channel", id: channel.id })}
-              className="w-full flex items-center gap-6 py-4 text-left group"
+              className="w-full flex items-center gap-4 sm:gap-6 py-4 text-left group"
             >
               {channel.avatar ? (
                  
-                <img src={channel.avatar} alt="" className="w-[118px] h-[118px] rounded-full object-cover shrink-0" />
+                <img src={channel.avatar} alt="" className="w-[72px] h-[72px] sm:w-[118px] sm:h-[118px] rounded-full object-cover shrink-0" />
               ) : (
-                <span className="w-[118px] h-[118px] rounded-full bg-[#3ea6ff] text-[#0f0f0f] text-4xl font-bold flex items-center justify-center shrink-0">
+                <span className="w-[72px] h-[72px] sm:w-[118px] sm:h-[118px] rounded-full bg-[#3ea6ff] text-[#0f0f0f] text-3xl sm:text-4xl font-bold flex items-center justify-center shrink-0">
                   {(channel.name || "?")[0]?.toUpperCase()}
                 </span>
               )}
               <div className="min-w-0 flex-1">
-                <p className="text-[18px] font-medium text-[#f1f1f1] flex items-center gap-2">
-                  {channel.name}
+                <p className="text-[18px] font-medium text-[#f1f1f1] flex items-center gap-2 min-w-0">
+                  <span className="truncate">{channel.name}</span>
                   {channel.verified && (
                     <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#aaa]" fill="currentColor"><path d="M12 2 9.8 4.2 6.7 4l-.5 3.1L3.5 8.5l1.4 2.8-1.4 2.8 2.7 1.4.5 3.1 3.1-.2L12 22l2.2-2.2 3.1.2.5-3.1 2.7-1.4-1.4-2.8 1.4-2.8-2.7-1.4-.5-3.1-3.1.2L12 2zm-1.6 13.4-3-3 1.4-1.4 1.6 1.6 3.6-3.6 1.4 1.4-5 5z" /></svg>
                   )}
                 </p>
-                <p className="text-[12px] text-[#aaa] mt-0.5">@{channel.name.toLowerCase().replace(/\s+/g, "")}{channelDetail?.subscribers && channelDetail.subscribers !== channel.subscribers ? ` · ${channelDetail.subscribers}` : channel.subscribers ? ` · ${channel.subscribers}` : ""}</p>
-                <p className="text-[12px] text-[#aaa] mt-2 clamp-2">{channel.description || channelDetail?.description?.slice(0, 160)}</p>
+                <p className="text-[12px] text-[#aaa] mt-0.5 truncate">@{channel.name.toLowerCase().replace(/\s+/g, "")}{channelDetail?.subscribers && channelDetail.subscribers !== channel.subscribers ? ` · ${channelDetail.subscribers}` : channel.subscribers ? ` · ${channel.subscribers}` : ""}</p>
+                <p className="text-[12px] text-[#aaa] mt-2 clamp-2">{(channel.description || channelDetail?.description || "").slice(0, 160)}{(channel.description || channelDetail?.description) ? "…" : ""}</p>
               </div>
-            </button>
-            <button
-              onClick={() => toggleSub({ id: channel.id, name: channel.name, avatar: channel.avatar, subscribers: channelDetail?.subscribers || channel.subscribers || "" })}
-              className={`absolute top-6 right-6 h-9 px-4 rounded-full text-[14px] font-medium flex items-center gap-2 ${isSubbed ? "bg-[#272727] hover:bg-[#3f3f3f]" : "bg-[#f1f1f1] text-[#0f0f0f] hover:bg-[#d9d9d9]"}`}
-            >
-              {isSubbed && <Bell className="w-4 h-4" />}
-              {isSubbed ? "Subscribed" : "Subscribe"}
+              {/* Subscribe INSIDE the layout flow — can never overlap the name */}
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleSub({ id: channel.id, name: channel.name, avatar: channel.avatar, subscribers: channelDetail?.subscribers || channel.subscribers || "" }); }}
+                className={`shrink-0 self-center h-9 px-4 rounded-full text-[14px] font-medium flex items-center gap-2 ${isSubbed ? "bg-[#272727] hover:bg-[#3f3f3f]" : "bg-[#f1f1f1] text-[#0f0f0f] hover:bg-[#d9d9d9]"}`}
+              >
+                {isSubbed && <Bell className="w-4 h-4" />}
+                {isSubbed ? "Subscribed" : "Subscribe"}
+              </button>
             </button>
             </div>
           )}
@@ -184,7 +185,8 @@ export default function SearchPage({ query }: { query: string }) {
                       {v.duration && <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[11px] font-medium px-1 rounded">{v.duration}</span>}
                     </div>
                     <p className="text-[13px] font-medium clamp-2 text-[#f1f1f1]">{v.title}</p>
-                    <p className="text-[12px] text-[#aaa] mt-1">{viewsText(v)}{viewsText(v) && v.published ? " · " : ""}{v.published}</p>
+                    <p className="text-[12px] text-[#aaa] mt-1 truncate">{v.channel || channelDetail.name}</p>
+                    <p className="text-[12px] text-[#aaa] mt-0.5">{viewsText(v)}{viewsText(v) && v.published ? " · " : ""}{v.published}</p>
                   </button>
                 ))}
               </div>
@@ -240,7 +242,7 @@ function ResultRow({ video }: { video: YtVideo }) {
         </p>
         {video.views && (
           <p className="text-[12px] text-[#aaa] mt-1 clamp-1 hidden lg:block">
-            {video.channel ? `${video.channel} · ` : ""}Watch this video about {String(video.title).split(/\s+/).slice(0, 6).join(" ").toLowerCase()}…
+            {video.channel ? `${video.channel} · ` : ""}{viewsText(video)}
           </p>
         )}
         <button

@@ -5,22 +5,29 @@ import Hls from "hls.js";
 import type { YtVideoFull, YtCaption, SbSegment } from "@/lib/yt-api";
 import { absStream, fetchSponsorBlock } from "@/lib/yt-api";
 import { formatTime } from "@/lib/yt-format";
+import { useYt } from "@/lib/yt-store";
 import {
   Play, Pause, SkipForward, Volume2, Volume1, VolumeX, Maximize, Minimize,
-  Settings, Subtitles, ArrowLeft, Gauge, Check,
+  Settings, Subtitles, ArrowLeft, Gauge, Check, ChevronRight, ChevronLeft, PictureInPicture2,
 } from "lucide-react";
 
 interface Props {
   video: YtVideoFull;
   startAt?: number;
+  /** Video finished playing (fires the autoplay-next chain when enabled). */
   onEnded?: () => void;
+  /** Next-video button — always active, like YouTube's "Skip this video". */
+  onNext?: () => void;
   onProgress?: (current: number, duration: number) => void;
   /** Called when no direct stream is loadable (e.g. bot-gated HLS) — lets the
    *  host swap in the official embed player instead of showing an error. */
   onFallback?: () => void;
+  /** Shorts mode: fills its container (no 16:9 lock), loops, no control
+   *  buttons — just a thin progress bar, tap-to-pause and double-tap seek. */
+  minimal?: boolean;
 }
 
-export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, onFallback }: Props) {
+export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onProgress, onFallback, minimal = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -52,6 +59,15 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
+  // double-tap seek ripple: {dir, key} — key re-triggers the CSS animation
+  const [ripple, setRipple] = useState<{ dir: "fwd" | "back"; key: number } | null>(null);
+  const rippleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // single vs double tap discrimination on the video surface
+  const tapRef = useRef<{ t: number; zone: "left" | "right" | "mid" } | null>(null);
+  const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // autoplay preference (also switchable from the settings menu, like YouTube)
+  const autoplay = useYt(s => s.prefs.autoplay);
+  const setAutoplay = useYt(s => s.setPrefs);
 
   const fallbackFormat = useMemo(() => {
     // progressive fallback: pick best combined mp4 up to 720p
@@ -74,7 +90,7 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
 
     // progressive fallback switcher: used when HLS dies before levels load
     // (CORS-blocked manifests, gated IPs, …)
-    const useProgressive = () => {
+    const switchToProgressive = () => {
       hls?.destroy();
       if (hlsRef.current === hls) hlsRef.current = null;
       if (fallbackFormat?.url) {
@@ -117,14 +133,14 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
           // progressive file instead of retrying forever.
           if (!manifestOkRef.current) {
             if (netErrors >= 2 || data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) {
-              useProgressive();
+              switchToProgressive();
               return;
             }
             hls?.startLoad();
             return;
           }
           if (netErrors <= 2) { hls?.startLoad(); return; }
-          useProgressive();
+          switchToProgressive();
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           hls?.recoverMediaError();
         } else {
@@ -208,7 +224,16 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
     const onPause = () => setPlaying(false);
     const onWait = () => setWaiting(true);
     const onPlaying = () => setWaiting(false);
-    const onEnd = () => { setPlaying(false); onEnded?.(); };
+    const onEnd = () => {
+      setPlaying(false);
+      if (minimal && !onEnded) {
+        // Shorts loop: replay from the top
+        const el = videoRef.current;
+        if (el) { el.currentTime = 0; el.play().catch(() => {}); }
+        return;
+      }
+      onEnded?.();
+    };
     const onVol = () => { setVolume(el.volume); setMuted(el.muted); };
     const onErr = () => { setError("Stream error — try reloading"); setWaiting(false); };
     el.addEventListener("timeupdate", onTime);
@@ -234,7 +259,7 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
       el.removeEventListener("volumechange", onVol);
       el.removeEventListener("error", onErr);
     };
-  }, [sbSegments, onEnded, onProgress]);
+  }, [sbSegments, onEnded, onProgress, minimal]);
 
   // seek to startAt
   useEffect(() => {
@@ -281,6 +306,65 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
     const el = videoRef.current;
     if (el) { el.currentTime = Math.max(0, Math.min((el.duration || duration) - 0.2, el.currentTime + d)); poke(); }
   }, [duration, poke]);
+
+  // --- Double-tap seek (YouTube signature interaction) ---
+  // Left/right zones: double-tap seeks ±10s with an expanding ripple.
+  // Single tap: reveals hidden controls, or toggles play when visible.
+  // Touch events drive the seek gesture (preventDefault suppresses the
+  // synthesized click/dblclick so mobile never accidentally fullscreens);
+  // mouse clicks keep desktop semantics (click = pause, dblclick = fullscreen).
+  const showRipple = useCallback((dir: "fwd" | "back") => {
+    const key = Date.now();
+    setRipple({ dir, key });
+    if (rippleTimer.current) clearTimeout(rippleTimer.current);
+    rippleTimer.current = setTimeout(() => setRipple(null), 700);
+  }, []);
+
+  const zoneAt = useCallback((clientX: number): "left" | "right" | "mid" => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return "mid";
+    return clientX < rect.left + rect.width * 0.4 ? "left" : clientX > rect.right - rect.width * 0.4 ? "right" : "mid";
+  }, []);
+
+  const singleTapAction = useCallback(() => {
+    if (minimal) { togglePlay(); return; } // Shorts: tap = pause/play directly
+    if (!controlsVisible) { poke(); return; }
+    togglePlay();
+  }, [controlsVisible, poke, togglePlay, minimal]);
+
+  const onSurfaceTap = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!(e.target as HTMLElement).dataset.playerSurface) return;
+    // mouse: immediate semantics (dblclick → fullscreen is separate)
+    singleTapAction();
+  }, [singleTapAction]);
+
+  const onSurfaceTouch = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length > 0 || !(e.target as HTMLElement).dataset.playerSurface) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const zone = zoneAt(t.clientX);
+    const now = Date.now();
+    const last = tapRef.current;
+    if (last && now - last.t < 320 && zone !== "mid" && last.zone === zone) {
+      // double tap → seek ±10s, suppress synthetic click/dblclick
+      e.preventDefault();
+      tapRef.current = null;
+      if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+      seekBy(zone === "left" ? -10 : 10);
+      showRipple(zone === "left" ? "back" : "fwd");
+      return;
+    }
+    tapRef.current = { t: now, zone };
+    // single tap → wait to see if a second tap follows
+    e.preventDefault();
+    if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+    singleTapTimer.current = setTimeout(singleTapAction, 260);
+  }, [zoneAt, seekBy, showRipple, singleTapAction]);
+
+  useEffect(() => () => {
+    if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+    if (rippleTimer.current) clearTimeout(rippleTimer.current);
+  }, []);
 
   const setVol = useCallback((v: number) => {
     const el = videoRef.current;
@@ -344,7 +428,6 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
     }
     setMenu(null);
   };
-
   const pickSpeed = (s: number) => {
     const el = videoRef.current;
     if (el) el.playbackRate = s;
@@ -371,11 +454,12 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-video bg-black rounded-xl overflow-hidden group/player select-none"
+      className={`${minimal ? "relative w-full h-full" : "yt-player-shell relative w-full aspect-video"} bg-black ${minimal ? "rounded-lg sm:rounded-xl" : "rounded-xl"} overflow-hidden group/player select-none`}
       onMouseMove={poke}
-      onMouseLeave={() => { if (playing && !menu) setControlsVisible(false); }}
-      onClick={(e) => { if ((e.target as HTMLElement).dataset.playerSurface) togglePlay(); }}
-      onDoubleClick={(e) => { if ((e.target as HTMLElement).dataset.playerSurface) toggleFullscreen(); }}
+      onMouseLeave={() => { if (playing && !menu && !minimal) setControlsVisible(false); }}
+      onClick={onSurfaceTap}
+      onTouchEnd={onSurfaceTouch}
+      onDoubleClick={(e) => { if (!minimal && (e.target as HTMLElement).dataset.playerSurface) toggleFullscreen(); }}
     >
       {/* error / no stream */}
       {(error || noSource) && !onFallback && (
@@ -393,7 +477,24 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
         autoPlay
         muted
         poster={video.thumb_lg || video.thumb}
+        data-player-surface="1"
       />
+
+      {/* double-tap seek ripple — YouTube signature */}
+      {ripple && (
+        <div
+          key={ripple.key}
+          className={`absolute inset-y-0 ${ripple.dir === "fwd" ? "right-0" : "left-0"} w-2/5 z-10 flex items-center justify-center pointer-events-none overflow-hidden`}
+        >
+          <div className="absolute w-[130px] h-[130px] rounded-full bg-white/20 yt-seek-ring" />
+          <div className="relative flex flex-col items-center gap-1 text-white yt-seek-pop">
+            {ripple.dir === "fwd"
+              ? <ChevronRight className="w-11 h-11" strokeWidth={2.4} />
+              : <ChevronLeft className="w-11 h-11" strokeWidth={2.4} />}
+            <span className="text-[13px] font-medium">10 seconds</span>
+          </div>
+        </div>
+      )}
 
       {/* waiting spinner */}
       {waiting && !error && (
@@ -433,9 +534,9 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
         </button>
       )}
 
-      {/* CONTROLS */}
+      {/* CONTROLS — in minimal (Shorts) mode: thin progress bar only, always visible */}
       <div
-        className={`yt-controls absolute left-0 right-0 bottom-0 z-20 yt-scrim-bottom pt-10 pb-1 px-2 sm:px-4 ${controlsVisible || !playing ? "" : "yt-controls-hidden"}`}
+        className={`yt-controls absolute left-0 right-0 bottom-0 z-20 ${minimal ? "pt-6 pb-2 px-3" : "yt-scrim-bottom pt-10 pb-1 px-2 sm:px-4"} ${minimal ? "" : (controlsVisible || !playing) ? "" : "yt-controls-hidden"}`}
       >
         {/* seek bar */}
         <div
@@ -472,12 +573,13 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
           </div>
         </div>
 
-        {/* buttons row */}
+        {/* buttons row — hidden entirely in Shorts (minimal) mode */}
+        {!minimal && (
         <div className="flex items-center gap-1 sm:gap-2 text-white">
           <button onClick={togglePlay} aria-label={playing ? "Pause (k)" : "Play (k)"} className="w-10 h-10 flex items-center justify-center hover:opacity-80">
             {playing ? <Pause className="w-7 h-7" fill="white" /> : <Play className="w-7 h-7" fill="white" />}
           </button>
-          <button onClick={() => onEnded?.()} aria-label="Next video" className="w-10 h-10 flex items-center justify-center hover:opacity-80">
+          <button onClick={() => onNext?.()} aria-label="Next video" title="Next video" className={`w-10 h-10 flex items-center justify-center hover:opacity-80 ${onNext ? "" : "opacity-40 pointer-events-none"}`}>
             <SkipForward className="w-6 h-6" fill="white" />
           </button>
 
@@ -530,19 +632,31 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
                     {levels.length > 1 && (
                       <button onClick={() => setMenu("quality")} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10">
                         <span className="flex items-center gap-3"><Gauge className="w-4 h-4" /> Quality</span>
-                        <span className="text-[#aaa] text-[13px]">{currentLevel === -1 ? "Auto" : levels.find(l => l.index === currentLevel)?.label || "Auto"}</span>
+                        <span className="flex items-center gap-1 text-[#aaa] text-[13px]">{currentLevel === -1 ? "Auto" : levels.find(l => l.index === currentLevel)?.label || "Auto"}<ChevronRight className="w-3.5 h-3.5" /></span>
                       </button>
                     )}
                     <button onClick={() => setMenu("speed")} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10">
                       <span>Playback speed</span>
-                      <span className="text-[#aaa] text-[13px]">{speed === 1 ? "Normal" : `${speed}x`}</span>
+                      <span className="flex items-center gap-1 text-[#aaa] text-[13px]">{speed === 1 ? "Normal" : `${speed}x`}<ChevronRight className="w-3.5 h-3.5" /></span>
                     </button>
                     {captions.length > 0 && (
                       <button onClick={() => setMenu("captions")} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10">
                         <span className="flex items-center gap-3"><Subtitles className="w-4 h-4" /> Subtitles</span>
-                        <span className="text-[#aaa] text-[13px]">{captions.find(c => c.lang === activeCaption)?.name || "Off"}</span>
+                        <span className="flex items-center gap-1 text-[#aaa] text-[13px]">{captions.find(c => c.lang === activeCaption)?.name || "Off"}<ChevronRight className="w-3.5 h-3.5" /></span>
                       </button>
                     )}
+                    <button
+                      onClick={() => { setAutoplay({ autoplay: !autoplay }); }}
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/10 border-t border-white/10 mt-1"
+                      role="switch"
+                      aria-checked={autoplay}
+                    >
+                      <span>Autoplay next video</span>
+                      {/* YouTube-style switch */}
+                      <span className={`relative w-10 h-5 rounded-full transition-colors ${autoplay ? "bg-[#3ea6ff]" : "bg-white/25"}`}>
+                        <span className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white transition-all ${autoplay ? "left-[22px]" : "left-[3px]"}`} />
+                      </span>
+                    </button>
                   </>
                 )}
                 {menu === "quality" && (
@@ -594,10 +708,23 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onProgress, o
             )}
           </div>
 
+          <button
+            onClick={() => {
+              const el = videoRef.current as (HTMLVideoElement & { requestPictureInPicture?: () => Promise<unknown> }) | null;
+              if (document.pictureInPictureElement) document.exitPictureInPicture?.();
+              else el?.requestPictureInPicture?.().catch(() => {});
+            }}
+            aria-label="Picture-in-picture"
+            className="hidden md:flex w-10 h-10 items-center justify-center hover:opacity-80"
+          >
+            <PictureInPicture2 className="w-6 h-6" />
+          </button>
+
           <button onClick={toggleFullscreen} aria-label="Fullscreen (f)" className="w-10 h-10 flex items-center justify-center hover:opacity-80">
             {fullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
           </button>
         </div>
+        )}
       </div>
     </div>
   );

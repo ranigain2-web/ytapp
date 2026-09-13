@@ -306,3 +306,56 @@ datacenter IPs ("Sign in to confirm you're not a bot"). On a real phone's
   better.
 - This file was synced with the live agent worklog (Sessions 6–7 added,
   motive section added) and pushed to the repo.
+
+## Session 9 — 2026-09-13 · Premium UI round: responsive fixes, YouTube-parity player UX, new icon, handover discipline
+
+- **User asks:** fix "cheap" look + responsiveness/layout; portrait/landscape
+  text overlaps and edge cut-offs; run the gauntlet loop vs real YouTube; new
+  app icon; skip-ENTIRE-video + playback settings like YouTube; **add a
+  handover document every task** (standing rule — docs/HANDOVER.md is now
+  rewritten in full and updated on every task).
+- **Baseline audit (blind VLM, 3 viewports):** found the search channel
+  header's Subscribe button literally overlapping the channel name
+  (absolutely-positioned → rebuilt in-flow), the landscape player taller than
+  the viewport with the MiniSidebar eating 20% of the width, the Shorts 9:16
+  card wider than the viewport (clipped action rail), a dead first short,
+  over-bold feed titles, and inconsistent watch-page padding rhythm.
+- **Responsive fixes:** landscape "theater" player (`.yt-player-shell` —
+  height-filling, 16:9-derived width, measured exact fit top 56 → bottom
+  390); MiniSidebar hidden on watch below xl; search header rebuilt; uniform
+  px-3 padding rhythm on watch.
+- **Player UX (the core ask):** double-tap left/right = ±10s seek with
+  expanding ripple (YouTube's signature interaction; touch events own the
+  gesture so mobile never accidental-fullscreens), tap = show-controls /
+  pause, `data-player-surface` on the `<video>` (taps on the playing video
+  were a dead zone before), **Next button always skips the entire video**,
+  **Autoplay toggle** (YouTube-style switch) in the settings menu alongside
+  speed/quality/captions, PiP button on desktop.
+- **Shorts rebuilt:** fully immersive (no header/bottom nav), true 9:16
+  sizing that can never clip, action rail with counts, red Subscribe pill,
+  per-short resolution — **direct ad-free googlevideo playback via the custom
+  player (new `minimal` mode: loops, tap-pause, double-tap seek, thin
+  progress bar) with the official embed as fallback**, plus oEmbed
+  pre-validation that drops dead cards from the first six.
+- **Typography/polish:** feed titles to regular weight (YouTube's real
+  hierarchy), comment header to 16px/medium, action pills gained Download +
+  Clip, chips rows got YouTube-style edge fades, the fake "Watch this video
+  about…" filler line was removed from search results.
+- **App icon v3:** white tile + flat red play button; the critic destroyed
+  the first "premium gradient" attempt (artifact highlight read as a glitch)
+  — flat won: **10/10, "pixel-perfect recreation, gold standard."**
+- **Tooling:** `scripts/with-server.sh` (the sandbox reaper kills background
+  servers between tool calls — this runs servers + E2E inside one process
+  tree) and `scripts/critic.py` (blind VLM A/B harness).
+- **Gauntlet verdicts after fixes:** watch **PASS**, search **PASS**, shorts
+  layout **PASS**; remaining home flags verified as critic artifacts (natural
+  feed cut at the viewport, in-thumbnail content, code-verified chip/grid
+  alignment).
+- **E2E (through the relay = the exact on-device code path):** double-tap
+  fwd +10.8s / back −9.5s with ripple visible; landscape player exact fit;
+  home infinite scroll 75 → 148 cards; watch direct playback readyState 4;
+  shorts 83 cards; comments present.
+- **Honest caveat:** from this sandbox IP every InnerTube player client is
+  bot-gated for shorts (per-video gating) and some embeds throw Error 153 —
+  on real phone IPs direct streams flow (proven: `dQw4w9WgXcQ` plays direct
+  googlevideo from this very sandbox); the embed covers the remainder.

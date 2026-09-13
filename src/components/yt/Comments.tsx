@@ -64,24 +64,19 @@ export default function Comments({ videoId }: { videoId: string }) {
 
   return (
     <section aria-label="Comments">
-      <div className="flex items-center gap-8 mb-6">
-        <h2 className="text-[20px] font-bold">
+      <div className="flex items-center gap-4 mb-5">
+        <h2 className="text-[16px] font-medium text-[#f1f1f1]">
           {count !== null && count > 0 ? `${count.toLocaleString()} Comments` : "Comments"}
         </h2>
-        <div className="flex gap-4 text-[14px]">
-          <button
-            onClick={() => setSort("top")}
-            className={`flex items-center gap-2 ${sort === "top" ? "text-[#f1f1f1] font-medium" : "text-[#aaa]"}`}
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 5h18M6 12h12M10 19h4" /></svg>
-            Sort by
-          </button>
-          {sort === "top" ? (
-            <button onClick={() => setSort("new")} className="text-[#aaa] hover:text-[#f1f1f1]">Newest first</button>
-          ) : (
-            <button onClick={() => setSort("top")} className="text-[#aaa] hover:text-[#f1f1f1]">Top comments</button>
-          )}
-        </div>
+        <button
+          onClick={() => setSort(sort === "top" ? "new" : "top")}
+          className="flex items-center gap-1.5 text-[14px] text-[#aaa] hover:text-[#f1f1f1]"
+          aria-label={sort === "top" ? "Sort by newest first" : "Sort by top comments"}
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 5h18M6 12h12M10 19h4" /></svg>
+          <span className="hidden sm:inline">Sort by</span>
+          <span className="sm:hidden">{sort === "top" ? "Top" : "New"}</span>
+        </button>
       </div>
 
       {/* comment composer (visual only — anonymous) */}

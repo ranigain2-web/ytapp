@@ -22,7 +22,7 @@ export default function ChipsBar({ active, onSelect }: { active: string; onSelec
   const { navigate } = useRouter();
   return (
     <div className="sticky top-14 z-30 bg-[#0f0f0f]">
-      <div className="flex gap-3 px-2 sm:px-6 py-3 overflow-x-auto no-scrollbar" role="tablist" aria-label="Categories">
+      <div className="yt-chips-fade flex gap-3 px-2 sm:px-6 py-3 overflow-x-auto no-scrollbar" role="tablist" aria-label="Categories">
         {CATEGORIES.map((c) => {
           const isActive = c.id === active;
           return (

@@ -77,7 +77,7 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-[14px] font-medium leading-[20px] clamp-2 text-[#f1f1f1]">{video.title}</h3>
+          <h3 className="text-[14px] font-normal leading-[20px] clamp-2 text-[#f1f1f1]">{video.title}</h3>
           <p className="text-[12px] text-[#aaa] mt-1 truncate">{video.channel || "Unknown channel"}</p>
           <p className="text-[12px] text-[#aaa] truncate">
             {[viewsText(video), timeAgo(video.published)].filter(Boolean).join(" · ")}
@@ -115,7 +115,7 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
           </span>
         )}
         {video.is_live && (
-          <span className="absolute bottom-[4px] right-[4px] bg-[#ff0000] text-white text-[11px] font-medium px-1 rounded-[3px] flex items-center gap-1">
+          <span className="absolute bottom-[4px] right-[4px] bg-[#ff0000] text-white text-[11px] font-semibold px-1.5 py-[1px] rounded-[3px] flex items-center gap-1">
             <span className="w-1.5 h-1.5 bg-white rounded-full" />LIVE
           </span>
         )}
@@ -135,8 +135,8 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
           <ChannelAvatar name={video.channel} channelId={video.channel_id} url={video.channel_thumb} />
         </button>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[14px] font-medium leading-[20px] clamp-2 text-[#f1f1f1] min-h-[40px]">{video.title}</h3>
-          <button onClick={openChannel} className="block mt-0.5 text-[12px] leading-[18px] text-[#aaa] hover:text-[#f1f1f1] truncate max-w-full">{video.channel || "Unknown channel"}</button>
+          <h3 className="text-[14px] font-normal leading-[20px] clamp-2 text-[#f1f1f1] min-h-[40px]">{video.title}</h3>
+          <button onClick={openChannel} className="block mt-1 text-[12px] leading-[18px] text-[#aaa] hover:text-[#f1f1f1] truncate max-w-full">{video.channel || "Unknown channel"}</button>
           <p className="text-[12px] leading-[18px] text-[#aaa] truncate">
             {[viewsText(video), timeAgo(video.published)].filter(Boolean).join(" · ")}
           </p>
