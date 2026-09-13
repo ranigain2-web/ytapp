@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getApiBase, setApiBase, fetchHealth } from "@/lib/yt-api";
+import { getApiBase, setApiBase, fetchHealth, getActiveSourceLabel, invalidateDataSource, resolveDataSource } from "@/lib/yt-api";
 import { useYt } from "@/lib/yt-store";
-import { Check, X, RefreshCw } from "lucide-react";
+import { Check, X, RefreshCw, Globe, Server } from "lucide-react";
 
 function Toggle({ label, desc, value, onChange }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -30,12 +30,27 @@ export default function SettingsPage() {
   const [health, setHealth] = useState<{ ok: boolean; po_token: boolean; uptime: number } | null>(null);
   const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [sourceLabel, setSourceLabel] = useState<string>("checking…");
   const prefs = useYt(s => s.prefs);
   const setPrefs = useYt(s => s.setPrefs);
   const clearHistory = useYt(s => s.clearHistory);
 
+  const refreshSource = () => {
+    setSourceLabel("checking…");
+    invalidateDataSource();
+    resolveDataSource()
+      .then(() => setSourceLabel(getActiveSourceLabel()))
+      .catch(() => setSourceLabel("not connected"));
+  };
+
   useEffect(() => {
-    fetchHealth().then(setHealth).catch(() => setHealth(null));
+    let alive = true;
+    invalidateDataSource();
+    resolveDataSource()
+      .then(() => { if (alive) setSourceLabel(getActiveSourceLabel()); })
+      .catch(() => { if (alive) setSourceLabel("not connected"); });
+    fetchHealth().then(h => { if (alive) setHealth(h); }).catch(() => { if (alive) setHealth(null); });
+    return () => { alive = false; };
   }, []);
 
   const save = () => {
@@ -59,12 +74,35 @@ export default function SettingsPage() {
     <div className="px-2 sm:px-6 pb-16 pt-2 max-w-[720px]">
       <h1 className="text-[24px] sm:text-[36px] font-bold mb-8">Settings</h1>
 
+      {/* Data source */}
+      <section className="mb-10">
+        <h2 className="text-[16px] font-medium mb-4">Data source</h2>
+        <div className="rounded-xl bg-[#272727]/60 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              {sourceLabel.startsWith("community") ? <Globe className="w-5 h-5 text-[#ffb13b] shrink-0" /> : <Server className="w-5 h-5 text-[#3ea6ff] shrink-0" />}
+              <div className="min-w-0">
+                <p className="text-[14px] text-[#f1f1f1] truncate">{sourceLabel}</p>
+                <p className="text-[12px] text-[#aaa] mt-0.5">Active source for search, feeds and video pages</p>
+              </div>
+            </div>
+            <button onClick={refreshSource} className="flex items-center gap-2 h-9 px-4 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-[13px] shrink-0">
+              <RefreshCw className="w-4 h-4" /> Check now
+            </button>
+          </div>
+          <p className="text-[12px] leading-[18px] text-[#aaa] mt-3">
+            Your own server gives ad-free direct streams and full quality. Community servers are free public
+            instances — used automatically when no server is set, with playback through the official embed.
+          </p>
+        </div>
+      </section>
+
       {/* API server */}
       <section className="mb-10">
         <h2 className="text-[16px] font-medium mb-4">API server</h2>
         <div className="rounded-xl bg-[#272727]/60 p-4">
           <label htmlFor="api-base" className="block text-[13px] text-[#aaa] mb-2">
-            Backend URL (leave empty for same-origin; used by the Android app)
+            Backend URL (leave empty for same-origin / community fallback; used by the Android app)
           </label>
           <div className="flex gap-2">
             <input

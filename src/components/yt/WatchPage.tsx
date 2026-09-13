@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchVideo, fetchComments, type YtVideoFull, type YtComment } from "@/lib/yt-api";
+import { fetchVideo, fetchComments, getActiveSource, type YtVideoFull, type YtComment } from "@/lib/yt-api";
 import { useRouter } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
 import { formatViews, formatCount, timeAgo, fullDate } from "@/lib/yt-format";
@@ -93,6 +93,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
 
   const v = data!;
   const likeCount = v.likes ? formatCount(v.likes) : "";
+  const communityMode = getActiveSource() === "community";
 
   return (
     <div className="max-w-[1754px] mx-auto px-0 sm:px-6 pt-0 sm:pt-6 pb-16 flex flex-col xl:flex-row gap-0 sm:gap-6">
@@ -116,7 +117,9 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         {v.embed_fallback && (
           <p className="px-4 sm:px-0 py-2 text-[12px] text-[#aaa] bg-[#1a1a1a] sm:rounded-lg sm:mt-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#ffb13b]" />
-            This video is protected on our server&apos;s IP — using official embed (ads may appear). Self-host the API on a residential IP to fix.
+            {communityMode
+              ? "Community mode — playing via the official embed (ads may appear on monetized videos). Connect your own ytapp server in Settings for ad-free direct streams."
+              : "This video is protected on our server's IP — using official embed (ads may appear). Self-host the API on a residential IP to fix."}
           </p>
         )}
 

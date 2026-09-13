@@ -23,6 +23,11 @@ wait_for() { # $1=url  $2=grep-pattern  $3=timeout-secs
 }
 
 # --- 1. pot-provider (PO tokens; needed by yt-api for stream extraction) ---
+# Self-heal: sandbox resets can wipe sub-project node_modules — reinstall if absent.
+if [ ! -d "$POT_DIR/node_modules/axios" ] && [ -f "$POT_DIR/package.json" ]; then
+  echo "pot-provider deps missing — installing…"
+  (cd "$POT_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1)
+fi
 if ! curl -s -m 2 http://127.0.0.1:4416/ping 2>/dev/null | grep -q "server_uptime"; then
   echo "Starting pot-provider (bgutil) on :4416..."
   mkdir -p "$POT_DIR"
@@ -35,6 +40,10 @@ else
 fi
 
 # --- 2. yt-api (Express gateway: /api/* + optional static frontend) ---
+if [ ! -d "$API_DIR/node_modules/express" ] && [ -f "$API_DIR/package.json" ]; then
+  echo "yt-api deps missing — installing…"
+  (cd "$API_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1)
+fi
 if ! curl -s -m 2 http://127.0.0.1:3001/api/health 2>/dev/null | grep -q '"ok":true'; then
   echo "Starting yt-api on :3001..."
   mkdir -p "$API_DIR"

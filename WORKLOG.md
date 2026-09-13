@@ -149,3 +149,46 @@ file is the curated repository copy.)
 - **Lint:** 7 false-positive `require()` errors in `electron/main.cjs`
   (CJS-by-design) → excluded from lint scope; `bun run lint` now clean.
 - **UI polish commit:** VideoCard + eslint config + session-4 screenshots.
+
+## Session 5 — 2026-09-13 · Android crash fix: community mode + robust client (gauntlet)
+
+- **The bug (user-reported, screenshot):** APK on Android showed
+  `Unexpected token '<', "<!DOCTYPE "... is not valid JSON` — the app shipped
+  with NO default backend; on device, relative `/api/*` hit the Capacitor
+  WebView's HTML 404 (HTTP 200 + HTML), and `api()` parsed it as JSON.
+- **Fix 1 — robust client:** `api()` now validates the response body before
+  parsing (JSON-shape guard + try/catch) and raises friendly ApiErrors
+  ("No API server at this address", "invalid response", timeouts). Raw
+  parser errors can never reach the UI again.
+- **Fix 2 — community mode (the big one):** new `src/lib/community.ts` —
+  auto-fallback to public Piped instances (CORS `*`, health-probed,
+  failover list). `resolveDataSource()` picks server → community → setup
+  panel. Verified LIVE from the sandbox: `api.piped.private.coffee` serves
+  trending/search/comments/channel; `/streams` is gated on their side, so
+  watch pages embed via youtube-nocookie from the USER's IP (plays clean on
+  devices). Found+fixed adapter bug: noembed absolute-URL base concat;
+  channel videos fall back to channel-scoped search when the instance
+  returns empty relatedStreams.
+- **Fix 3 — first-run UX:** SetupPanel (round-1 critic verdict FIX →
+  rewrote copy consumer-first → round-2 ALL PASS): "Can't reach YouTube",
+  Retry primary, optional server address + Connect (verified: entering a
+  live backend recovers the app to server mode in-place), Advanced
+  accordion with the Docker one-liner. Settings gained a "Data source"
+  section showing the active source.
+- **Mode-aware UI:** home shows a subtle community badge; watch-page embed
+  notice explains community mode; Settings exposes source + Check now.
+- **E2E (browser, through gateway):** server mode home 15 imgs/no badge ✓;
+  community mode (dead server) home ✓, search "big buck bunny" 20 results ✓,
+  watch: title/channel/actions/description/20 related + real comments ✓
+  (VLM: 5/5 PASS), channel page name/subs/videos via search-seed ✓;
+  setup panel on total outage ✓; Connect round-trip recovers feed ✓.
+  The backend dying mid-session ALSO auto-proved live fallback to community.
+- **Robustness:** `start-stack.sh` now self-heals wiped node_modules (the
+  sandbox reset sub-project deps twice this session). Static export
+  (`build:static`) builds clean; community code confirmed inside the
+  bundle chunk (`api.piped.private.coffee` present in out/).
+- **Honest limits:** community stream extraction on public instances is
+  flaky by design (their IPs) → playback = official embed (ads may appear
+  on monetized videos; direct ad-free streams need the user's own server
+  or the macOS app which self-hosts). noembed fallback shows "0 views"
+  until a healthy instance serves /streams.

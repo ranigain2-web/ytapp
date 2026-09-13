@@ -24,6 +24,7 @@ export function setApiBase(base: string) {
   if (typeof window !== "undefined") {
     window.localStorage.setItem("yt_api_base", clean);
   }
+  invalidateDataSource(); // re-resolve server vs community on next fetch
 }
 
 export function apiHref(path: string): string {
@@ -45,22 +46,93 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, opts: { timeoutMs?: number } = {}): Promise<T> {
+  const url = apiHref(path);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20000);
+  let status = 0;
+  let text = "";
   try {
-    const res = await fetch(apiHref(path), { signal: ctrl.signal, headers: { Accept: "application/json" } });
-    if (!res.ok) {
-      let msg = `HTTP ${res.status}`;
-      try {
-        const j = await res.json();
-        if (j?.error) msg = j.error;
-      } catch { /* ignore */ }
-      throw new ApiError(msg, res.status);
-    }
-    return (await res.json()) as T;
+    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+    status = res.status;
+    text = await res.text();
+  } catch (e) {
+    const timedOut = e instanceof Error && e.name === "AbortError";
+    throw new ApiError(timedOut ? "The request timed out" : "Could not reach the server");
   } finally {
     clearTimeout(timer);
   }
+  // Guard: the response must actually be JSON — an HTML page here means the
+  // backend is absent/misrouted (e.g. Capacitor WebView 404 fallback). Never
+  // surface raw parser errors to the user.
+  const t = text.trimStart();
+  if (!t.startsWith("{") && !t.startsWith("[")) {
+    throw new ApiError(status === 404 ? "No API server at this address" : "The server returned an invalid response", status);
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new ApiError("The server returned an invalid response", status);
+  }
+  if (status < 200 || status >= 300) {
+    const msg = (data as { error?: string })?.error || `HTTP ${status}`;
+    throw new ApiError(msg, status);
+  }
+  return data as T;
+}
+
+// ---- Data source resolution (server vs community) ----
+// The app prefers the yt-api backend (same-origin in the sandbox, or the
+// configured base URL). If that is unreachable — e.g. the Android APK before
+// any server is configured — it automatically falls back to public community
+// instances (Piped API, CORS-open). Both being down surfaces a friendly setup
+// state in the UI.
+
+import { probeCommunity, activeCommunityInstance } from "./community";
+
+export type DataSource = "server" | "community";
+let activeSource: DataSource | null = null;
+let sourceProbe: Promise<DataSource> | null = null;
+
+export function getActiveSource(): DataSource | null {
+  return activeSource;
+}
+
+export function getActiveSourceLabel(): string {
+  if (activeSource === "server") {
+    const b = getApiBase();
+    return b ? `server · ${b}` : "server · same-origin";
+  }
+  if (activeSource === "community") return activeCommunityInstance ? `community · ${activeCommunityInstance.replace(/^https?:\/\//, "")}` : "community";
+  return "not connected";
+}
+
+export function invalidateDataSource() {
+  activeSource = null;
+  sourceProbe = null;
+}
+
+export async function resolveDataSource(): Promise<DataSource> {
+  if (activeSource) return activeSource;
+  if (!sourceProbe) {
+    sourceProbe = (async () => {
+      try {
+        await api<{ ok: boolean }>("/api/health", { timeoutMs: 8000 });
+        activeSource = "server";
+        return "server" as const;
+      } catch {
+        const ok = await probeCommunity();
+        if (ok) {
+          activeSource = "community";
+          return "community" as const;
+        }
+        throw new ApiError("No data source reachable");
+      }
+    })();
+    // don't cache a failed resolution — retry next call
+    sourceProbe.catch(() => { sourceProbe = null; });
+  }
+  return sourceProbe;
 }
 
 // ---- Types ----
@@ -154,9 +226,17 @@ export interface SbSegment {
   end: number;
 }
 
-// ---- Endpoints ----
-export const fetchHome = (category: string) =>
-  api<{ category: string; source: string; results: YtVideo[] }>(`/api/home?category=${encodeURIComponent(category)}`, { timeoutMs: 60000 });
+// ---- Endpoints (routed: ytapp server when reachable, community otherwise) ----
+import {
+  communityHome, communitySearch, communityVideo,
+  communityComments, communityChannel,
+} from "./community";
+
+export async function fetchHome(category: string): Promise<{ category: string; source: string; results: YtVideo[] }> {
+  const mode = await resolveDataSource();
+  if (mode === "community") return communityHome(category);
+  return api<{ category: string; source: string; results: YtVideo[] }>(`/api/home?category=${encodeURIComponent(category)}`, { timeoutMs: 60000 });
+}
 
 export interface YtChannelResult {
   id: string;
@@ -167,23 +247,39 @@ export interface YtChannelResult {
   verified?: boolean;
 }
 
-export const fetchSearch = (q: string) =>
-  api<{ query: string; channel?: YtChannelResult | null; results: YtVideo[] }>(`/api/search?q=${encodeURIComponent(q)}&type=video`, { timeoutMs: 60000 });
+export async function fetchSearch(q: string): Promise<{ query: string; channel?: YtChannelResult | null; results: YtVideo[] }> {
+  const mode = await resolveDataSource();
+  if (mode === "community") return communitySearch(q);
+  return api<{ query: string; channel?: YtChannelResult | null; results: YtVideo[] }>(`/api/search?q=${encodeURIComponent(q)}&type=video`, { timeoutMs: 60000 });
+}
 
-export const fetchVideo = (id: string) =>
-  api<YtVideoFull>(`/api/video/${id}`, { timeoutMs: 60000 });
+export async function fetchVideo(id: string): Promise<YtVideoFull> {
+  const mode = await resolveDataSource();
+  if (mode === "community") return communityVideo(id);
+  return api<YtVideoFull>(`/api/video/${id}`, { timeoutMs: 60000 });
+}
 
-export const fetchComments = (id: string, sort: "top" | "new" = "top") =>
-  api<{ comments: YtComment[]; count: number | null; error?: string }>(`/api/video/${id}/comments?sort=${sort}`, { timeoutMs: 60000 });
+export async function fetchComments(id: string, sort: "top" | "new" = "top"): Promise<{ comments: YtComment[]; count: number | null; error?: string }> {
+  const mode = await resolveDataSource();
+  if (mode === "community") return communityComments(id);
+  return api<{ comments: YtComment[]; count: number | null; error?: string }>(`/api/video/${id}/comments?sort=${sort}`, { timeoutMs: 60000 });
+}
 
-export const fetchChannel = (id: string) =>
-  api<YtChannel>(`/api/channel/${id}`, { timeoutMs: 60000 });
+export async function fetchChannel(id: string): Promise<YtChannel> {
+  const mode = await resolveDataSource();
+  if (mode === "community") return communityChannel(id);
+  return api<YtChannel>(`/api/channel/${id}`, { timeoutMs: 60000 });
+}
 
-export const fetchSponsorBlock = (id: string) =>
-  api<{ segments: SbSegment[]; source: string | null; unreachable?: boolean }>(`/api/sponsorblock/${id}`, { timeoutMs: 12000 });
+export async function fetchSponsorBlock(id: string): Promise<{ segments: SbSegment[]; source: string | null; unreachable?: boolean }> {
+  const mode = await resolveDataSource();
+  if (mode === "community") return { segments: [], source: null, unreachable: true };
+  return api<{ segments: SbSegment[]; source: string | null; unreachable?: boolean }>(`/api/sponsorblock/${id}`, { timeoutMs: 12000 });
+}
 
-export const fetchHealth = () =>
-  api<{ ok: boolean; po_token: boolean; uptime: number }>(`/api/health`, { timeoutMs: 8000 });
+export async function fetchHealth(): Promise<{ ok: boolean; po_token: boolean; uptime: number }> {
+  return api<{ ok: boolean; po_token: boolean; uptime: number }>(`/api/health`, { timeoutMs: 8000 });
+}
 
 // Absolute URL resolver for streams (HLS/captions/storyboard paths are relative)
 export function absStream(url: string | null | undefined): string {
