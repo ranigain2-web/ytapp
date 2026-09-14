@@ -21,7 +21,7 @@ export const CATEGORIES = [
 export default function ChipsBar({ active, onSelect }: { active: string; onSelect: (cat: string) => void }) {
   const { navigate } = useRouter();
   return (
-    <div className="sticky top-14 z-30 bg-[var(--yt-bg)]">
+    <div className="sticky top-[var(--yt-header-h)] z-30 bg-[var(--yt-bg)]">
       <div className="yt-chips-fade flex gap-3 px-2 sm:px-6 py-3 overflow-x-auto no-scrollbar" role="tablist" aria-label="Categories">
         {CATEGORIES.map((c) => {
           const isActive = c.id === active;

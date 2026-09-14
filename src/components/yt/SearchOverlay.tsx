@@ -126,7 +126,7 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
       aria-label="Search"
     >
       {/* top bar */}
-      <div className="h-14 flex items-center gap-2 px-2 border-b border-[var(--yt-border)]">
+      <div className="h-[var(--yt-header-h)] flex items-center gap-2 px-2 border-b border-[var(--yt-border)]">
         <button
           onClick={onClose}
           aria-label="Close search"
@@ -166,7 +166,7 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
       </div>
 
       {/* suggestions / recents */}
-      <div className="overflow-y-auto overscroll-contain" style={{ height: "calc(100% - 56px)" }} data-testid="search-suggestion-list">
+      <div className="overflow-y-auto overscroll-contain" style={{ height: "calc(100% - var(--yt-header-h))" }} data-testid="search-suggestion-list">
         {!q.trim() && recents.length === 0 && (
           <div className="pt-16 text-center text-[13px] text-[#717171] px-8">
             No recent searches yet — start typing to see suggestions.

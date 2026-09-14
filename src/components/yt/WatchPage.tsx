@@ -185,13 +185,20 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     : null;
 
   return (
-    <div className="yt-watch-outer max-w-[1754px] mx-auto px-0 sm:px-6 pt-0 sm:pt-6 pb-16 flex flex-col xl:flex-row gap-0 sm:gap-6">
+    // Two measured layout facts drive these breakpoints:
+    //  • below lg the player is edge-to-edge (YouTube's tablet player is the
+    //    full 834px; ours was inset to 802px by a sm:px-6 override),
+    //  • YouTube goes TWO-COLUMN on watch from 1000px, not 1280px — at 1024 it
+    //    renders a 656px player beside a 320px related rail. Ours stayed
+    //    stacked, so a 1024px Mac/iPad window got a full-width player and the
+    //    related list pushed below the fold.
+    <div className="yt-watch-outer max-w-[1754px] mx-auto px-0 lg:px-4 xl:px-6 pt-0 lg:pt-4 xl:pt-6 pb-16 flex flex-col lg:flex-row gap-0 lg:gap-4 xl:gap-6">
       {/* main column */}
       <div className="yt-player-col flex-1 min-w-0 max-w-[1280px] mx-auto w-full">
         {/* PLAYER */}
         {blockedMessage ? (
           <div
-            className="w-full aspect-video bg-black rounded-none sm:rounded-xl flex flex-col items-center justify-center px-6 text-center bg-cover bg-center"
+            className="w-full aspect-video bg-black rounded-none lg:rounded-xl flex flex-col items-center justify-center px-6 text-center bg-cover bg-center"
             style={v.thumb_lg || v.thumb ? { backgroundImage: `linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.72)), url(${v.thumb_lg || v.thumb})` } : undefined}
             data-testid="blocked-video"
           >
@@ -209,7 +216,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           </div>
         ) : v.embed_fallback || forceEmbed ? (
           <div
-            className="yt-player-shell relative w-full aspect-video bg-black rounded-none sm:rounded-xl overflow-hidden"
+            className="yt-player-shell relative w-full aspect-video bg-black rounded-none lg:rounded-xl overflow-hidden"
             style={{ backgroundImage: v.thumb_lg || v.thumb ? `url(${v.thumb_lg || v.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
           >
             <iframe
@@ -281,7 +288,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           const hasAudioStream = !(v.embed_fallback || forceEmbed)
             && (v.formats || []).some(f => f.has_audio && !f.has_video);
           return (
-          <div className="flex items-center justify-between gap-3 px-3 sm:px-0 py-2 mt-1 border-b border-[var(--yt-border)] overflow-x-auto no-scrollbar">
+          <div className="flex items-center justify-between gap-3 px-3 lg:px-0 py-2 mt-1 border-b border-[var(--yt-border)] overflow-x-auto no-scrollbar">
             <button
               onClick={() => setPrefs({ autoplay: !autoplay })}
               role="switch"
@@ -322,10 +329,10 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         })()}
 
         {/* title */}
-        <h1 className="px-3 sm:px-0 mt-2 text-[18px] sm:text-[20px] font-medium leading-[26px] text-[var(--yt-text)]">{v.title || "Untitled"}</h1>
+        <h1 className="px-3 lg:px-0 mt-2 text-[18px] sm:text-[20px] font-medium leading-[26px] text-[var(--yt-text)]">{v.title || "Untitled"}</h1>
 
         {/* channel + actions row */}
-        <div className="px-3 sm:px-0 mt-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="px-3 lg:px-0 mt-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <button
               onClick={() => v.channel_id && navigate({ name: "channel", id: v.channel_id })}
@@ -401,7 +408,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
 
         {/* description */}
         <div
-          className="px-3 sm:px-0 mt-3 rounded-xl bg-[var(--yt-elev2-70)] p-3 cursor-pointer hover:bg-[var(--yt-bg-elev2)]"
+          className="px-3 lg:px-0 mt-3 rounded-xl bg-[var(--yt-elev2-70)] p-3 cursor-pointer hover:bg-[var(--yt-bg-elev2)]"
           onClick={() => setDescOpen(o => !o)}
         >
           <p className="text-[14px] font-medium">
@@ -427,20 +434,26 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         </div>
 
         {/* comments */}
-        <div className="mt-6 px-3 sm:px-0">
+        <div className="mt-6 px-3 lg:px-0">
           <Comments videoId={v.id} />
         </div>
       </div>
 
       {/* related sidebar */}
-      <aside className="w-full xl:w-[402px] shrink-0 px-3 sm:px-0 mt-6 xl:mt-0">
+      <aside className="w-full lg:w-[320px] xl:w-[402px] shrink-0 px-3 lg:px-0 mt-6 lg:mt-0">
         <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
           {["All", "From this channel", "Related", "Recently uploaded", "Watched"].map((chip, i) => (
             <span key={chip} className={`shrink-0 h-8 px-3 rounded-lg text-[13px] font-medium flex items-center ${i === 0 ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)]"}`}>{chip}</span>
           ))}
         </div>
-        <div className="space-y-2">
-          {(v.related || []).map(r => <VideoCard key={r.id} video={r} compact />)}
+        {/* In the rail (lg+) the related list is a compact stack, and the phone
+            keeps compact rows. In the TABLET band only (sm…lg, i.e. once the
+            secondary column has dropped below the player but the viewport is
+            still wide) YouTube switches to a 2-up grid of stacked cards —
+            measured at 834px: two 393×229 thumbnails per row, not one 810px
+            row. `sm:max-lg:` encodes exactly that band. */}
+        <div className="space-y-2 sm:max-lg:grid sm:max-lg:grid-cols-2 sm:max-lg:gap-x-4 sm:max-lg:gap-y-6 sm:max-lg:space-y-0">
+          {(v.related || []).map(r => <VideoCard key={r.id} video={r} compact responsive />)}
         </div>
       </aside>
     </div>

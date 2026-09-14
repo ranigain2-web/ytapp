@@ -39,7 +39,11 @@ export default function RootLayout({
         {/* apply the stored theme before first paint — no dark/light flash */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
-      <body className={`${roboto.variable} font-sans antialiased bg-[#0f0f0f] text-[#f1f1f1]`}>
+      {/* NOTE: no hardcoded bg/text utilities here. `bg-[#0f0f0f]` out-specifies
+          the `body { background: var(--yt-bg) }` rule in globals.css, which
+          pinned the whole app to the dark palette even in light theme. Themed
+          tokens are applied in CSS so light mode actually goes light. */}
+      <body className={`${roboto.variable} font-sans antialiased`}>
         {children}
         <Toaster />
       </body>

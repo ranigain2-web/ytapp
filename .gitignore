@@ -34,6 +34,14 @@ yarn-error.log*
 .env*
 !.env.example
 
+# ===== generated UI evidence (regenerable — do not commit: ~137MB) =====
+# Recreate with:
+#   bash scripts/with-server.sh 'node scripts/audit-ui.mjs'
+#   bash scripts/with-server.sh 'node scripts/fidelity-bar.mjs'
+# Both write screenshots + a report; the reports are meant to be read locally.
+/docs/screenshots/audit/
+/docs/screenshots/fidelity/
+
 # ===== sandbox-only artifacts (dev environment, NOT part of the product) =====
 /.zscripts/
 /mini-services/

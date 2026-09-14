@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "gauntlet-loop": {
+      "source": "robonuggets/gauntlet-loop",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/gauntlet-loop/SKILL.md",
+      "computedHash": "dc7a515354caa61abe7a3552fbe598bae3cb1c069e25e3c135ee0d5a2e567eb4"
+    }
+  }
+}

@@ -10,11 +10,13 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
-import android.support.v4.media.MediaMetadataCompat;
-import android.support.v4.media.session.MediaSessionCompat;
-import android.support.v4.media.session.PlaybackStateCompat;
+import androidx.media.MediaMetadataCompat;
+import androidx.media.session.MediaSessionCompat;
+import androidx.media.session.PlaybackStateCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.media.app.NotificationCompat.MediaStyle;
 import androidx.annotation.Nullable;
@@ -49,6 +51,20 @@ public class MediaPlaybackService extends Service {
     private static final String EXTRA_POSITION = "position";
     private static final String EXTRA_SEEK_TO = "seekTo";
 
+    /**
+     * The live service instance.
+     *
+     * This exists because Android 12+ forbids starting a foreground service
+     * from the background (ForegroundServiceStartNotAllowedException). Once the
+     * app is backgrounded, every {@code startForegroundService()} call — the
+     * periodic position sync AND the re-assert fired on visibilitychange —
+     * would throw and be swallowed, so the notification went stale and a
+     * service that had been reclaimed was never brought back. Talking to the
+     * already-running instance directly sidesteps the restriction entirely.
+     */
+    private static volatile MediaPlaybackService instance;
+
+    private final Handler main = new Handler(Looper.getMainLooper());
     private MediaSessionCompat mediaSession;
     private PowerManager.WakeLock wakeLock;
     private String title = "YouTube";
@@ -63,6 +79,19 @@ public class MediaPlaybackService extends Service {
     // ---- static command entrypoints (called from the plugin) ----
 
     static void start(Context ctx, String title, String artist, String artwork, double duration) {
+        MediaPlaybackService live = instance;
+        if (live != null) {
+            // Already running: mutate it in place (no background service start).
+            final String t = title, a = artist, aw = artwork;
+            final double d = duration;
+            live.main.post(new Runnable() {
+                @Override
+                public void run() {
+                    live.applyEnable(t, a, aw, d);
+                }
+            });
+            return;
+        }
         Intent i = new Intent(ctx, MediaPlaybackService.class);
         i.setAction(ACTION_ENABLE);
         i.putExtra(EXTRA_TITLE, title);
@@ -73,6 +102,21 @@ public class MediaPlaybackService extends Service {
     }
 
     static void update(Context ctx, Boolean playing, double position, double duration, String title, String artist) {
+        MediaPlaybackService live = instance;
+        if (live != null) {
+            // Runs on every ~5s tick and on every play/pause while backgrounded,
+            // so this MUST NOT go through startForegroundService().
+            final Boolean p = playing;
+            final double pos = position, dur = duration;
+            final String t = title, a = artist;
+            live.main.post(new Runnable() {
+                @Override
+                public void run() {
+                    live.applyUpdate(p, pos, dur, t, a);
+                }
+            });
+            return;
+        }
         Intent i = new Intent(ctx, MediaPlaybackService.class);
         i.setAction(ACTION_UPDATE);
         if (playing != null) i.putExtra(EXTRA_PLAYING, playing.booleanValue());
@@ -84,6 +128,16 @@ public class MediaPlaybackService extends Service {
     }
 
     static void stop(Context ctx) {
+        MediaPlaybackService live = instance;
+        if (live != null) {
+            live.main.post(new Runnable() {
+                @Override
+                public void run() {
+                    live.teardown();
+                }
+            });
+            return;
+        }
         try {
             ctx.stopService(new Intent(ctx, MediaPlaybackService.class));
         } catch (Throwable ignored) {
@@ -107,6 +161,7 @@ public class MediaPlaybackService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         createChannel();
         mediaSession = new MediaSessionCompat(this, "ytapp-media");
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
@@ -144,36 +199,20 @@ public class MediaPlaybackService extends Service {
         String action = intent != null && intent.getAction() != null ? intent.getAction() : ACTION_UPDATE;
         switch (action) {
             case ACTION_ENABLE: {
-                tornDown = false;
                 String t = intent.getStringExtra(EXTRA_TITLE);
-                if (t != null && !t.isEmpty()) title = t;
                 String a = intent.getStringExtra(EXTRA_ARTIST);
-                if (a != null) artist = a;
                 String aw = intent.getStringExtra(EXTRA_ARTWORK);
-                if (aw != null && !aw.equals(artworkUrl)) {
-                    artworkUrl = aw;
-                    artwork = null;
-                }
-                if (intent.hasExtra(EXTRA_DURATION)) duration = intent.getDoubleExtra(EXTRA_DURATION, duration);
-                playing = true;
-                startForeground(NOTIFICATION_ID, buildNotification());
-                refreshSession();
-                fetchArtwork();
+                double d = intent.hasExtra(EXTRA_DURATION) ? intent.getDoubleExtra(EXTRA_DURATION, duration) : duration;
+                applyEnable(t, a, aw, d);
                 break;
             }
             case ACTION_UPDATE: {
-                if (intent.hasExtra(EXTRA_TITLE)) {
-                    String t = intent.getStringExtra(EXTRA_TITLE);
-                    if (t != null && !t.isEmpty()) title = t;
-                }
-                if (intent.hasExtra(EXTRA_ARTIST)) artist = intent.getStringExtra(EXTRA_ARTIST);
-                if (intent.hasExtra(EXTRA_PLAYING)) playing = intent.getBooleanExtra(EXTRA_PLAYING, playing);
-                if (intent.hasExtra(EXTRA_DURATION)) duration = intent.getDoubleExtra(EXTRA_DURATION, duration);
-                if (intent.hasExtra(EXTRA_POSITION)) position = intent.getDoubleExtra(EXTRA_POSITION, position);
-                if (!tornDown) {
-                    startForeground(NOTIFICATION_ID, buildNotification());
-                    refreshSession();
-                }
+                Boolean p = intent.hasExtra(EXTRA_PLAYING) ? intent.getBooleanExtra(EXTRA_PLAYING, playing) : null;
+                double pos = intent.hasExtra(EXTRA_POSITION) ? intent.getDoubleExtra(EXTRA_POSITION, position) : -1.0;
+                double dur = intent.hasExtra(EXTRA_DURATION) ? intent.getDoubleExtra(EXTRA_DURATION, duration) : -1.0;
+                String t = intent.hasExtra(EXTRA_TITLE) ? intent.getStringExtra(EXTRA_TITLE) : null;
+                String a = intent.hasExtra(EXTRA_ARTIST) ? intent.getStringExtra(EXTRA_ARTIST) : null;
+                applyUpdate(p, pos, dur, t, a);
                 break;
             }
             case ACTION_PLAY: {
@@ -220,8 +259,37 @@ public class MediaPlaybackService extends Service {
 
     @Override
     public void onDestroy() {
+        if (instance == this) instance = null;
         if (!tornDown) teardown();
         super.onDestroy();
+    }
+
+    // ---- in-place mutation (main thread) ----
+
+    private void applyEnable(String t, String a, String aw, double d) {
+        tornDown = false;
+        if (t != null && !t.isEmpty()) title = t;
+        if (a != null) artist = a;
+        if (aw != null && !aw.equals(artworkUrl)) {
+            artworkUrl = aw;
+            artwork = null;
+        }
+        if (d > 0) duration = d;
+        playing = true;
+        startForeground(NOTIFICATION_ID, buildNotification());
+        refreshSession();
+        fetchArtwork();
+    }
+
+    private void applyUpdate(Boolean p, double pos, double dur, String t, String a) {
+        if (tornDown) return;
+        if (t != null && !t.isEmpty()) title = t;
+        if (a != null) artist = a;
+        if (p != null) playing = p.booleanValue();
+        if (dur > 0) duration = dur;
+        if (pos >= 0) position = pos;
+        startForeground(NOTIFICATION_ID, buildNotification());
+        refreshSession();
     }
 
     @Nullable

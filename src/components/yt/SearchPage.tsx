@@ -102,7 +102,7 @@ export default function SearchPage({ query }: { query: string }) {
         <div className="mt-6 space-y-6 max-w-[900px]">
           {[1, 2, 3, 4, 5].map(i => (
             <div key={i} className="flex gap-4">
-              <div className="w-[246px] sm:w-[360px] aspect-video rounded-xl yt-skeleton shrink-0" />
+              <div className="w-[246px] sm:w-[360px] lg:w-[444px] xl:w-[500px] aspect-video rounded-xl yt-skeleton shrink-0" />
               <div className="flex-1 space-y-3 pt-1">
                 <div className="h-5 yt-skeleton rounded w-full" />
                 <div className="h-5 yt-skeleton rounded w-2/3" />
@@ -129,7 +129,11 @@ export default function SearchPage({ query }: { query: string }) {
           <p className="text-sm text-[var(--yt-text-2)]">Try different keywords or remove search filters</p>
         </div>
       ) : (
-        <div className="mt-6 max-w-[1096px]">
+        // YouTube caps its primary results column at 1280px, not 1096 — the
+        // fidelity harness measured 1152px-wide result rows at a 1440px
+        // viewport against our 1096, so the container (not the 500px
+        // thumbnail) was what kept our rows narrow.
+        <div className="mt-6 max-w-[1280px]">
           {channel && (
             <div className="border-b border-[var(--yt-border)]/70 pb-6 mb-6">
             <button
@@ -197,7 +201,7 @@ export default function SearchPage({ query }: { query: string }) {
             {videos?.map(v => <ResultRow key={v.id} video={v} />)}
             {loadingMore && [1, 2].map(i => (
               <div key={`sk${i}`} className="flex gap-4 opacity-60">
-                <div className="w-[246px] lg:w-[360px] aspect-video rounded-xl yt-skeleton shrink-0" />
+                <div className="w-[246px] lg:w-[444px] xl:w-[500px] aspect-video rounded-xl yt-skeleton shrink-0" />
                 <div className="flex-1 space-y-2 pt-1"><div className="h-5 yt-skeleton rounded w-2/3" /><div className="h-3 yt-skeleton rounded w-1/3" /></div>
               </div>
             ))}
@@ -223,7 +227,10 @@ function ResultRow({ video }: { video: YtVideo }) {
   const [imgFailed, setImgFailed] = useState(false);
   return (
     <div className="flex gap-4 cursor-pointer group" onClick={open} role="link" tabIndex={0} onKeyDown={e => e.key === "Enter" && open()}>
-      <div className="relative w-[246px] lg:w-[360px] aspect-video rounded-xl overflow-hidden bg-[var(--yt-bg-elev)] shrink-0">
+      {/* Thumbnail size is measured from real YouTube search results: 360px at
+          tablet widths (measured 349 at 834px), 444px at 1024, 500px from 1440
+          up (it grows with the results container). */}
+      <div className="relative w-[246px] sm:w-[360px] lg:w-[444px] xl:w-[500px] aspect-video rounded-xl overflow-hidden bg-[var(--yt-bg-elev)] shrink-0">
         {!imgFailed ? (
 
           <img src={video.thumb_lg || video.thumb} alt={video.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform" onError={() => setImgFailed(true)} />

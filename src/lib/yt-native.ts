@@ -35,6 +35,44 @@ export function isNativeApp(): boolean {
   return typeof window !== "undefined" && Capacitor.isNativePlatform();
 }
 
+/**
+ * True inside the Capacitor Android WebView.
+ *
+ * This decides the app CHROME, not just the native plugin path. Real YouTube
+ * chooses its shell from the user agent, not the viewport: measured at 834px,
+ * an Android UA gets the 48px app bar + bottom pivot bar, a desktop UA gets the
+ * 56px app bar + guide rail. Our shell used to be width-only, so the Android
+ * tablet target rendered desktop chrome. Width still decides layout INSIDE the
+ * mobile shell (grid columns, gutters).
+ */
+export function isAndroidApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as unknown as {
+    androidBridge?: unknown;
+    Capacitor?: { getPlatform?: () => string };
+  };
+  if (w.androidBridge) return true;
+  try {
+    return w.Capacitor?.getPlatform?.() === "android";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stamp the platform class on <html> so CSS can pin the shell.
+ *
+ * The boot script in yt-theme.ts already does this before first paint (no
+ * flash of desktop chrome on an Android tablet). This is the client-side
+ * re-assert for the case where the bridge shows up after the document booted.
+ * It only touches classList, and <html> carries suppressHydrationWarning, so
+ * it can never desync hydration.
+ */
+export function applyPlatformClass() {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle("yt-android", isAndroidApp());
+}
+
 export function nativeBackgroundEnable(opts: YtBackgroundEnableOptions) {
   getNative()?.enable(opts).catch(() => {});
 }

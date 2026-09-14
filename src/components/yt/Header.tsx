@@ -28,10 +28,11 @@ export default function Header({ onToggleSidebar, onSearch }: {
   const theme = useYt(s => s.prefs.theme);
   const setPrefs = useYt(s => s.setPrefs);
   const isLight = resolveIsLight(theme);
-  const [q, setQ] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("q") || "";
-  });
+  // Start empty and seed from the URL AFTER mount. Reading location during the
+  // first render made the server ("/") and the client ("/?q=space documentary")
+  // disagree on the input's value, which is what threw React hydration error
+  // #418 on search routes.
+  const [q, setQ] = useState("");
   const [focus, setFocus] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -41,13 +42,15 @@ export default function Header({ onToggleSidebar, onSearch }: {
   const suggBoxRef = useRef<HTMLDivElement>(null);
   const { navigate } = useRouter();
 
-  // sync input on back/forward navigation (event callback context)
+  // seed the input from the URL after hydration, then stay in sync on
+  // back/forward navigation (event-callback context, so no render mismatch)
   useEffect(() => {
-    const onPop = () => {
+    const sync = () => {
       const params = new URLSearchParams(window.location.search);
       setQ(params.get("q") || "");
-      setSuggOpen(false);
     };
+    sync();
+    const onPop = () => { sync(); setSuggOpen(false); };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -103,7 +106,7 @@ export default function Header({ onToggleSidebar, onSearch }: {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 h-14 bg-[var(--yt-bg)] flex items-center gap-2 px-2 sm:px-4">
+      <header className="fixed top-0 left-0 right-0 z-50 h-[var(--yt-header-h)] bg-[var(--yt-bg)] flex items-center gap-2 px-2 sm:px-4">
         {/* left: hamburger + logo */}
         <div className="flex items-center gap-1 shrink-0">
           <button

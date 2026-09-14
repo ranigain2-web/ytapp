@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Hls from "hls.js";
-import type { YtVideoFull, YtCaption, SbSegment } from "@/lib/yt-api";
+import type { YtVideoFull, YtFormat, YtCaption, SbSegment } from "@/lib/yt-api";
 import { absStream, fetchSponsorBlock } from "@/lib/yt-api";
 import { formatTime } from "@/lib/yt-format";
 import { useYt } from "@/lib/yt-store";
@@ -82,6 +82,10 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
   // native background service bookkeeping
   const bgActiveRef = useRef(false);
+  // Did the USER deliberately pause? Backgrounding an Android WebView can fire
+  // a pause event all by itself; we must not treat that as "the user wants it
+  // stopped", or background playback is impossible.
+  const userPausedRef = useRef(false);
   const positionRef = useRef(0);
   const durationRef = useRef(0);
   const lastSyncRef = useRef(0);
@@ -94,11 +98,13 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     const combined = video.formats.filter(f => f.has_video && f.has_audio && /mp4/.test(f.mime));
     return combined.sort((a, b) => (b.height || 0) - (a.height || 0)).find(f => (f.height || 0) <= 720) || combined[0] || video.formats.find(f => f.has_video && f.has_audio);
   }, [video.formats]);
-  // Premium "audio mode": best audio-only stream (m4a/webm) — saves data and
-  // is the source used for pure listening / background audio.
+  // Premium "audio mode": best audio-only stream — saves data and is the
+  // source used for pure listening / background audio. Prefer m4a (universally
+  // hardware-decoded, incl. Safari/WKWebView on macOS), then webm/opus.
   const audioFormat = useMemo(() => {
-    const audio = video.formats.filter(f => f.has_audio && !f.has_video && /mp4|webm/.test(f.mime));
-    return audio.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0] || null;
+    const audio = video.formats.filter(f => f.has_audio && !f.has_video && !!f.url);
+    const rank = (f: YtFormat) => (/mp4|m4a/.test(f.mime) ? 0 : /webm/.test(f.mime) ? 1 : 2);
+    return audio.sort((a, b) => rank(a) - rank(b) || (b.bitrate || 0) - (a.bitrate || 0))[0] || null;
   }, [video.formats]);
   const noSource = !video.hls && !fallbackFormat?.url && !(audioOnly && audioFormat?.url);
 
@@ -352,22 +358,83 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     }
   }, [playing, video.title, video.channel]);
 
-  // native foreground service: alive while playing (and pref on), gone otherwise
+  // --- Premium: native foreground service (Android) ---
+  // This service is what keeps the app process — and therefore the stream —
+  // alive once the activity leaves the foreground.
+  //
+  // It is deliberately NOT torn down when playback pauses. Android can pause a
+  // WebView's <video> the moment the activity is backgrounded, and tearing the
+  // service down at exactly that moment removes the only thing keeping the
+  // process alive. That race is how "background play is not working" happens.
+  // The service stops only when the pref is switched off, the player unmounts,
+  // or the video is replaced.
   useEffect(() => {
-    const want = playing && backgroundPlay;
-    if (want && !bgActiveRef.current) {
+    if (!backgroundPlay) {
+      if (bgActiveRef.current) {
+        bgActiveRef.current = false;
+        nativeBackgroundDisable();
+      }
+      return;
+    }
+    if (!playing && !started) return; // nothing has started yet — stay idle
+    const payload = {
+      title: video.title || "YouTube",
+      artist: video.channel || "",
+      artwork: video.thumb_lg || video.thumb || "",
+      duration: durationRef.current || video.duration || 0,
+    };
+    if (!bgActiveRef.current) {
       bgActiveRef.current = true;
-      nativeBackgroundEnable({
+      nativeBackgroundEnable(payload);
+    } else {
+      // keeps the lock-screen / notification state in sync with the player
+      nativeBackgroundUpdate({
+        playing,
+        position: positionRef.current,
+        duration: payload.duration,
+        title: payload.title,
+        artist: payload.artist,
+      });
+    }
+  }, [playing, started, backgroundPlay, video.id, video.title, video.channel, video.thumb_lg, video.thumb, video.duration]);
+
+  // The moment the app leaves the foreground is the moment this feature exists
+  // for. Two jobs:
+  //   1. if the WebView paused playback on its own (not the user), resume it —
+  //      a foreground service alone cannot restart a paused <video>;
+  //   2. make sure the foreground service is actually running, which also
+  //      covers "user hits play then instantly switches apps".
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden" || !backgroundPlay) return;
+      const el = videoRef.current;
+      if (!el) return;
+      if (el.paused && !userPausedRef.current && !el.ended) {
+        el.play().catch(() => { /* autoplay policy — notification Play still works */ });
+      }
+      const payload = {
         title: video.title || "YouTube",
         artist: video.channel || "",
         artwork: video.thumb_lg || video.thumb || "",
-        duration: durationRef.current || video.duration || 0,
-      });
-    } else if (!want && bgActiveRef.current) {
-      bgActiveRef.current = false;
-      nativeBackgroundDisable();
-    }
-  }, [playing, backgroundPlay, video.id, video.title, video.channel, video.thumb_lg, video.thumb, video.duration]);
+        duration: el.duration || durationRef.current || video.duration || 0,
+      };
+      if (!bgActiveRef.current) {
+        bgActiveRef.current = true;
+        nativeBackgroundEnable(payload);
+      } else {
+        nativeBackgroundUpdate({
+          playing: !el.paused,
+          position: el.currentTime || 0,
+          duration: payload.duration,
+          title: payload.title,
+          artist: payload.artist,
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [backgroundPlay, video.id, video.title, video.channel, video.thumb_lg, video.thumb, video.duration]);
 
   useEffect(() => () => {
     if (bgActiveRef.current) {
@@ -403,8 +470,8 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (el.paused) { if (!started) userStart(); else el.play().catch(() => {}); }
-    else el.pause();
+    if (el.paused) { userPausedRef.current = false; if (!started) userStart(); else el.play().catch(() => {}); }
+    else { userPausedRef.current = true; el.pause(); }
   }, [started, userStart]);
 
   const seekBy = useCallback((d: number) => {
@@ -513,18 +580,18 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
   // notification / MediaSession buttons land here.
   useEffect(() => {
     setMediaHandlers({
-      play: () => { const el = videoRef.current; if (el && el.paused) { if (!started) userStart(); else el.play().catch(() => {}); } },
-      pause: () => videoRef.current?.pause(),
+      play: () => { const el = videoRef.current; userPausedRef.current = false; if (el && el.paused) { if (!started) userStart(); else el.play().catch(() => {}); } },
+      pause: () => { userPausedRef.current = true; videoRef.current?.pause(); },
       next: () => onNextRef.current?.(),
       seek: (to) => { const el = videoRef.current; if (el && isFinite(to)) { el.currentTime = Math.max(0, Math.min((el.duration || 0) - 0.2, to)); poke(); } },
       seekBy: (d) => seekBy(d),
     });
     const off = addControlListener((e) => {
       const el = videoRef.current;
-      if (e.action === "play") { if (el) { if (!started) userStart(); else el.play().catch(() => {}); } }
-      else if (e.action === "pause") el?.pause();
+      if (e.action === "play") { userPausedRef.current = false; if (el) { if (!started) userStart(); else el.play().catch(() => {}); } }
+      else if (e.action === "pause") { userPausedRef.current = true; el?.pause(); }
       else if (e.action === "next") onNextRef.current?.();
-      else if (e.action === "stop") el?.pause();
+      else if (e.action === "stop") { userPausedRef.current = true; el?.pause(); }
       else if (e.action === "seek" && e.seekTo != null && el) { el.currentTime = Math.max(0, Math.min((el.duration || 0) - 0.2, e.seekTo)); poke(); }
     });
     return () => { off(); clearMediaHandlers(); };
@@ -619,6 +686,45 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
               ? <ChevronRight className="w-11 h-11" strokeWidth={2.4} />
               : <ChevronLeft className="w-11 h-11" strokeWidth={2.4} />}
             <span className="text-[13px] font-medium">10 seconds</span>
+          </div>
+        </div>
+      )}
+
+      {/* AUDIO MODE ARTWORK — an audio-only stream renders no frames, so the
+          video element would sit there as a black rectangle and the feature
+          reads as "broken" instead of intentional. Show the video's artwork
+          (YouTube Premium does the same) with the title/channel, and pass taps
+          through to the player surface so play/pause and double-tap seek still
+          work. */}
+      {audioOnly && audioFormat && !error && (
+        <div
+          className="absolute inset-0 z-[5] overflow-hidden bg-black"
+          data-player-surface="1"
+          data-testid="audio-mode-art"
+        >
+          {(video.thumb_lg || video.thumb) && (
+            <img
+              src={video.thumb_lg || video.thumb}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-40"
+            />
+          )}
+          <div className="relative h-full flex items-center justify-center gap-4 sm:gap-7 px-5 sm:px-10">
+            {(video.thumb_lg || video.thumb) && (
+              <img
+                src={video.thumb_lg || video.thumb}
+                alt=""
+                className="w-[42%] max-w-[260px] aspect-video object-cover rounded-lg sm:rounded-xl shadow-2xl shrink-0"
+              />
+            )}
+            <div className="min-w-0 hidden xs:block max-w-[46%]">
+              <p className="text-white text-[15px] sm:text-[17px] font-medium leading-[22px] clamp-2">{video.title}</p>
+              {video.channel && <p className="text-white/75 text-[13px] mt-1.5 truncate">{video.channel}</p>}
+              <p className="mt-3 inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full bg-white/10 text-white text-[12px] font-medium">
+                <Headphones className="w-3.5 h-3.5" /> Audio mode — data saver
+              </p>
+            </div>
           </div>
         </div>
       )}

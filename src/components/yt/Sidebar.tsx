@@ -140,7 +140,11 @@ export function MiniSidebar() {
     { label: "Liked", icon: ThumbsUp, route: { name: "liked" } },
   ];
   return (
-    <nav className="w-[72px] shrink-0 hidden sm:flex flex-col pt-14" aria-label="mini guide">
+    // Visibility is owned by the wrapper in AppShell (md…xl, or md+ when the
+    // full guide is collapsed). NOTE: no `pt-14` here — AppShell already pads
+    // the whole row by the header height, so a local top pad pushed the rail's
+    // first item 56px below the full guide's first item.
+    <nav className="w-[72px] shrink-0 flex flex-col" aria-label="mini guide">
       {items.map((item) => {
         const active = route.name === item.route?.name;
         return (
@@ -159,7 +163,11 @@ export function MiniSidebar() {
 }
 
 export function SidebarDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (typeof document === "undefined") return null;
+  // NOTE: deliberately no `typeof document === "undefined"` SSR guard here.
+  // The markup below is plain JSX with no browser-only access, and returning
+  // null on the server while the client's FIRST render emitted the overlay
+  // shifted every following sibling — React reported a hydration mismatch on
+  // every route and discarded the server HTML (error #418).
   return (
     <>
       {/* backdrop (mobile) */}
@@ -173,7 +181,7 @@ export function SidebarDrawer({ open, onClose }: { open: boolean; onClose: () =>
         aria-label="Guide"
         aria-hidden={!open}
       >
-        <div className="h-14 flex items-center gap-4 px-4 sticky top-0 bg-[var(--yt-bg)] z-10">
+        <div className="h-[var(--yt-header-h)] flex items-center gap-4 px-4 sticky top-0 bg-[var(--yt-bg)] z-10">
           <button onClick={onClose} aria-label="Close guide" className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-[var(--yt-bg-elev2)]">
             <svg viewBox="0 0 24 24" className="w-6 h-6 text-[var(--yt-text)]" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>

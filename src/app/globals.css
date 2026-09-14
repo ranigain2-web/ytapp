@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Tailwind v4 reads breakpoints from CSS, not tailwind.config.ts. The components
+   use a `3xl:` variant for the widest feed columns; without this registration
+   that class generates nothing and the 6-column layout silently never applied. */
+@theme {
+  --breakpoint-3xl: 1920px;
+}
+
 /* ---- Touch responsiveness (Android WebView) ----
    Kill double-tap-zoom delays and tap highlight flashes so every control
    responds on the FIRST tap, like a native app. */
@@ -201,11 +208,19 @@ html.yt-light {
   --yt-chip-fade: #ffffff;
 }
 
-/* The app canvas follows the theme tokens (overrides the shadcn body bg). */
+/* The app canvas follows the theme tokens (overrides the shadcn body bg).
+   NOTE: layout.tsx must NOT put bg-[#0f0f0f]/text-[#f1f1f1] utilities on
+   <body> — a utility class out-specifies this rule and pins the app to dark. */
 body {
   background: var(--yt-bg);
   color: var(--yt-text);
 }
+
+/* color-scheme comes from the theme CLASS (set pre-paint by the boot script),
+   not an inline style — an inline style added before hydration mismatched the
+   server-rendered <html> and threw React error #418 on every page. */
+html.yt-dark { color-scheme: dark; }
+html.yt-light { color-scheme: light; }
 
 /* Roboto as primary UI font */
 .font-sans, body {
@@ -292,6 +307,42 @@ input[type="range"].yt-vol::-moz-range-thumb {
 nextjs-portal { display: none !important; }
 nextjs-portal::part(placeholder) { display: none !important; }
 
+/* ===== Chrome geometry =====
+   One source of truth for the app bar height. Measured against m.youtube.com
+   in the same browser at the same viewports: YouTube's mobile header is 48px
+   and its desktop header is 56px. Everything that must sit under the header
+   (page top padding, sticky offsets, guide height, chips bar, search overlay)
+   reads this variable, so the two can never drift apart. */
+:root { --yt-header-h: 48px; }
+/* 768px, not 640px: this is the same breakpoint where the bottom pivot bar
+   hands over to the guide rail below, so the app bar and the navigation never
+   mix mobile and desktop chrome. */
+@media (min-width: 768px) { :root { --yt-header-h: 56px; } }
+
+/* ===== Platform shell (Android) =====
+   YouTube picks its chrome from the USER AGENT, not the viewport: measured in
+   one browser at 834px, an Android UA renders the 48px app bar + bottom pivot
+   bar while a desktop UA renders the 56px app bar + guide rail. Our shell was
+   width-only, so the Android tablet target got desktop chrome.
+
+   `yt-android` (stamped pre-paint by the boot script, see yt-theme.ts) pins the
+   mobile shell at any width. Width still drives everything INSIDE the shell
+   (grid columns, gutters, card sizes) — only the chrome is pinned.
+
+   Specificity note: `html.yt-android` (0,1,1) out-specifies `:root` (0,1,0),
+   so the 48px header wins over the 768px media query without !important. The
+   data-attribute selectors (0,2,1) likewise beat Tailwind's `md:` utilities. */
+html.yt-android { --yt-header-h: 48px; }
+html.yt-android [data-yt-rail] { display: none; }
+html.yt-android [data-yt-mobile-nav] { display: flex; }
+
+/* Guide column height. dvh so the Android URL bar collapsing does not leave a
+   scrollable gap; the vh line is the fallback for older WebViews. */
+.yt-under-header {
+  height: calc(100vh - var(--yt-header-h));
+  height: calc(100dvh - var(--yt-header-h));
+}
+
 /* ===== Premium polish layer (Session 9) ===== */
 
 /* Landscape phones: player becomes a theater shell — fills viewport height,
@@ -300,7 +351,7 @@ nextjs-portal::part(placeholder) { display: none !important; }
 @media (orientation: landscape) and (max-height: 520px) {
   .yt-player-shell {
     width: auto;
-    height: calc(100vh - 56px); /* header height */
+    height: calc(100vh - var(--yt-header-h));
     max-width: 100%;
     aspect-ratio: 16 / 9;
     margin-left: auto;
@@ -364,3 +415,74 @@ nextjs-portal::part(placeholder) { display: none !important; }
   background-size: 340px 100%;
   animation: shimmer 1.5s infinite linear;
 }
+
+/* ==========================================================================
+   Motion & materiality layer (phase 13)
+   Goal: the app should feel as smooth as the real thing on a laptop and a
+   tablet, without ever fighting the OS "reduce motion" setting.
+   ========================================================================== */
+
+/* Page entrance — a short, confident rise. Short enough to feel instant
+   (YouTube never animates for longer than ~300ms on navigation). */
+@keyframes yt-page-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+.yt-page-enter { animation: yt-page-enter 0.28s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+/* Media tiles: slow-out zoom (the YouTube grid hover feel) + a hairline
+   border that appears with the scale, which reads as materiality rather than
+   a flat colour change. */
+.yt-media {
+  transition: transform 0.42s cubic-bezier(0.2, 0.7, 0.3, 1), filter 0.3s ease;
+  will-change: transform;
+}
+.yt-card-lift .yt-media { transform: scale(1); }
+@media (hover: hover) and (pointer: fine) {
+  .yt-card-lift:hover .yt-media { transform: scale(1.045); filter: saturate(1.06); }
+}
+
+/* Chips / pills: YouTube's springy press, and a real hover state. */
+.yt-chip {
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.yt-chip:active { transform: scale(0.95); }
+
+/* Ripple-free "press" for icon buttons (Material's 0.92 scale). */
+.yt-icon-btn { transition: background-color 0.18s ease, transform 0.14s cubic-bezier(0.2, 0.7, 0.3, 1); }
+.yt-icon-btn:active { transform: scale(0.92); }
+
+/* Bottom-nav / rail icons cross-fade instead of snapping. */
+.yt-nav-item { transition: color 0.2s ease, transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1); }
+.yt-nav-item:active { transform: scale(0.9); }
+
+/* Overlays (menus, sheets) fade + scale in from their anchor. */
+@keyframes yt-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.yt-pop { animation: yt-pop-in 0.16s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+/* Honor the OS setting: kill decorative motion outright. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===== Large-screen (laptop / tablet landscape) refinements ===== */
+/* Watch page on xl+: give the related rail a little breathing room and keep
+   the player from stretching into an absurdly wide letterbox. */
+@media (min-width: 1280px) {
+  .yt-player-col > .yt-player-shell,
+  .yt-player-col > div > .yt-player-shell { border-radius: 12px; }
+}
+/* Tablet portrait: 2-up grid is correct, but give the padding rhythm the same
+   proportions as YouTube's tablet layout instead of phone-sized gutters. */
+/* REMOVED: a `640px–1024px { .yt-watch-outer { padding: 0 16px } }` override used
+   to live here. It fought the component's own padding and inset the tablet
+   player by 32px (measured 802px wide vs YouTube's 834px). Below xl the player
+   is now deliberately edge-to-edge, and the watch page owns its own padding. */

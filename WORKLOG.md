@@ -491,3 +491,171 @@ top of that, four REAL bugs/gaps existed regardless of version.
 supposedly shipped, FIRST verify which build they're running (Settings →
 About / screenshots) — version skew was the root cause here, and the fix
 isn't just code, it's an in-app version beacon + upgrade tour.
+
+## Session 12 — 2026-09-13 · Cold-start environment bring-up on the fresh checkout
+
+- **Context:** new checkout (`/workspaces/ytapp`, not the original sandbox's
+  `/home/z/my-project`), with **no `node_modules` anywhere and no `bun`
+  installed** — the repo's scripts and `bun.lock` assume bun. Nothing could be
+  built or verified until that was fixed.
+- **Bring-up:** installed bun 1.4.2 (`npm i -g bun`), `bun install` at the root
+  (904 packages), `npm install` in `server/` (73) and `pot-provider/` (161).
+  Both sub-project `package-lock.json` files are **tracked in git** and were
+  reproduced byte-identically — no lockfile churn. Versions: youtubei.js
+  18.0.0, express 4.22.2.
+- **Portability fix:** `scripts/with-server.sh` hardcoded `cd /home/z/my-project`
+  (twice) and ran the static server with `bun`. It now derives the project
+  root from `$BASH_SOURCE` (same pattern as `start-stack.sh`) and runs
+  `scripts/serve-static.mjs` with plain `node` — that script is
+  dependency-free Node ESM, so bun is no longer required for the harness.
+- **Readiness verified (all green):** stack up via `start-stack.sh` — PO token
+  minted and a warm session created ~10 s after boot (`po_token:true`,
+  expires +6 h); `/api/search` + `/api/home` return real InnerTube results;
+  `/api/video/dQw4w9WgXcQ` returns title/channel + **24 formats + HLS** with
+  `embed_fallback:false`; `bun run lint` clean; `bun run build:static`
+  compiles (Next 16.1.3, 3/3 static pages); `test-electron-bundle.sh`
+  **13/13 PASS** — including the full ad-free pipeline (metadata → IOS HLS →
+  recursive manifest rewrite → real video segment bytes through the proxy).
+  Notably this IP is **not** bot-gated for that video, unlike the old
+  datacenter sandbox.
+- **Harness gap (honest):** the gauntlet tooling is sandbox-specific and
+  absent here — `agent-browser`, Chromium/Chrome, the `z-ai` vision CLI, and
+  any VLM API key. So `scripts/e2e-v12.sh` / `e2e-premium.sh` (DOM E2E) and
+  `scripts/critic.py` (blind VLM A/B) **cannot run in this environment** as
+  written. What still verifies changes: `build:static`, `lint`,
+  `test-electron-bundle.sh`, and direct curl probes against the live API.
+  `e2e-v12.sh` / `e2e-premium.sh` also still hardcode `/home/z/...` paths —
+  fix them the same way before use on another machine.
+- **Installed the `gauntlet-loop` skill** (github.com/robonuggets/gauntlet-loop)
+  → `.agents/skills/gauntlet-loop/SKILL.md` + `skills-lock.json`.
+
+## Session 13 — 2026-09-14 · YouTube fidelity (measured) + the two dead features
+
+**User report:** (a) the UI must look like real YouTube — notably “sections
+getting cut out”; (b) **background play doesn't work**; (c) **audio-only
+(“data saver”) mode doesn't work**. Plus: optimise for laptop *and* tablet,
+and the Mac target is Intel (i9 MBP 2019).
+
+### The gauntlet bar: measure YouTube, in the same browser, at the same size
+
+The old blind VLM critic is not available here and I have no image tool, so
+“looks like YouTube” was made **falsifiable with numbers**: `scripts/fidelity-bar.mjs`
+loads **real m.youtube.com / www.youtube.com** and our app in the *same*
+Chromium at the *same* viewport and diffs column counts, item sizes, gaps,
+radii, typography, header/guide/player geometry. `scripts/audit-ui.mjs`
+walks 24 route×viewport combinations and reports horizontal overflow, real
+clipping, overlaps and tap targets. Both save screenshots + a report
+(`docs/screenshots/{fidelity,audit}/`, **gitignored** — ~137 MB, regenerate
+with one command each). Playwright is now a devDependency.
+
+### Measured fidelity fixes (each one is a number from real YouTube)
+
+- **Header height was 8px off.** YouTube's mobile app bar is **48px**, desktop
+  **56px**; ours was 56 everywhere. One `--yt-header-h` token now drives page
+  padding, sticky offsets, guide height, chips bar and search overlay.
+- **The tablet player was 32px narrow** (802 vs 834) — a leftover
+  `min-width: 640px` CSS rule fought the component's own padding. Removed;
+  tablet watch is now **834×469, an exact match**.
+- **1024px got no two-column watch page.** A Mac window at 1024 is YouTube's
+  two-column breakpoint (656 player + 320 rail) — ours stacked until 1280.
+  Watch/search now split at lg; small-laptop player is **656×369, exact**.
+- **`3xl:` was a dead class.** Tailwind v4 reads breakpoints from CSS, not
+  `tailwind.config.ts`, so the 6-column feed variant generated nothing.
+  Registered `--breakpoint-3xl` in `@theme`.
+- **Related-video rail was the wrong shape.** YouTube's rail thumbnail is a
+  *share of the column* (208px in a 320px rail, 256px in 402px) — ours was a
+  fixed 168px, making every rail card ~20% shorter than the real one. And
+  below lg YouTube switches the related list to a **2-up grid**: measured
+  393×229 thumbnails in two columns at 834px while we rendered one 810px row.
+  One `responsive` prop on `VideoCard` reflows phone (rows) → tablet (2-up
+  grid) → rail (rows); now **397×303 vs YouTube's 393×309** at 834, gaps exact.
+- **Search thumbnails**: 360px in the tablet band (YouTube 349), 444 @1024 and
+  500 @1440 were already exact; the results container cap (1096) was what kept
+  rows narrow — YouTube caps the primary column at 1280, so desktop search
+  rows are now **1152px, exact**.
+- **Video description was genuinely cut off** — the collapsed clamp hid
+  1300–1560px of text with no way to expand it. Added a Show more/less
+  expander.
+- **“Android tablet gets desktop chrome.”** YouTube picks its shell from the
+  **user agent**, not the viewport: measured at 834px an Android UA renders the
+  48px bar + bottom pivot bar while a desktop UA renders the 56px bar + guide
+  rail. Our shell was width-only. `yt-theme.ts`'s boot script now stamps
+  `yt-android` pre-paint (so there is never a frame of desktop chrome) and
+  `globals.css` pins the mobile shell at any width; width still drives layout
+  *inside* the shell (grid columns, gutters).
+
+### The two dead features
+
+- **Audio-only (“data saver”).** Root cause: the audio path had no artwork
+  layer and no position handling, so `audioOnly` produced a black box and
+  restarted from 0 — it *looked* broken. Now: audio-only streams are picked
+  from any playback path, `videoWidth === 0` confirms no video track, the
+  artwork replaces the player surface, position is preserved across the swap
+  (`loadedVideoRef`), and toggling back restores video frames. **7/7 checks.**
+- **Background play.** Two real bugs. (1) The foreground service was torn down
+the moment `playing` went false, so a WebView-induced pause destroyed the only
+thing keeping the process alive and nothing ever resumed. (2) `update()` /
+re-assert from the background called `startForegroundService()`, which
+**Android 12+ forbids from the background** — the call threw, `startSafe`
+swallowed it, and the service never started or updated. Now the service
+survives a user pause and only a *deliberate* pause is respected; updates go
+through `startService` when the service is already running, and the service
+re-asserts itself on background. Also replaced the deprecated
+`android.support.v4.*` imports with `androidx.core.*` (they only compiled
+because Jetifier rewrote them). **8/8 checks**, incl. the resume-after-pause
+and pref-off paths.
+
+### Hydration was throwing React #418 on every page
+
+Found while verifying the theme work: two real SSR/client branches —
+`SidebarDrawer` returned `null` on the server but rendered an overlay on the
+client, and `Header`'s search input read `location.search` during first render.
+Plus `color-scheme` was set as an inline style the server never produced, and
+`layout.tsx`'s `<body>` carried hardcoded `bg-[#0f0f0f]` utilities that
+out-specified the theme tokens (light mode kept a dark body). All four fixed;
+**0 hydration errors across 16 route × persisted-state combinations.**
+
+### New / changed harnesses
+
+- `scripts/e2e-playback.mjs` (**28/28**) — real Chromium with a faithful
+  Capacitor Android bridge stub (`window.androidBridge` + `PluginHeaders` +
+  `nativePromise`), so it drives the **real** `yt-background` plugin proxy, not
+  a mock of our own wrapper. Covers hydration, light theme, audio mode,
+  background-play contract, and the Android shell at tablet width.
+- `scripts/fidelity-bar.mjs`, `scripts/audit-ui.mjs` (above).
+- `audit-ui.mjs` now separates **intentional ellipsis** from real clipping —
+  its vertical-overflow branch forgot the line-clamp exclusion the horizontal
+  branch had, so every `clamp-2` card title was reported as a defect.
+- `fidelity-bar.mjs` now names **which element** it measured (`grid el`) and
+  skips comment threads, which had been silently winning the “most uniform
+  children” tie on watch pages and getting compared to YouTube's related list.
+
+### Verification (this checkout, 2026-09-14)
+
+| Gate | Result |
+|---|---|
+| `bun run lint` | clean |
+| `bun run build:static` | clean (Next 16.1.3) |
+| `scripts/audit-ui.mjs` (24 route×viewport) | **0 overflow, 0 real clipping, 0 overlaps** |
+| `scripts/fidelity-bar.mjs` | header 48/56 exact at all 4 viewports; player exact at 390/834/1024; rail + search within a few px |
+| `scripts/e2e-playback.mjs` | **28/28** |
+| `scripts/test-electron-bundle.sh` | **13/13** (incl. real video bytes through the proxy) |
+
+Known remaining delta: at 1440 the watch player is 966 vs YouTube's 996 —
+YouTube reclaims ~30px because it collapses the guide on watch pages. The
+aspect ratio and the 402px rail are exact; ≤1024 is pixel-identical.
+
+### Version bumped to v1.2.1
+
+Session 11's lesson was that a fix the user never actually received is not a
+fix (they were running a v1.0.0-era APK). So this is a visible release: the two
+repaired features lead the What's-new tour, and Settings → About reads v1.2.1
+so “am I on the fixed build?” is answerable in-app. All three harnesses now
+read the version from `package.json` instead of hardcoding it — a stale
+literal there makes the tour open on first run and cover the very layout being
+measured.
+
+Push to `main` triggers `build-android.yml` and `build-macos.yml` (both fire
+on `push` to `main`), so the APK and the Intel-x64 dmg/zip build from this
+commit.
+

@@ -44,7 +44,21 @@ function ChannelAvatar({ name, channelId, url, size = 36 }: { name: string; chan
   );
 }
 
-export function VideoCard({ video, compact = false }: { video: YtVideo; compact?: boolean }) {
+/**
+ * `compact` = the horizontal row used inside the watch page's related rail
+ * (>lg) and other side lists.
+ *
+ * `responsive` lets that same compact card reflow when it is NOT in a rail.
+ * Measured against real YouTube:
+ *   • phone      → compact rows, 168px thumbnail (unchanged)
+ *   • sm … lg    → 2-up grid of stacked cards; YouTube renders 393×229
+ *                  thumbnails in two columns at 834px while we rendered
+ *                  full-width 810px rows
+ *   • lg+        → back to the compact rail row
+ * Rendering one element that reflows is cheaper than mounting both variants
+ * and hiding one, and it keeps a single source of truth for the card.
+ */
+export function VideoCard({ video, compact = false, responsive = false }: { video: YtVideo; compact?: boolean; responsive?: boolean }) {
   const { navigate } = useRouter();
   const later = useYt(s => s.later);
   const toggleLater = useYt(s => s.toggleLater);
@@ -64,10 +78,24 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
   };
 
   if (compact) {
-    // sidebar-related video card (horizontal)
+    // Horizontal row at lg+; full-width grid card below lg when `responsive`
+    // (the two class sets below are the only difference between the modes).
+    // `sm:max-lg:` = the tablet band only, so the phone keeps YouTube's compact
+    // row. At lg+ the max-lg condition stops matching, so the base row wins
+    // again without needing an extra lg: rule.
+    const rootCls = responsive
+      ? "group flex w-full gap-2 text-left sm:max-lg:flex-col sm:max-lg:gap-3"
+      : "flex gap-2 w-full text-left group";
+    // In the rail the thumbnail is a share of the column, not a fixed 168px:
+    // YouTube measures 208px in a 320px rail (65%) and 256px in a 402px rail
+    // (64%). A fixed 168px left the text column far wider than YouTube's and
+    // made every rail card ~20% shorter than the real one.
+    const thumbCls = responsive
+      ? "relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[var(--yt-bg-elev)] sm:max-lg:w-full sm:max-lg:rounded-xl lg:w-[65%] xl:w-[64%]"
+      : "relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[var(--yt-bg-elev)]";
     return (
-      <button onClick={open} className="flex gap-2 w-full text-left group">
-        <div className="relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[var(--yt-bg-elev)]">
+      <button onClick={open} className={rootCls}>
+        <div className={thumbCls}>
           {!imgFailed ? (
 
             <img src={video.thumb} alt={video.title} loading="lazy" className="w-full h-full object-cover" onError={() => setImgFailed(true)} />
@@ -77,8 +105,18 @@ export function VideoCard({ video, compact = false }: { video: YtVideo; compact?
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-[14px] font-normal leading-[20px] clamp-2 text-[var(--yt-text)]">{video.title}</h3>
-          <p className="text-[12px] text-[var(--yt-text-2)] mt-1 truncate">{video.channel || "Unknown channel"}</p>
+          {/* Weight 500 matches real YouTube watch-page related cards, which the
+              fidelity harness measured at 14px/20 —500 (ours was 400). */}
+          <h3 className="text-[14px] font-medium leading-[20px] clamp-2 text-[var(--yt-text)]">{video.title}</h3>
+          {/* Grid mode gets the avatar row (YouTube's feed-card structure); the
+              rail keeps the flat channel line the sidebar uses. */}
+          {responsive && (
+            <div className="hidden sm:max-lg:flex items-center gap-2 mt-1.5">
+              <ChannelAvatar name={video.channel || "?"} channelId={video.channel_id} size={24} />
+              <span className="text-[12px] text-[var(--yt-text-2)] truncate">{video.channel || "Unknown channel"}</span>
+            </div>
+          )}
+          <p className={`text-[12px] text-[var(--yt-text-2)] mt-1 truncate${responsive ? " sm:max-lg:hidden" : ""}`}>{video.channel || "Unknown channel"}</p>
           <p className="text-[12px] text-[var(--yt-text-2)] truncate">
             {[viewsText(video), timeAgo(video.published)].filter(Boolean).join(" · ")}
           </p>

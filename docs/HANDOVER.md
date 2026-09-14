@@ -84,8 +84,28 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   would have had background play silently OFF). E2E suite
   `scripts/e2e-v12.sh` (19 checks) + old suite still 14/14; blind critic:
   watch page OURS WINS.
+- **Phase 12 — cold-start bring-up on a fresh checkout** (2026-09-13/14):
+  the new checkout had no dependencies and no bun, so nothing was buildable
+  or verifiable. Installed bun 1.4.2 + all three dependency trees (sub-project
+  lockfiles reproduced byte-identically) and made `scripts/with-server.sh`
+  path-portable.
+- **Phase 13 — measured YouTube fidelity + the two dead features**
+  (2026-09-14, latest): the user reported that background play and audio-only
+  mode did nothing, and that parts of the UI were “getting cut out”. Both bugs
+  were real (see §3/§5): the foreground service was torn down whenever
+  `playing` went false, and background re-asserts called
+  `startForegroundService()`, which Android 12+ forbids from the background;
+  audio mode had no artwork layer and restarted from 0. “Looks like YouTube”
+  was made falsifiable — `scripts/fidelity-bar.mjs` diffs our DOM against
+  real m.youtube.com / www.youtube.com in the same browser at the same size,
+  and `scripts/audit-ui.mjs` walks 24 route×viewport combinations for layout
+  defects. Fixed from their output: 48px mobile app bar, tablet player
+  802→834 (exact), 1024px two-column watch (exact), the dead `3xl:` variant,
+  the related rail's shape, search thumbnail/container widths, a genuinely
+  cut-off description, and the fact that YouTube picks its shell from the
+  **user agent** rather than the viewport.
 
-## 3. Current state (as of 2026-09-13, end of phase 10 — v1.2.0)
+## 3. Current state (as of 2026-09-14, end of phase 13 — v1.2.1)
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,
@@ -104,9 +124,25 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   → Playback → Background play (default on). Verified to the fullest extent
   possible off-device: the APK with the plugin builds and carries both
   classes + merged manifest entries (local SDK build + CI).
+  **Phase 13 repaired the actual device bugs** (see §5): the service used to
+  be torn down the moment `playing` went false, and background re-asserts
+  called `startForegroundService()` — which Android 12+ **forbids from the
+  background**, so the call threw and `startSafe` swallowed it. Verified
+  8/8 by `scripts/e2e-playback.mjs` §4 against a faithful Capacitor bridge
+  stub (real plugin proxy, not a mock of our own wrapper).
 - ✅ **Audio mode (Premium data saver)**: player settings menu + Settings
   toggle — swaps to the best audio-only stream (m4a/webm opus), keeps
-  position, shows thumbnail + chip. E2E-verified itag 18 → 251 live swap.
+  position, shows thumbnail + chip. Verified 7/7 by `e2e-playback.mjs` §3:
+  `videoWidth === 0` proves no video track, the artwork layer replaces the
+  black box, position survives the swap, and toggling back restores frames.
+- ✅ **Measured YouTube fidelity (phase 13)**: “looks like YouTube” is now a
+  number, not an opinion. `scripts/fidelity-bar.mjs` loads real
+  m.youtube.com / www.youtube.com and our app in the same browser at the same
+  viewport and diffs geometry. Fixed from its output: 48px mobile app bar
+  (ours was 56 everywhere), tablet player 802→**834 exact**, 1024px two-column
+  watch (656×369 **exact**), the dead `3xl:` breakpoint, the related rail's
+  shape (proportional thumbnail + a 2-up grid in the tablet band), search
+  thumbnail/container widths, and a genuinely cut-off video description.
 - ✅ **Skip-video discoverability**: an app-level player bar under the player
   in BOTH modes (custom player AND official embed): `Autoplay` switch +
   `Skip video →` button (next related video). The YouTube IFrame API
@@ -141,6 +177,19 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   throttles intermittently (`Precondition check failed` 400) after heavy
   testing. On real phone IPs, direct streams flow (architecture-verified;
   the user confirms playback on-device).
+- ✅ **Verification gates (phase 13, all green on 2026-09-14)**: `bun run
+  lint` clean, `bun run build:static` clean, `scripts/audit-ui.mjs` **0 real
+  clipping / 0 overflow / 0 overlap across 24 route×viewport combos**,
+  `scripts/e2e-playback.mjs` **28/28**, `scripts/test-electron-bundle.sh`
+  **13/13**. Playwright is a devDependency; the harnesses save screenshots +
+  reports under `docs/screenshots/{audit,fidelity}/` (**gitignored**, ~137 MB).
+- ✅ **Fresh-checkout bring-up verified (phase 12)**: on a new machine this
+  repo needs `npm i -g bun` FIRST (scripts + `bun.lock` assume bun; no deps
+  ship with the checkout). After that: `bun install`, `npm install` in
+  `server/` + `pot-provider/`, then `bash scripts/start-stack.sh`. Verified
+  green here: PO token minted ~10 s after boot, search/home/video live (24
+  formats + HLS, `embed_fallback:false`), `bun run lint` clean,
+  `bun run build:static` OK, `test-electron-bundle.sh` **13/13**.
 - ⚠️ **The sandbox cannot drive a real embed to ENDED** (bot-gated inside
   headless Chrome): the ENDED-overlay E2E uses the `window.__ytEmbedEnded`
   debug hook to verify the render + routing path; the IFrame-API event
@@ -203,6 +252,39 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 
 ## 5. Gotchas & known issues
 
+- **This checkout ships without dependencies or bun.** `npm i -g bun` first,
+  then `bun install` (root) + `npm install` (in `server/` and `pot-provider/`;
+  their `package-lock.json` files ARE tracked — they must stay
+  byte-identical, so install with npm, not bun, in those two).
+- **The OLD gauntlet harness needs sandbox-only tooling** that is NOT part of
+  this repo: `agent-browser`, the `z-ai` vision CLI, and a VLM API key.
+  Without them `scripts/e2e-v12.sh`, `e2e-premium.sh` and `scripts/critic.py`
+  (blind VLM A/B) cannot run. **Use the phase-13 harnesses instead** — they
+  need only Playwright's Chromium (`bun add -d playwright`), which installs
+  from public npm and is already a devDependency:
+  `scripts/audit-ui.mjs` (24 route×viewport layout defects),
+  `scripts/fidelity-bar.mjs` (measured diff against real YouTube),
+  `scripts/e2e-playback.mjs` (28 functional checks incl. an Android bridge
+  stub). Say what you did NOT run rather than implying E2E evidence.
+- **Don't trust the audit's `clipped` count without reading it.** It now
+  splits **real clipping** (overflow:hidden with no clamp — the "section cut
+  out" defect) from **`ellipsis`** (a `clamp-2`/`clamp-3` explains it; card
+  titles and the collapsed description are intentional). Both numbers appear
+  in the report; only the first is a bug.
+- **The shell is chosen by PLATFORM, not width.** Real YouTube picks its
+  chrome from the user agent: at 834px an Android UA gets the 48px bar +
+  bottom pivot bar, a desktop UA gets the 56px bar + guide rail. So
+  `yt-theme.ts`'s boot script stamps `yt-android` on `<html>` pre-paint (via
+  `window.androidBridge` / `Capacitor.getPlatform()`) and `globals.css` pins
+  the mobile shell at any width. Width still drives layout *inside* the
+  shell. When comparing against YouTube, **match the UA to the shell you are
+  rendering** — `fidelity-bar.mjs` uses m.youtube.com + an Android UA for the
+  phone profile and www.youtube.com + a desktop UA for tablet and up;
+  comparing our desktop shell to YouTube's mobile layout reports a phantom
+  "48 vs 56 header" mismatch.
+- **`scripts/e2e-v12.sh` / `e2e-premium.sh` still hardcode `/home/z/...`
+  paths** (`with-server.sh` was fixed in phase 12). Derive the root from
+  `$BASH_SOURCE` before using them on another machine.
 - `URL_SUFFIX` defaults to `&XTransformPort=3001` (dev-sandbox gateway
   artifact). **Production must set `URL_SUFFIX=""`** (Docker + desktop
   already do). If manifests contain garbage URLs, check this first.
@@ -217,6 +299,15 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   architecture-level E2E.
 - m.youtube.com must be fetched with mobile device emulation
   (`agent-browser set device "iPhone 14"`) or it redirects to desktop.
+- **`--yt-header-h` is the single source of truth for the app bar** (48px
+  mobile / 56px desktop / 48px pinned on Android). Page padding, sticky
+  offsets, guide height, the chips bar and the search overlay all read it —
+  never hardcode `pt-14`/`h-14` again, that is exactly how the 8px drift
+  happened.
+- Tailwind v4 reads breakpoints from **CSS** (`@theme` in globals.css), not
+  `tailwind.config.ts`. A `3xl:` variant generated nothing for months because
+  it was only declared in the JS config. Register new breakpoints in BOTH
+  places.
 - Public-instance ecosystem rot: pointing anything at public Invidious/Piped
   today expects failure — that's why this architecture exists.
 - SponsorBlock public API has outage history — the app degrades silently.
@@ -236,16 +327,27 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 
 ## 6. How to resume work (10-minute orientation)
 
-1. Read this file + WORKLOG.md tail (sessions 1-9).
-2. `bash scripts/start-stack.sh && bun run dev` → confirm the home grid; or
+1. Read this file + WORKLOG.md tail (through session 13).
+2. Bring the environment up first (see §5) — the checkout ships with no
+   deps and no bun: `npm i -g bun && bun install &&
+   (cd server && npm install) && (cd pot-provider && npm install)`.
+3. `bash scripts/start-stack.sh`, then `curl
+   http://127.0.0.1:3001/api/health` → expect `ok:true, po_token:true`
+   (takes ~10 s to mint). Then `bun run dev` → confirm the home grid; or
    `bun run build:static && bash scripts/with-server.sh '…'` for the APK
    artifact path (`http://127.0.0.1:3999/?src=standalone`).
-3. Skim `src/lib/innertube.ts` (engine), `src/lib/yt-api.ts` (source
+4. Skim `src/lib/innertube.ts` (engine), `src/lib/yt-api.ts` (source
    layering), `server/index.mjs` (relay routes at the bottom).
-4. E2E loop: `scripts/critic.py <ours.png> <ref.png> <label>` runs a blind
-   VLM A/B; `agent-browser --session ours …` drives pages at
-   390×844 / 844×390 / 1280×800.
-5. Pick from the roadmap below or fix what's red in Actions.
+5. E2E loop (no sandbox tooling needed beyond Playwright's Chromium):
+   `bash scripts/with-server.sh 'node scripts/e2e-playback.mjs'` (28
+   functional checks), `… 'node scripts/audit-ui.mjs'` (layout defects +
+   screenshots for review), `… 'node scripts/fidelity-bar.mjs'` (numeric
+   diff vs real m.youtube.com/www.youtube.com). The old VLM path
+   (`scripts/critic.py <ours.png> <ref.png> <label>`) still exists but needs
+   `agent-browser` + a VLM key.
+6. `gauntlet-loop` skill lives at `.agents/skills/gauntlet-loop/` (install
+   with `npx skills add robonuggets/gauntlet-loop --skill gauntlet-loop`).
+7. Pick from the roadmap below or fix what's red in Actions.
 
 ## 7. Roadmap (ranked)
 
@@ -282,7 +384,14 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 - `src/components/yt/ShortsPage.tsx` — snap feed, per-short resolution
   (direct player → embed), oEmbed drop of dead cards, immersive chrome.
 - `src/components/yt/WatchPage.tsx` — watch layout, action pills,
-  `yt-player-shell`/`yt-watch-outer` landscape theater classes.
+  `yt-player-shell`/`yt-watch-outer` landscape theater classes, the
+  description expander (the collapsed clamp used to hide 1300–1560px of text
+  with no way to reveal it), and the related list that becomes a 2-up grid in
+  the tablet band (`sm:max-lg:`).
+- `src/components/yt/VideoCard.tsx` — `compact` = rail row; add `responsive`
+  to let one element reflow phone rows → tablet 2-up cards → rail rows. The
+  rail thumbnail is a share of the column (65% at lg / 64% at xl), matching
+  YouTube's measured 208px-in-320px and 256px-in-402px.
 - `src/app/globals.css` — premium polish layer at the bottom (landscape
   player shell, shorts frame sizing, chips fade, seek ripple animations).
 - `server/index.mjs` — read the header comment first; relay routes
@@ -290,15 +399,51 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   bottom; HLS rewrite + `/api/segment` host allowlist are
   security-sensitive; `STATIC_DIR` block is desktop-only.
 - `electron/main.cjs` — port resolution + health waits + child lifecycle.
-- `scripts/with-server.sh` — the sandbox-reaper-safe way to run E2E.
-- `scripts/critic.py` — blind VLM A/B judgment harness.
+- `scripts/with-server.sh` — the sandbox-reaper-safe way to run E2E (runs
+  both backends + the static server in ONE process tree). Path-portable since
+  phase 12: it derives the project root from `$BASH_SOURCE` and uses plain
+  `node` for `serve-static.mjs`, so it works in any checkout without bun.
+- `scripts/audit-ui.mjs` — **phase 13**, the layout-defect harness: 24
+  route×viewport combinations (phone 390 / tablet 834 / small-laptop 1024 /
+  laptop 1440 × home/watch/search/shorts/settings/channel). Reports
+  horizontal page overflow, real clipping (vs intentional ellipsis),
+  overlapping interactive elements, sub-44px tap targets, and saves
+  screenshots + `REPORT.md`. Needs only Playwright's Chromium.
+- `scripts/fidelity-bar.mjs` — **phase 13**, the fidelity bar: loads real
+  m.youtube.com / www.youtube.com and our app in the SAME browser at the SAME
+  viewport, then diffs grid columns, item/thumbnail geometry, gaps, radii,
+  header/guide/player boxes and typography. Prints `grid el` (which element
+  it measured) and skips comment threads, which otherwise win the "most
+  uniform children" tie on watch pages. Reference + UA are per profile — see
+  the note in §5 about matching the UA to the shell you render.
+- `scripts/e2e-playback.mjs` — **phase 13**, 28 functional checks: hydration
+  on 6 routes, light theme reaching `<body>`, audio-only mode (7), the
+  background-play contract (8), and the Android shell at tablet width (8).
+  Installs a faithful Capacitor **Android bridge stub** (`window.androidBridge`
+  + `PluginHeaders` + `nativePromise`) so it drives the real `yt-background`
+  plugin proxy rather than a mock of our own wrapper.
+- `scripts/critic.py` — blind VLM A/B judgment harness (legacy; needs
+  `agent-browser` + a VLM key).
 - `src/lib/yt-native.ts` — native bridge wrapper: yt-background plugin calls
-  + W3C MediaSession helpers. Web = silent no-ops.
+  + W3C MediaSession helpers. Web = silent no-ops. Also owns
+  `isAndroidApp()` / `applyPlatformClass()` (platform → app chrome, see §5).
+- `plugins/yt-background/android/.../MediaPlaybackService.java` +
+  `YtBackgroundPlugin.java` — Android 12+ rules matter here: **never call
+  `startForegroundService()` for an update from the background** (it throws
+  `ForegroundServiceStartNotAllowedException` and the old `startSafe`
+  swallowed it, so the service silently never started/updated). Use
+  `startService()` when the service is already running, re-assert on
+  background, and do NOT tear the service down on a WebView-induced pause.
+  Imports are `androidx.core.*` (the old `android.support.v4.*` only compiled
+  because Jetifier rewrote them — Jetifier is deprecated).
 - `src/lib/yt-embed-api.ts` — official YouTube IFrame API loader (embed
   autoplay-next on ENDED, ENDED → our overlay when autoplay is off). All
   failures are silent — the embed plays regardless.
 - `src/lib/yt-theme.ts` — theme engine (apply/watch/boot-script) + the
-  `THEME_BOOT_SCRIPT` inline in layout.tsx.
+  `THEME_BOOT_SCRIPT` inline in layout.tsx. The boot script ALSO stamps
+  `yt-android` pre-paint (duplicating `yt-native.ts`'s `isAndroidApp()`
+  detection on purpose, so it stays dependency-free and runs before any
+  module loads) — that is what pins the mobile shell on Android at any width.
 - `plugins/yt-background/` — the local Capacitor plugin (Android ONLY):
   `YtBackgroundPlugin.java` (bridge) + `MediaPlaybackService.java` (FGS +
   MediaSessionCompat + MediaStyle notification). JS dist is hand-written
