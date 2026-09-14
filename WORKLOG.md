@@ -599,11 +599,19 @@ re-assert from the background called `startForegroundService()`, which
 **Android 12+ forbids from the background** — the call threw, `startSafe`
 swallowed it, and the service never started or updated. Now the service
 survives a user pause and only a *deliberate* pause is respected; updates go
-through `startService` when the service is already running, and the service
-re-asserts itself on background. Also replaced the deprecated
-`android.support.v4.*` imports with `androidx.core.*` (they only compiled
-because Jetifier rewrote them). **8/8 checks**, incl. the resume-after-pause
-and pref-off paths.
+through the live service instance (never a background service start), and the
+service re-asserts itself on background. The plugin also calls
+`WebView.resumeTimers()` on pause, because Android stops WebView timers while
+the activity is invisible and hls.js needs them to keep appending segments.
+**8/8 checks**, incl. the resume-after-pause and pref-off paths.
+
+> **Correction from CI.** I also "modernised" the three
+> `android.support.v4.media.*` imports to `androidx.media.*`; that **broke the
+> APK build** (`cannot find symbol … location: package androidx.media`, while
+> `androidx.media.app.NotificationCompat.MediaStyle` resolved fine). Reverted
+> with an explanatory comment — see HANDOVER §8. I could not catch this
+> locally (no Android SDK here), which is exactly why CI must stay green
+> before calling a plugin change done.
 
 ### Hydration was throwing React #418 on every page
 

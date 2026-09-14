@@ -434,8 +434,15 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   swallowed it, so the service silently never started/updated). Use
   `startService()` when the service is already running, re-assert on
   background, and do NOT tear the service down on a WebView-induced pause.
-  Imports are `androidx.core.*` (the old `android.support.v4.*` only compiled
-  because Jetifier rewrote them — Jetifier is deprecated).
+  **Keep the `android.support.v4.media.*` imports.** The androidx.media
+  equivalents (`androidx.media.MediaMetadataCompat`,
+  `androidx.media.session.MediaSessionCompat` / `PlaybackStateCompat`) do NOT
+  resolve on this module's compile classpath even with `androidx.media:media`
+  declared — CI failed with `cannot find symbol … location: package
+  androidx.media` while `androidx.media.app.NotificationCompat.MediaStyle`
+  resolved fine. The support-4 names are supplied through Jetifier and are the
+  configuration CI has proven green. Don't "modernise" them without an Android
+  SDK to compile against.
 - `src/lib/yt-embed-api.ts` — official YouTube IFrame API loader (embed
   autoplay-next on ENDED, ENDED → our overlay when autoplay is off). All
   failures are silent — the embed plays regardless.

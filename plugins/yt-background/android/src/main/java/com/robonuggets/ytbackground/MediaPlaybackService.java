@@ -14,9 +14,18 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
-import androidx.media.MediaMetadataCompat;
-import androidx.media.session.MediaSessionCompat;
-import androidx.media.session.PlaybackStateCompat;
+// NOTE: keep the legacy `android.support.v4.media.*` names. The androidx.media
+// equivalents (androidx.media.MediaMetadataCompat / .session.MediaSessionCompat
+// / .session.PlaybackStateCompat) DO NOT resolve on this module's compile
+// classpath even with `androidx.media:media` declared — verified by a CI run
+// that failed with "cannot find symbol ... location: package androidx.media"
+// while `androidx.media.app.NotificationCompat.MediaStyle` resolved fine. The
+// support-4 names are provided through Jetifier (the generated Android project
+// has enableJetifier on) and are the configuration CI has proven green. Do not
+// "modernise" these imports without an Android SDK to compile against.
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.media.app.NotificationCompat.MediaStyle;
 import androidx.annotation.Nullable;
