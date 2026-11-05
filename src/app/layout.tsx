@@ -1,13 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Roboto } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { THEME_BOOT_SCRIPT } from "@/lib/yt-theme";
 
-const roboto = Roboto({
+// Self-hosted Roboto (variable, latin). Was next/font/google — the CI runners
+// intermittently fail to fetch fonts.googleapis.com ("next/font/google
+// queries have exactly one entry"), which broke builds on otherwise
+// identical commits. A 43KB local woff2 removes the network dependency
+// entirely; the variable file covers 400/500/700.
+const roboto = localFont({
+  src: "../fonts/roboto-var.woff2",
   variable: "--font-roboto",
-  weight: ["400", "500", "700"],
-  subsets: ["latin"],
+  weight: "100 900",
   display: "swap",
 });
 
