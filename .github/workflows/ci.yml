@@ -47,7 +47,8 @@ jobs:
         run: bun run build:static
 
       - name: E2E playback suite (server mode, result-guarded)
-        run: bash scripts/with-server.sh 'node scripts/e2e-playback.mjs 2>&1 | tee /tmp/e2e.log; grep -E "RESULT: ([1-9][0-9]*) passed, 0 failed" /tmp/e2e.log'
+        run: |
+          bash scripts/with-server.sh 'node scripts/e2e-playback.mjs 2>&1 | tee /tmp/e2e.log; grep -E "RESULT: ([1-9][0-9]*) passed, 0 failed" /tmp/e2e.log'
 
       # The result guard lives INSIDE the quoted command (with-server.sh takes
       # exactly one argument). The pipeline's exit status is grep's: it only
@@ -71,7 +72,8 @@ jobs:
           cat /tmp/audit.log
 
       - name: E2E parity suite (standalone mode via relay)
-        run: bash scripts/with-server.sh 'node scripts/e2e-parity.mjs 2>&1 | tee /tmp/parity.log; grep -E "RESULT: ([1-9][0-9]*) passed, 0 failed" /tmp/parity.log'
+        run: |
+          bash scripts/with-server.sh 'node scripts/e2e-parity.mjs 2>&1 | tee /tmp/parity.log; grep -E "RESULT: ([1-9][0-9]*) passed, 0 failed" /tmp/parity.log'
 
       - name: Upload evidence
         if: always()
