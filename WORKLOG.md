@@ -787,3 +787,24 @@ commit.
 - **Next:** phase 2 — playback store + miniplayer + PiP + autoplay
   countdown (the plan recommends a fresh goldfish pass on §6 Phase 2
   before coding it), then phase 3.
+
+## Session 14 (cont.) — v1.3.0 tagged + released
+
+- **Goldfish pass on phase 2** (per the plan's own rule): zero-context
+  reviewer returned 10 findings (3 structural blockers: surface-mount
+  mechanism, embed handoff, Shorts enforcement path) — all resolved as
+  binding amendments [A1]-[A10] in the plan doc before any phase-2 code.
+  Key decisions: single imperatively-owned <video> adopted across mount
+  points (never re-parented through React); route-based (not mount-based)
+  Shorts owner rule; store-owned embed mode + countdown; home-press PiP
+  via onUserLeaveHint in a CI-injected MainActivity snippet.
+- **CI flake root-caused:** next/font/google intermittently fails to fetch
+  in GitHub runners (broke a docs-only commit's build) → Roboto self-hosted
+  (variable woff2, 43KB, latin) — the build now has zero network deps.
+- **version.ts trap killed:** it hardcoded 1.2.1 while package.json said
+  1.3.0 — the What's-new dialog opened for the wrong version and broke
+  e2e. Now derives from package.json.
+- **v1.3.0 tagged on c2f1682** (CI green on that exact commit — the new
+  release gate's first live pass). Release workflow building APKs + macOS.
+- Next session: phase 2 implementation per the amended plan (miniplayer +
+  PiP + playback store + autoplay countdown), then phase 3.
