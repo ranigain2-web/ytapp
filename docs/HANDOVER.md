@@ -154,7 +154,58 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   phase 0; a fresh goldfish pass on §6 Phase 2 is recommended when
   phase 2 begins.**
 
-## 3. Current state (as of 2026-11-05, end of phase 15 — v1.2.1 code, v2.0 plan ready)
+- **Phase 16 — plan execution: phase 0 (the measurable bar) + phase 1
+  (playback core hardening)** (2026-11-06): the plan went from paper to
+  code, both phases end-to-end in one session.
+  *Phase 0 shipped:* `gauntlet_critic.mjs` committed (randomized slots,
+  `WINNER=ours|TIE|WINNER=reference`, TIE requires a written reason);
+  `gauntlet-loop.mjs` runner with a **bot-gate honesty layer** — YouTube
+  serves empty feed shells to this datacenter IP, so blank references are
+  detected by pixel variance and either replaced with the archived
+  `bar_mytube_*.png` or honestly skipped (`SKIPPED-REF-BLANK`) — never a
+  hallucinated comparison. `audit-ui.mjs` v2: `--quick` CI mode +
+  dead-interactive probe (reads React `__reactProps$` off DOM nodes —
+  addEventListener bookseeing cannot work with React's root delegation),
+  hardcoded-color sweep, clipboard/toast probe; baseline reproduces the
+  plan's audit exactly (comments cluster + Sign-in dead, ~24 hardcoded
+  colors, toast-less share). `fidelity-bar.mjs` 3→8 surfaces + history
+  JSON. `e2e-parity.mjs` NEW standalone-mode suite (9 checks). `ci.yml`
+  NEW (lint → build → e2e-playback result-guarded → audit --quick →
+  e2e-parity result-guarded) + release.yml **CI-green gate** (tags whose
+  commit lacks green CI are refused; backfill dispatches exempt). Gotcha:
+  `'RESULT: ...'` inside a YAML plain scalar breaks the whole workflow
+  file — result-guard steps MUST use block scalars (`run: |`).
+  *Phase 1 shipped:* audio focus with the ownership model in
+  `MediaPlaybackService.java` (GAIN at user-gesture enable, LOSS→pause,
+  TRANSIENT→pause+resume, CAN_DUCK→duck event, GAIN→unduck+resume),
+  `ACTION_AUDIO_BECOMING_NOISY` receiver, wakelock renewal, `keepAwake`
+  plugin bridge (WebView setKeepScreenOn); W3C MediaSession hard-gated
+  off on native; player: pointer-drag seek scrubbing (44px band,
+  storyboard sprite preview tiles, chapters row, `c` captions, long-press
+  2×, landscape→fullscreen `yt-lands`, data saver ≤360p/60fps-skip,
+  defaultQuality pinning, `?debug=1` → `window.__ytDebug`, forwardRef
+  `seekTo` for WatchPage chapter chips); Settings quality row + Data
+  saver toggle; `#555` → `--yt-switch`.
+  ***The big catch (why e2e discipline pays):*** the registerPlugin
+  proxy THROWS `"YtBackground.addListener()" is not implemented on
+  android` for native plugins (Java's PluginHeaders never contains
+  addListener — it's a "special snowflake" — so core's
+  createPluginMethod falls through to Unimplemented) and our `.catch`
+  swallowed it: **notification/lock-screen/headset controls were
+  silently dead on real devices since v1.0**. Fixed in `yt-native.ts` by
+  registering through the injected bridge's `window.Capacitor.addListener`
+  (nativeCallback path), reproduced in isolation, and the e2e stub now
+  mirrors the real bridge INCLUDING splice-on-remove (a stub that never
+  removed listeners double-applied duck and masked the restore bug).
+  Also fixed: muted autoplay no longer enables the service (enable fires
+  at the gesture or the backgrounding re-assert — focus ownership), and
+  the unmute nudge's dead `started !== false` condition (it never showed).
+  Tests: e2e-playback 28→**46/46**, e2e-parity **9/9**, audit quick
+  overflow=0, lint clean. Evidence: `docs/evidence/phase0-summary.md` +
+  gauntlet baseline (ours=2 ref=2 — baseline losses are the point of a
+  bar; `--until-win` flips them in later phases).
+
+## 3. Current state (as of 2026-11-06, end of phase 16 — plan phases 0+1 executed, 46/46 e2e)
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,

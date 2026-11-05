@@ -748,3 +748,42 @@ commit.
   run, gates release notes not CI).
 - **No product code changed this session** — the round's rule: the plan is
   reviewed and finalized before implementation. Phase 0 starts next.
+
+## Session 14 — 2026-11-06 · Plan execution: phase 0 + phase 1 shipped end-to-end
+
+- **Phase 0 (the measurable bar)** — gauntlet_critic.mjs committed +
+  upgraded (randomized slots, WINNER/TIE vocabulary, no free ties);
+  gauntlet-loop.mjs runner with the bot-gate honesty layer (blank-reference
+  detection by pixel variance → archived bar_mytube_*.png fallback or honest
+  SKIPPED-REF-BLANK; YouTube feed-gates this datacenter IP, fresh references
+  of feed surfaces come back empty); audit-ui v2 (--quick CI mode,
+  dead-interactive via React fiber props, hardcoded-color sweep,
+  clipboard/toast probe — baseline reproduces the plan's audit exactly);
+  fidelity-bar 3→8 surfaces + history JSON; e2e-parity.mjs NEW standalone
+  suite 9/9; ci.yml NEW gate chain; release.yml CI-green tag gate.
+- **Phase 1 (playback core hardening)** — plugin: audio focus ownership
+  model + becoming-noisy receiver + wakelock renewal + keepAwake bridge;
+  app: W3C MediaSession gated off on native, pointer-drag seek scrubbing
+  with storyboard sprite previews + chapters row, `c` captions, long-press
+  2×, landscape→fullscreen, data saver + quality pinning, __ytDebug,
+  forwardRef seekTo (WatchPage chapter chips seek the player), Settings
+  quality row + Data saver.
+- **THE catch:** registerPlugin's proxy throws "addListener() is not
+  implemented on android" for native plugins and our catch swallowed it —
+  notification/lockscreen/headset controls were silently dead on real
+  devices since v1.0. Fixed via window.Capacitor.addListener (the injected
+  bridge's path); reproduced in isolation; e2e stub now mirrors the real
+  bridge including splice-on-remove (a never-removing stub double-applied
+  duck and masked the unduck restore).
+- **Also fixed:** muted autoplay no longer enables the background service
+  (enable at user gesture or backgrounding re-assert — the focus-ownership
+  rule); dead unmute-nudge condition (`started !== false` never showed it);
+  ci.yml YAML parse bug ('RESULT: ' in a plain scalar killed the workflow —
+  block scalars required).
+- **Verification:** e2e-playback 28→46 checks, all green; e2e-parity 9/9;
+  audit quick overflow=0 on all 4 profile/surface combos; lint clean;
+  build clean; gauntlet baseline recorded (ours=2 ref=2 — expected).
+- **Commits:** d45d29b (phase 0), 671378b (phase 1), 4c7119e (ci yaml fix).
+- **Next:** phase 2 — playback store + miniplayer + PiP + autoplay
+  countdown (the plan recommends a fresh goldfish pass on §6 Phase 2
+  before coding it), then phase 3.
