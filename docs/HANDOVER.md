@@ -129,8 +129,32 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   is needed before the next push** (repo Settings → Developer settings →
   Personal access tokens → then `git remote set-url origin
   https://ranigain2-web:<TOKEN>@github.com/ranigain2-web/ytapp.git`).
+- **Phase 15 — v2.0 plan: the Total Parity & Premium round**
+  (2026-11-05): the owner supplied a fresh push token (verified, admin
+  scope) and commissioned the deep-dive plan. Full-codebase audit (all 16
+  components + innertube.ts + the Android plugin + every harness), then
+  `concepts_brief.md` + `docs/designs/2026-11-05-premium-parity-v2.md`
+  drafted (elephant) and **reviewed by five zero-context goldfish
+  subagents** (zoom-out, comprehension, implementation-readiness,
+  design-critic ×2) — 43 findings, all resolved in the doc revision; the
+  itemized record is `docs/designs/2026-11-05-premium-parity-v2-review.md`.
+  The plan: 7 phases (0 bar+CI gates → 1 playback hardening incl. audio
+  focus/becoming-noisy/keepAwake/seek-drag/storyboard-previews → 2
+  miniplayer+PiP+playback-store → 3 zero-dead-UI+toasts+sheets → 4
+  Subscriptions feed/channel tabs/comment threads/Shorts truth → 5
+  on-device signatureCipher deciphering + ad-absence CI suite → 6
+  theme-token sweep + final gauntlet), each phase a tagged release with
+  its own E2E additions and What's-new entry; `e2e-device.md` is the
+  honest ADB/macOS checklist the owner runs per release. Key decided
+  architecture (from the review): Shorts stay per-card OUTSIDE the new
+  yt-playback store; single-active-audio-owner rule; MediaSessionCompat
+  is the sole Android session authority (W3C gated off on native);
+  service requests audio focus before first audible start; subs feed
+  uses one shared single-flight TTL cache. **Implementation starts at
+  phase 0; a fresh goldfish pass on §6 Phase 2 is recommended when
+  phase 2 begins.**
 
-## 3. Current state (as of 2026-11-05, end of phase 14 — v1.2.1, toolbelt installed)
+## 3. Current state (as of 2026-11-05, end of phase 15 — v1.2.1 code, v2.0 plan ready)
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,

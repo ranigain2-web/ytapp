@@ -707,3 +707,44 @@ commit.
 - **State on disk:** HANDOVER + WORKLOG updated; `android/` and `out/` are
   gitignored regenerables (CI rebuilds the APK); upload/ + worklog.md
   untouched.
+
+## Session 13 — 2026-11-05 · v2.0 Total Parity plan (EGM full cycle)
+
+- **User request:** new push token; re-load the toolbelt; deep-dive the
+  codebase and create the complete, executable, every-test-included plan to
+  make ytapp E2E identical to YouTube — ad-free, Premium features free,
+  background play front and center — using REA + gauntlet + EGM.
+- **Token:** installed, verified (admin scope), first push landed (session-12
+  docs commit 44fcd27).
+- **Deep dive:** read VideoPlayer.tsx (1035 lines), WatchPage, the full
+  MediaPlaybackService + plugin, theme/store/embed libs in person, plus two
+  parallel Explore agents covering all 16 components and the whole
+  data/test layer — a precise gap inventory with file:line evidence
+  (12+ dead controls, no miniplayer, subs page not a feed, comment threads
+  missing, Shorts fake identity, ~30 theme-breaker colors, 10 dead CSS
+  classes, CI zero gates, ad-free conditional on embed, audio focus absent).
+- **EGM cycle:** concepts_brief.md → full design doc → **five zero-context
+  goldfish reviews** (zoom-out, comprehension, implementation-readiness,
+  design-critic ×2 — first critic run corrupted in transit, re-run focused).
+  43 findings (8 blockers, 24 majors, 11 nits), every one resolved in the
+  doc revision; itemized in the review record. Notable catches: a ci.yml
+  invocation that would have run zero tests and gone green; the
+  gauntlet_critic.mjs judge being gitignored; the audio-focus self-war
+  (WebView vs service); Shorts-vs-global-VideoSurface contradiction; the
+  subs fan-out storm; a dead Prev notification button shipping in phase 1.
+- **Artifacts:** `concepts_brief.md`,
+  `docs/designs/2026-11-05-premium-parity-v2.md` (the plan),
+  `docs/designs/2026-11-05-premium-parity-v2-review.md` (finding→resolution
+  table), `docs/designs/SITEMAP.md`, HANDOVER phase 15.
+- **Plan shape:** 7 phases, each a tagged release (v1.3.0 → v2.0.0): 0
+  measurable bar + CI gates; 1 playback hardening (audio focus,
+  becoming-noisy, keepAwake, seek-drag, storyboard previews, chapters,
+  landscape-fullscreen, data saver); 2 playback store + miniplayer + PiP +
+  autoplay countdown; 3 zero dead UI + toasts + sheets + 3-dot menus +
+  haptics + PTR; 4 Subscriptions feed + channel tabs + comment threads +
+  Shorts truth + notifications + account menu; 5 on-device deciphering +
+  ad-absence CI suite + live/premiere; 6 theme sweep + motion wiring +
+  final gauntlet. Device-only truths live in `scripts/e2e-device.md` (owner
+  run, gates release notes not CI).
+- **No product code changed this session** — the round's rule: the plan is
+  reviewed and finalized before implementation. Phase 0 starts next.
