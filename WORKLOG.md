@@ -667,3 +667,43 @@ Push to `main` triggers `build-android.yml` and `build-macos.yml` (both fire
 on `push` to `main`), so the APK and the Intel-x64 dmg/zip build from this
 commit.
 
+
+## Session 12 — 2026-11-05 · Toolbelt install + sandbox resync (get-ready round)
+
+- **User request:** clone + install three skill repos, verify GitHub, get
+  ready for the next work round.
+- **Skills installed (13, at `skills/`; sources in `skills-src/`, gitignored
+  via `.git/info/exclude`):**
+  - `gauntlet-loop` (robonuggets) — builder + harsh blind critic vs a named,
+    fetchable bar; loop until ours wins. This formalizes the pattern we
+    already run against m.youtube.com.
+  - `google/elephant-goldfish-model` — 7 `egm-*` skills (brainstorm → draft
+    → review → resolve, bootstrap, drift-report, review-loop). Elephant
+    drafts with full project context; goldfish reviewers see only the doc.
+  - `morluto/rea` — Reverse Engineer Anything. Verified working in this
+    sandbox via the **CLI path** (`npx -y rea-agents@latest <cmd> --json`)
+    — no MCP registration needed. Relevant commands for ytapp:
+    `capture-web-screenshot`, `analyze-web-bundle`, `compare-web-screenshots`,
+    `analyze` (APK/ZIP member inventories — can inspect the real YouTube APK
+    or our own).
+- **Sandbox rot found and fixed:** local branch was 12 commits behind
+  origin/main with a stale half-uncommitted tree (old amended Session-4
+  duplicate + partial file states — the sandbox's .git and working tree had
+  desynced across recycles). Diffed everything first: all local-only lines
+  were older versions of code the remote had already improved → hard reset
+  to `origin/main` (`4450c7b`). No unique work lost (upload/ images and
+  skills survive; they were never legitimately tracked).
+- **Build repaired:** `node_modules/yt-background` (file: dep) had lost its
+  link → `build:static` failed on `Can't resolve 'yt-background'`. One
+  `bun install` restored it; static build green again.
+- **GitHub verification:**
+  - fetch/clone: ✅ (public repo — works even with the dead token)
+  - releases: ✅ v1.0.0 + v1.1.0 + v1.2.0 published, each with debug APK,
+    release-unsigned APK, macOS dmg + zip (verified via the releases page)
+  - push + REST API: ❌ **the embedded `ghp_` token is dead** (401 Bad
+    credentials). Phase 4 déjà vu. Needs a fresh token from the user before
+    anything can be pushed; the codespace branch
+    (`codespace-shiny-zebra-*`) is how recent work reached the remote.
+- **State on disk:** HANDOVER + WORKLOG updated; `android/` and `out/` are
+  gitignored regenerables (CI rebuilds the APK); upload/ + worklog.md
+  untouched.

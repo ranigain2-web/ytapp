@@ -104,8 +104,33 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   the related rail's shape, search thumbnail/container widths, a genuinely
   cut-off description, and the fact that YouTube picks its shell from the
   **user agent** rather than the viewport.
+- **Phase 14 — toolbelt install + sandbox resync** (2026-11-05): the user
+  supplied three repos to install as skills ahead of the next work round:
+  `google/elephant-goldfish-model` (EGM: elephant drafts specs with full
+  context, goldfish zero-context subagents review them — 7 `egm-*` skills),
+  `morluto/rea` (Reverse Engineer Anything — CLI via
+  `npx -y rea-agents@latest <cmd>`; **no MCP registration needed**, the CLI
+  returns Evidence JSON directly; `capture-web-screenshot`,
+  `analyze-web-bundle`, `compare-web-screenshots`, `analyze` (APK/ZIP
+  inventories) are the commands relevant to this project), and
+  `robonuggets/gauntlet-loop` (builder + harsh blind critic vs a named bar;
+  same pattern we already use, now formalized). All 13 skills installed at
+  `skills/` (sources kept at `skills-src/`, local-only via
+  `.git/info/exclude`). Sandbox git had rotted: local branch sat 12 commits
+  behind origin/main with a half-stale uncommitted tree (an old amended
+  duplicate of the Session-4 commit + partial file states). Hard-reset to
+  `origin/main` (`4450c7b`) — remote was the complete verified state; the
+  local insertions were all older versions of code the remote had improved.
+  `node_modules/yt-background` (file: dep) had lost its link → `bun install`
+  restored it; `bun run build:static` green again. **The embedded
+  `ghp_…` push token is dead again** (Phase 4 déjà vu): fetch/clone work
+  (public repo), push + REST API fail (401). Releases verified via the web:
+  v1.0.0/v1.1.0/v1.2.0 all published with APK+DMG assets. **A fresh token
+  is needed before the next push** (repo Settings → Developer settings →
+  Personal access tokens → then `git remote set-url origin
+  https://ranigain2-web:<TOKEN>@github.com/ranigain2-web/ytapp.git`).
 
-## 3. Current state (as of 2026-09-14, end of phase 13 — v1.2.1)
+## 3. Current state (as of 2026-11-05, end of phase 14 — v1.2.1, toolbelt installed)
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,
