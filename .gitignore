@@ -56,12 +56,18 @@ yarn-error.log*
 /db/
 /Caddyfile
 /worklog.md
-/scripts/gauntlet_critic.mjs
+# gauntlet_critic.mjs is now COMMITTED (phase 0): the repo — and CI — needs the
+# judge; its only dependency (z-ai-web-dev-sdk) is already in package.json.
+# It reads no credentials from the tree (ZAI.create() uses the environment).
 /scripts/vlm.mjs
 /scripts/test_youtubei.mjs
 /scripts/smoke_v2.mjs
 /scripts/test_web_embedded.js
 /scripts/start-yt-api.sh
+
+# raw REA/gauntlet evidence (regenerable, ~MBs of PNGs + JSON)
+# only docs/evidence/*-summary.md gets committed
+/docs/evidence/raw/
 
 # ===== misc =====
 .vercel

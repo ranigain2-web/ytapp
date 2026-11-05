@@ -1,0 +1,30 @@
+{
+  "phone/home": {
+    "verdict": "WINNER=reference",
+    "reason": "Image 2 reproduces YouTube's populated home feed — category chips, video cards with thumbnails, channel avatars, metadata, duration badges, and full bottom nav — while Image 1 is a mostly empty empty-state screen that fails to demonstrate the home surface at all.",
+    "gap": "Image 1 lacks any actual feed content (video cards, thumbnail grid, chips row), leaving two-thirds of the screen blank and the information density near zero.",
+    "confidence": "high",
+    "refSource": "archived"
+  },
+  "phone/watch": {
+    "verdict": "WINNER=reference",
+    "reason": "Image 1 is a fully realized dark-theme YouTube watch page with correct layout, chips, and hierarchy, while Image 2 is not a watch surface at all — it is a reCAPTCHA traffic-block page with no video, metadata, or YouTube design language whatsoever.",
+    "gap": "Image 2 contains no watch-page UI whatsoever — no player, title, channel row, action chips, or comments — making it a total failure of the surface.",
+    "confidence": "high",
+    "refSource": "archived"
+  },
+  "phone/search": {
+    "verdict": "WINNER=ours",
+    "reason": "Image 2 faithfully reproduces YouTube's mobile search surface — edge-to-edge thumbnails, top search bar with filter/mic icons, live badge with signal icon, overflow menus, and compact metadata rows — while Image 1 reads as a desktop dark-mode home feed awkwardly squeezed into a phone frame, with a hamburger menu, redundant search icon, non-native filter chips, and oversized rounded thumbnails.",
+    "gap": "Image 1's layout is desktop-derived rather than the mobile search pattern (edge-to-edge results, condensed metadata on one line, overflow menu per result).",
+    "confidence": "high",
+    "refSource": "fresh"
+  },
+  "phone/shorts": {
+    "verdict": "WINNER=ours",
+    "reason": "Image 2 nails the authentic YouTube Shorts layout — proper header branding, right-rail with labeled engagement counts, channel handle with white subscribe pill, title, and linked-audio/scrim pill at the bottom — while Image 1 is littered with collisions (subscribe button overlapping \"Shorts feed\" text, a stray progress bar/timestamp crashing into the avatar row), missing like-count context, and a muddled top bar with mismatched icons.",
+    "gap": "Image 1's bottom metadata row is broken — overlapping subscribe button, garbled timestamp \"00/0:00\" colliding with the channel avatar, and a floating progress bar that fights the title text for space.",
+    "confidence": "high",
+    "refSource": "fresh"
+  }
+}

@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: write
+  actions: read   # the CI-green gate below queries workflow run conclusions
 
 env:
   TAG_NAME: ${{ inputs.tag_name || github.ref_name }}
@@ -30,6 +31,31 @@ jobs:
     name: Android APKs (${{ inputs.tag_name || github.ref_name }})
     runs-on: ubuntu-latest
     steps:
+      # ---- CI green gate (phase 0 rule: no tag ships untested) -----
+      # The tagged commit must have a GREEN ci.yml run. Tags must point at
+      # main commits that already ran CI. Manual backfill dispatches (older
+      # versions) are exempt — their commits predate this workflow.
+      - name: CI green gate
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_SHA: ${{ github.sha }}
+        run: |
+          STATUS="missing"
+          for i in $(seq 1 40); do
+            RUNS=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$TAG_SHA" --jq '.workflow_runs | length' 2>/dev/null || echo 0)
+            if [ "$RUNS" != "0" ]; then
+              STATUS=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$TAG_SHA" --jq '.workflow_runs[0].conclusion // "running"')
+              [ "$STATUS" = "running" ] || [ "$STATUS" = "null" ] || break
+            fi
+            sleep 20
+          done
+          echo "CI conclusion for $TAG_SHA: $STATUS"
+          if [ "$STATUS" != "success" ]; then
+            echo "::error::Refusing to build release: CI for $TAG_SHA is '$STATUS'. Push the commit to main first, wait for green CI, then tag."
+            exit 1
+          fi
+
       - name: Checkout (build ref)
         uses: actions/checkout@v4
         with:

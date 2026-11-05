@@ -1,0 +1,85 @@
+name: CI
+
+# The phase-0 gate: no tag ships without green tests. Runs the full quality
+# bar on every push to main and every PR:
+#   lint → static build → e2e-playback (server mode, result-guarded) →
+#   audit-ui --quick (objective defect classes on 2 surfaces × 2 profiles).
+# release.yml refuses to build artifacts unless this workflow is green on the
+# tagged commit — see its "CI green gate" step.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint + build + e2e + audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend deps (includes local yt-background plugin)
+        run: bun install --frozen-lockfile
+
+      - name: Install backend deps (yt-api server)
+        run: cd server && npm install --omit=dev --no-audit --no-fund
+
+      - name: Install Playwright chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Build static export
+        env:
+          BUILD_MODE: static
+          NEXT_PUBLIC_API_BASE: ${{ vars.API_BASE || '' }}
+        run: bun run build:static
+
+      - name: E2E playback suite (server mode, result-guarded)
+        run: bash scripts/with-server.sh 'node scripts/e2e-playback.mjs 2>&1 | tee /tmp/e2e.log; grep -E "RESULT: ([1-9][0-9]*) passed, 0 failed" /tmp/e2e.log'
+
+      # The result guard lives INSIDE the quoted command (with-server.sh takes
+      # exactly one argument). The pipeline's exit status is grep's: it only
+      # succeeds when the suite actually printed "RESULT: N passed, 0 failed"
+      # with N > 0. A crashed suite prints no RESULT line; a failing suite
+      # prints "M failed" — both fail the step. A silent no-op cannot go green.
+
+      - name: UI audit (quick — 2 surfaces × 2 profiles)
+        run: |
+          bash scripts/with-server.sh 'node scripts/audit-ui.mjs --quick 2>&1 | tee /tmp/audit.log'
+          # Regression gate: zero horizontal overflow and zero capture errors.
+          # The defect-class counts (dead-interactive, hardcoded colors) are the
+          # phase-3/6 burn-down: reported, not yet gated — they gate when the
+          # phases that fix them land.
+          if grep -q "FAILED" /tmp/audit.log; then
+            echo "::error::audit-ui capture failed"; exit 1
+          fi
+          if grep -E "overflow=[1-9][0-9]*px" /tmp/audit.log; then
+            echo "::error::horizontal overflow regressed"; exit 1
+          fi
+          cat /tmp/audit.log
+
+      - name: E2E parity suite (standalone mode via relay)
+        run: bash scripts/with-server.sh 'node scripts/e2e-parity.mjs 2>&1 | tee /tmp/parity.log; grep -E "RESULT: ([1-9][0-9]*) passed, 0 failed" /tmp/parity.log'
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-evidence
+          path: |
+            docs/screenshots/audit/
+            docs/evidence/gauntlet-summary.md
+          retention-days: 14
+          if-no-files-found: ignore

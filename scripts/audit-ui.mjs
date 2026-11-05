@@ -11,10 +11,17 @@
 //   • overlapping interactive elements (the "button on top of text" class)
 //   • tap targets under 44px (mobile ergonomics)
 //   • unexpected horizontal scroll containers
+//   • dead-interactive controls (phase-3 burn-down: visible controls that look
+//     clickable but have NO handler on themselves or a nearby ancestor —
+//     detected via React fiber props, because React delegates events to the
+//     root so a naive addEventListener WeakSet sees nothing)
+//   • hardcoded colors that break the theme tokens (phase-6 burn-down)
+//   • clipboard writes with no toast confirmation (phase-3 burn-down)
 // and writes screenshots for human review plus a JSON + Markdown report.
 //
 // Usage:
 //   node scripts/audit-ui.mjs                      # our app on :3999
+//   node scripts/audit-ui.mjs --quick              # CI: 2 pages × 2 profiles
 //   BASE=http://127.0.0.1:3999 node scripts/audit-ui.mjs
 //   REF=1 node scripts/audit-ui.mjs                # also capture m.youtube.com
 // ============================================================================
@@ -31,6 +38,7 @@ const APP_VERSION = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 const BASE = process.env.BASE || "http://127.0.0.1:3999";
 const OUT = process.env.OUT || "docs/screenshots/audit";
 const DO_REF = process.env.REF === "1" || process.argv.includes("--ref");
+const QUICK = process.argv.includes("--quick"); // CI mode: 2 pages × 2 profiles
 const ONLY = process.env.ONLY || "";
 
 const PROFILES = [
@@ -49,7 +57,13 @@ const PAGES = [
   { name: "shorts", url: "/?page=shorts" },
   { name: "settings", url: "/?page=settings" },
   { name: "channel", url: "/?channel=UCuAXFkgsw1L7xaCfnd5JJOw" },
+  { name: "subscriptions", url: "/?page=subscriptions" },
+  { name: "history", url: "/?page=history" },
 ];
+
+// CI gate set: the two surfaces with the highest regression value.
+const QUICK_PAGES = ["home", "watch"];
+const QUICK_PROFILES = ["phone", "laptop"];
 
 // Runs INSIDE the page. Must stay dependency-free.
 function auditInPage() {
@@ -282,6 +296,93 @@ function auditInPage() {
     if (hidden.length) bottomHidden = hidden.slice(0, 6);
   })();
 
+  // 8) dead-interactive probe (phase-3 burn-down). A visible control that
+  //    PROMISES interactivity (button/a/[role=button|switch|tab], cursor:pointer)
+  //    but has no handler anywhere on itself or a near ancestor. React attaches
+  //    events at the root via delegation, so addEventListener bookkeeping cannot
+  //    answer this — instead we read React's own fiber props off the DOM node
+  //    (__reactProps$), which is exactly what the click dispatcher consults.
+  //    Alive = self-or-ancestor (≤4 hops) has an interaction prop, OR it is an
+  //    <a href>, OR a native form control, OR a labeled media control.
+  const reactPropsOf = (el) => {
+    for (const k of Object.keys(el)) {
+      if (k.startsWith("__reactProps$")) return el[k];
+    }
+    return null;
+  };
+  const hasInteractionProp = (props) =>
+    !!props && Object.keys(props).some((k) => /^on(PointerDown|Click|MouseDown|TouchStart|KeyDown|Submit|Change|Press|DoubleClick|ContextMenu)/.test(k));
+  const isAlive = (el) => {
+    let cur = el, hops = 0;
+    while (cur && cur !== document.body && hops < 4) {
+      if (hasInteractionProp(reactPropsOf(cur))) return true;
+      if (cur.tagName === "A" && cur.getAttribute("href")) return true;
+      if (/^(INPUT|SELECT|TEXTAREA)$/.test(cur.tagName) && !cur.disabled) return true;
+      if (cur.hasAttribute && cur.hasAttribute("data-yt-alive")) return true; // native listeners (video controls etc.)
+      cur = cur.parentElement;
+      hops++;
+    }
+    return false;
+  };
+  const looksInteractive = (el) => {
+    const tag = el.tagName;
+    if (tag === "BUTTON" || tag === "A") return true;
+    const role = el.getAttribute("role");
+    if (role === "button" || role === "switch" || role === "tab" || role === "menuitem" || role === "option") return true;
+    if (getComputedStyle(el).cursor === "pointer" && el.children.length === 0) return true;
+    return false;
+  };
+  const dead = [];
+  const seenDead = new Set();
+  for (const el of all) {
+    if (!visible(el)) continue;
+    if (el.closest("[data-yt-dead-ok],video,iframe")) continue; // media internals + explicit allowlist
+    if (!looksInteractive(el)) continue;
+    if (isAlive(el)) continue;
+    // report the outermost dead shell once, not every nested span inside it
+    const shell = (() => {
+      let cur = el, out = el;
+      while (cur && cur !== document.body) {
+        if (looksInteractive(cur) && !isAlive(cur)) out = cur;
+        cur = cur.parentElement;
+      }
+      return out;
+    })();
+    if (seenDead.has(shell)) continue;
+    seenDead.add(shell);
+    dead.push({
+      sel: describe(shell),
+      tag: shell.tagName.toLowerCase(),
+      label: (shell.getAttribute("aria-label") || shell.textContent || "").trim().slice(0, 32),
+    });
+  }
+
+  // 9) hardcoded colors (phase-6 burn-down): computed color/background matching
+  //    the raw-hex sweep list instead of a theme token. (Inlined — this
+  //    function is serialized into the page and cannot close over module scope.)
+  const HARDCODED_RGB = [
+    "rgb(47, 47, 47)",   // #2f2f2f
+    "rgb(34, 34, 34)",   // #222 / #222222
+    "rgb(85, 85, 85)",   // #555
+    "rgb(113, 113, 113)", // #717171
+    "rgb(136, 136, 136)", // #888
+    "rgb(170, 170, 170)", // #aaa
+    "rgb(204, 204, 204)", // #ccc
+  ];
+  const hardcoded = [];
+  for (const el of all) {
+    if (!visible(el)) continue;
+    const cs = getComputedStyle(el);
+    for (const [prop, val] of [["color", cs.color], ["backgroundColor", cs.backgroundColor], ["borderTopColor", cs.borderTopColor]]) {
+      if (!val || val === "rgba(0, 0, 0, 0)") continue;
+      if (HARDCODED_RGB.includes(val)) {
+        hardcoded.push({ sel: describe(el), prop, val });
+        break;
+      }
+    }
+    if (hardcoded.length >= 24) break;
+  }
+
   return {
     viewport: { vw, vh },
     docOverflow,
@@ -300,7 +401,11 @@ function auditInPage() {
       smallTargets: smallTargets.length,
       overlaps: overlaps.length,
       bottomHidden: bottomHidden ? bottomHidden.length : 0,
+      deadInteractive: dead.length,
+      hardcodedColors: hardcoded.length,
     },
+    dead: dead.slice(0, 20),
+    hardcoded: hardcoded.slice(0, 12),
     tokens,
   };
 }
@@ -327,8 +432,20 @@ async function captureOurApp(browser, profile, page) {
     // The tour overlays the app on first run in a fresh profile — it is not a
     // layout defect. Pre-seed it as seen, at the CURRENT version so a bump
     // cannot make it open and cover the page being measured.
+    //
+    // Also wrap navigator.clipboard.writeText so the toast-less-mutation probe
+    // can see every copy the page performs (phase-3: every mutation must
+    // confirm itself with a [data-testid=yt-toast] within 1s).
     await tab.addInitScript((v) => {
       try { localStorage.setItem("yt_whatsnew_seen", v); } catch { /* ignore */ }
+      window.__clipWrites = [];
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+        navigator.clipboard.writeText = (t) => {
+          window.__clipWrites.push({ t: String(t).slice(0, 80), at: Date.now() });
+          return orig(t);
+        };
+      }
     }, APP_VERSION);
     await tab.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
     // give the data layer time to paint real content, not skeletons
@@ -337,6 +454,28 @@ async function captureOurApp(browser, profile, page) {
     await tab.evaluate(() => window.scrollTo(0, 0));
     await sleep(600);
     report.measures = await tab.evaluate(auditInPage);
+
+    // toast-less mutation probe: click the first share-ish control, then check
+    // a toast appeared within 1s of the clipboard write (phase-3 bar).
+    if (page.name === "watch" || page.name === "shorts") {
+      try {
+        const shared = await tab.evaluate(async () => {
+          const btn = [...document.querySelectorAll("button")].find((b) => {
+            const l = (b.getAttribute("aria-label") || b.textContent || "").toLowerCase();
+            return /\bshare\b/.test(l) && b.getBoundingClientRect().height > 0;
+          });
+          if (!btn) return { clicked: false };
+          btn.click();
+          await new Promise((r) => setTimeout(r, 1000));
+          return {
+            clicked: true,
+            clip: (window.__clipWrites || []).length,
+            toast: !!document.querySelector("[data-testid=yt-toast]"),
+          };
+        });
+        report.toastProbe = shared;
+      } catch { /* non-fatal */ }
+    }
   } catch (e) {
     report.errors.push(String(e.message || e).slice(0, 200));
   }
@@ -420,6 +559,18 @@ function toMarkdown(reports) {
     if (m.overlaps.length) { lines.push(""); lines.push("**Overlapping interactive elements**"); for (const o of m.overlaps.slice(0, 6)) lines.push(`- \`${o.a}\` ↔ \`${o.b}\` (${o.overlapPct}%) "${o.aText}" / "${o.bText}"`); }
     if (m.clipped.length) { lines.push(""); lines.push("**Clipped text (no line-clamp — a real cut-off)**"); for (const c of m.clipped.slice(0, 6)) lines.push(`- \`${c.sel}\` cut ${c.cutPx}px — "${c.text}"`); }
     if (m.tooTall.length) { lines.push(""); lines.push("**Taller than viewport**"); for (const t of m.tooTall.slice(0, 5)) lines.push(`- \`${t.sel}\` h=${t.height} (vh=${t.vh}) parentOverflowY=${t.parentOverflowY}`); }
+    if (m.dead?.length) {
+      lines.push(""); lines.push("**Dead-interactive controls (phase-3 burn-down)**");
+      for (const d of m.dead.slice(0, 10)) lines.push(`- \`${d.sel}\` "${d.label}"`);
+    }
+    if (m.hardcoded?.length) {
+      lines.push(""); lines.push("**Hardcoded colors (phase-6 burn-down)**");
+      for (const h of m.hardcoded.slice(0, 8)) lines.push(`- \`${h.sel}\` ${h.prop}=${h.val}`);
+    }
+    if (r.toastProbe?.clicked) {
+      lines.push("");
+      lines.push(`- share toast probe: clicked=${r.toastProbe.clicked} clipboardWrites=${r.toastProbe.clip} toastShown=${r.toastProbe.toast}${r.toastProbe.clip > 0 && !r.toastProbe.toast ? " — **TOAST-LESS MUTATION**" : ""}`);
+    }
     if (r.screenshot) { lines.push(""); lines.push(`![${tag} ${r.profile} ${r.page}](${path.relative("docs", r.screenshot)})`); }
     lines.push("");
   }
@@ -429,14 +580,16 @@ function toMarkdown(reports) {
 (async () => {
   const browser = await chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] });
   const reports = [];
-  const pages = ONLY ? PAGES.filter((p) => p.name === ONLY) : PAGES;
-  for (const profile of PROFILES) {
+  const profiles = QUICK ? PROFILES.filter((p) => QUICK_PROFILES.includes(p.name)) : PROFILES;
+  const pageSet = QUICK ? PAGES.filter((p) => QUICK_PAGES.includes(p.name)) : PAGES;
+  const pages = ONLY ? PAGES.filter((p) => p.name === ONLY) : pageSet;
+  for (const profile of profiles) {
     for (const page of pages) {
       process.stdout.write(`[ours] ${profile.name}/${page.name} … `);
       const r = await captureOurApp(browser, profile, page);
       reports.push(r);
       const m = r.measures;
-      console.log(m ? `overflow=${m.docOverflow}px wide=${m.counts.wide} clip=${m.counts.clipped} ellipsis=${m.counts.clamped} overlap=${m.counts.overlaps} small=${m.counts.smallTargets}` : `FAILED (${r.errors[0] || "?"})`);
+      console.log(m ? `overflow=${m.docOverflow}px wide=${m.counts.wide} clip=${m.counts.clipped} ellipsis=${m.counts.clamped} overlap=${m.counts.overlaps} small=${m.counts.smallTargets} dead=${m.counts.deadInteractive} hardc=${m.counts.hardcodedColors}` : `FAILED (${r.errors[0] || "?"})`);
     }
   }
   if (DO_REF) {

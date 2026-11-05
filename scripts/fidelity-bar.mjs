@@ -46,10 +46,17 @@ const PROFILES = [
   { name: "desktop", width: 1440, height: 900, dpr: 1, mobile: false, ref: "https://www.youtube.com" },
 ];
 
+// The 8 measured surfaces (phase-0 bar). Ours are query-param routes (static
+// export); refs are YouTube's own URLs at the same viewport.
 const CASES = [
   { name: "home", ours: "/", ref: "/" },
   { name: "watch", ours: `/?v=${VIDEO}`, ref: `/watch?v=${VIDEO}` },
   { name: "search", ours: "/?q=space%20documentary", ref: "/results?search_query=space+documentary" },
+  { name: "shorts", ours: "/?page=shorts", ref: "/shorts" },
+  { name: "channel", ours: "/?channel=UCuAXFkgsw1L7xaCfnd5JJOw", ref: "/@RickAstleyYT" },
+  { name: "subscriptions", ours: "/?page=subscriptions", ref: "/feed/subscriptions" },
+  { name: "settings", ours: "/?page=settings", ref: "/" }, // YouTube has no settings page on the surface; home carries the chrome bar
+  { name: "history", ours: "/?page=history", ref: "/feed/history" },
 ];
 
 // Runs inside the page. Dependency-free.
@@ -295,7 +302,14 @@ function diffTable(ours, ref) {
       console.log(`\n${"=".repeat(72)}\n${key}\n${"=".repeat(72)}`);
       if (a?.error) console.log(`  OURS failed: ${a.error}`);
       if (b?.error) console.log(`  YOUTUBE failed: ${b.error}`);
-      if (a && !a.error && b && !b.error) {
+      if (b && !b.error && !b.grid && b.counts?.imgs < 5) {
+        // YouTube served a bot-gated empty shell (datacenter IP): no grid, no
+        // thumbnails. Recording numbers against it would be noise, so the
+        // surface is marked and the diff skipped — honestly.
+        b.refEmpty = true;
+        console.log("  YOUTUBE reference EMPTY (bot-gated shell) — diff skipped");
+      }
+      if (a && !a.error && b && !b.error && !b.refEmpty) {
         console.log(diffTable(a, b));
         console.log("\n  typography (ours):");
         for (const t of a.texts) console.log(`    ${String(t.fs).padStart(5)}px/${String(t.lh).padStart(5)}  w${t.w} h${t.h} clamp=${fmt(t.clamp)}  ${JSON.stringify(t.text)}`);
@@ -307,6 +321,26 @@ function diffTable(ours, ref) {
 
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(`${OUT}/fidelity.json`, JSON.stringify(report, null, 2));
-  console.log(`\nJSON → ${OUT}/fidelity.json   screenshots → ${OUT}/`);
+
+  // History with trend arrows: append a compact per-surface snapshot so a later
+  // run can show whether each delta moved toward or away from YouTube's value.
+  // (Keep it small — only the headline numbers, not the typography dump.)
+  const histPath = `${OUT}/fidelity-history.json`;
+  let hist = [];
+  try { hist = JSON.parse(fs.readFileSync(histPath, "utf8")); } catch { /* first run */ }
+  const stamp = new Date().toISOString();
+  for (const [key, sides] of Object.entries(report)) {
+    const a = sides.ours, b = sides.ref;
+    if (!a || a.error || !b || b.error || b.refEmpty) continue;
+    hist.push({
+      at: stamp, surface: key,
+      ours: { cols: a.grid?.columns ?? null, itemW: a.grid?.itemW ?? null, gapX: a.grid?.gapX ?? null, headerH: a.chrome?.headerH ?? null },
+      ref: { cols: b.grid?.columns ?? null, itemW: b.grid?.itemW ?? null, gapX: b.grid?.gapX ?? null, headerH: b.chrome?.headerH ?? null },
+    });
+  }
+  // keep the last 40 runs of history
+  hist = hist.slice(-320);
+  fs.writeFileSync(histPath, JSON.stringify(hist, null, 2));
+  console.log(`\nJSON → ${OUT}/fidelity.json   history → ${histPath}   screenshots → ${OUT}/`);
   await browser.close();
 })();
