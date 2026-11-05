@@ -403,6 +403,67 @@ WORKLOG updated.
 
 ### Phase 2 — Premium feature completion: miniplayer + PiP (~2 sessions)
 
+> **Amendment (2026-11-06, post-goldfish):** a fresh zero-context review of
+> this section raised 10 findings (3 structural blockers); all resolved as
+> decisions below, marked **[A1]…[A10]**. These are binding for the
+> implementation — the section as originally drafted is superseded where an
+> amendment contradicts it.
+>
+> - **[A1] Surface mount mechanism (the `<video>` never moves):** the
+>   VideoSurface component OWNS one `<video>` element created imperatively
+>   (once, in a ref — never in React's reconcile tree) and ADOPTS it into the
+>   active mount point (`watch slot` or `mini frame`) via an effect that does
+>   `container.appendChild(videoEl)`. React renders only the chrome around an
+>   adoption `<div>`. This survives every route remount (AppShell keys
+>   WatchPage on `route.v`) with zero source reset: hls instance, position,
+>   MediaSession, and phase-1 wiring all persist. Fullscreen requests target
+>   the mount-point container (a real visible element). `VideoPlayerHandle`
+>   style seek is replaced by store actions; WatchPage's chapter chips call
+>   `playback.seekTo()`.
+> - **[A2] Embed handoff:** the store gains `mode: "direct" | "embed" |
+>   "none"` per video. WatchPage's `onFallback` → `playback.setEmbed(id)`
+>   which (a) pauses + parks the surface (embed iframe = second audio source
+>   → owner rule), (b) remembers embed-ness so the mini never docks for that
+>   video, (c) `forceEmbed` moves into the store (keyed by videoId, TTL'd
+>   like today's local state). Test addition: mini playing on home → open an
+>   embed-only video → mini closes, surface parks, iframe plays.
+> - **[A3] Shorts enforcement is ROUTE-based, not mount-based:** yt-playback
+>   subscribes to the router; entering the shorts route → `pauseAndDock()`
+>   (surface pauses, mini closes, `wasMini` remembered). Leaving shorts →
+>   mini reopens only if `wasMini`. Preloaded-but-silent adjacent Shorts
+>   cards never touch the store (the original "any second player mounting"
+>   wording is dropped — ambiguous against preload). The store-owned surface
+>   is the ONLY direct-mode player; per-card Shorts players stay outside.
+> - **[A4] Scroll-past trigger:** IntersectionObserver on the watch slot,
+>   `threshold: [0, 0.15]` — the mini docks when intersectionRatio drops
+>   below 0.15 (≈ the player leaving view), INCLUDING when paused (YouTube's
+>   desktop behavior). The observer is owned by the VideoSurface effect
+>   (it outlives WatchPage remounts; re-attached to the current slot).
+> - **[A5] Home-press PiP:** `onUserLeaveHint()` in MainActivity — delivered
+>   by extending the CI patch to inject a small `MainActivity` snippet after
+>   `cap add` (the MainActivity is template-generated, so the patch is
+>   deterministic; the snippet sets a static flag the plugin polls on
+>   activity-pause). `exitPip` is a no-op (leaving PiP is user-driven;
+>   dismissing PiP arrives as the existing `stop` control event). Web:
+>   `enterPip` no-ops — desktop keeps the already-shipped W3C PiP button,
+>   which moves into the surface unchanged. `pipOnHome` gets a SettingsPage
+>   row (SettingsPage joins the file inventory).
+> - **[A7] ENDED/countdown ownership moves to the SURFACE** (it outlives
+>   routes): the surface calls `playback.advance()`; the countdown UI renders
+>   wherever the surface is currently docked; countdown state lives in the
+>   store; Cancel, a route change to another video, or a manual seek clears
+>   it. The queue (related[]) is pushed into the store by WatchPage when
+>   metadata loads (`playback.setQueue(related)`), so notification
+>   next/prev and the countdown share one source of truth.
+> - **[A8] The PiP manifest assert lives in `build-android.yml`** (it already
+>   runs cap sync on every push): add the sed-patch there + an
+>   `aapt dump xmltree` assertion step. ci.yml stays UI-only.
+> - **[A9] AppShell.tsx joins the Phase-2 file inventory** (mount point, z-
+>   stack above MobileNav, shorts-route interplay).
+> - **[A10] Mini → different video:** navigating to a new watch video loads
+>   it into the surface and closes the mini (the mini is never preserved
+>   over a new watch page).
+
 **Goal:** playback continuity everywhere — the signature Premium behavior.
 
 - `src/lib/yt-playback.ts` (new, §4.1): playback slice + queue + `miniOpen`
