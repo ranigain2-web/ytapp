@@ -5,6 +5,7 @@ export class YtBackgroundWeb {
   async enable() {}
   async update() {}
   async disable() {}
+  async keepAwake() {}
   async addListener() {
     return { remove: async () => {} };
   }

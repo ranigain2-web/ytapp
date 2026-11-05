@@ -7,6 +7,7 @@ import { useYt } from "@/lib/yt-store";
 import { formatViews, formatCount, timeAgo, fullDate } from "@/lib/yt-format";
 import { loadYouTubeIframeAPI } from "@/lib/yt-embed-api";
 import VideoPlayer from "./VideoPlayer";
+import type { VideoPlayerHandle } from "./VideoPlayer";
 import { VideoCard } from "./VideoCard";
 import Comments from "./Comments";
 import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Scissors, Bell, AlertTriangle, SkipForward, Headphones, Play, RotateCcw } from "lucide-react";
@@ -83,6 +84,8 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     && (data.embed_fallback || forceEmbed)
     && !(data.embed_fallback && data.playability_reason && (data.embed_blocked || data.unavailable)));
   const embedIframeRef = useRef<HTMLIFrameElement | null>(null);
+  // Phase 1: imperative seek handle into the direct-mode player (chapter chips)
+  const playerRef = useRef<VideoPlayerHandle | null>(null);
   const autoplayRef = useRef(autoplay);
   const goNextRef = useRef(goNext);
   const [embedEnded, setEmbedEnded] = useState(false);
@@ -268,7 +271,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             <div className="sm:hidden absolute bottom-0 inset-x-0 h-1 bg-transparent" />
           </div>
         ) : (
-          <VideoPlayer video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onNext={goNext} onProgress={onProgress} onFallback={handlePlayerFallback} />
+          <VideoPlayer ref={playerRef} video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onNext={goNext} onProgress={onProgress} onFallback={handlePlayerFallback} />
         )}
         {(v.embed_fallback || forceEmbed) && !blockedMessage && (
           <p className="px-4 sm:px-0 py-2 text-[12px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev)] sm:rounded-lg sm:mt-2 flex items-center gap-2">
@@ -424,7 +427,17 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           {(v.chapters?.length || 0) > 0 && descOpen && (
             <div className="mt-3 space-y-1">
               {v.chapters.map((c, i) => (
-                <button key={i} className="block text-[13px] text-[var(--yt-blue)] hover:underline" onClick={(e) => e.stopPropagation()}>
+                <button
+                  key={i}
+                  className="block text-[13px] text-[var(--yt-blue)] hover:underline"
+                  data-testid="desc-chapter"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Phase 1: description chapter chips actually seek the player
+                    playerRef.current?.seekTo(c.start);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
                   {Math.floor(c.start / 60)}:{String(Math.floor(c.start % 60)).padStart(2, "0")} — {c.title}
                 </button>
               ))}

@@ -11,6 +11,9 @@ YtBackgroundWeb.prototype.update = function () {
 YtBackgroundWeb.prototype.disable = function () {
   return Promise.resolve();
 };
+YtBackgroundWeb.prototype.keepAwake = function () {
+  return Promise.resolve();
+};
 YtBackgroundWeb.prototype.addListener = function () {
   return Promise.resolve({ remove: function () { return Promise.resolve(); } });
 };

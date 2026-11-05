@@ -138,6 +138,43 @@ public class YtBackgroundPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * Phase 1: keep-screen-on control. The web layer's
+     * `capacitor.config.ts > keepScreenOn` never existed as a Capacitor
+     * feature — this is the real mechanism: setKeepScreenOn() on the WebView.
+     * While a video is PLAYING in the foreground the screen must not sleep
+     * (YouTube behavior); on pause/background it must.
+     */
+    @PluginMethod
+    public void keepAwake(PluginCall call) {
+        Boolean enable = call.getBoolean("enable", Boolean.TRUE);
+        final boolean e = enable == null || enable.booleanValue();
+        try {
+            Bridge bridge = getBridge();
+            if (bridge == null || bridge.getWebView() == null) {
+                call.reject("no webview");
+                return;
+            }
+            final android.webkit.WebView wv = bridge.getWebView();
+            Runnable apply = new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        wv.setKeepScreenOn(e);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            };
+            // Views may only be mutated on the UI thread.
+            android.app.Activity act = getActivity();
+            if (act != null) act.runOnUiThread(apply);
+            else wv.post(apply);
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("keepAwake failed: " + t.getMessage());
+        }
+    }
+
     void emitControl(String action) {
         JSObject data = new JSObject();
         data.put("action", action);

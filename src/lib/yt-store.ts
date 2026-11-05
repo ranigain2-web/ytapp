@@ -74,6 +74,9 @@ interface YtStore {
     /** Premium-style audio mode: play the audio-only stream and show the
      *  thumbnail (saves data; also the stream used for pure listening). */
     audioOnly: boolean;
+    /** Phase 1 ("Playback and performance"): cap quality at 360p and skip
+     *  60fps variants — YouTube's Data saver. */
+    dataSaver: boolean;
   };
   setPrefs: (p: Partial<YtStore["prefs"]>) => void;
 }
@@ -154,6 +157,7 @@ export const useYt = create<YtStore>()(
         theme: "dark",
         backgroundPlay: true,
         audioOnly: false,
+        dataSaver: false,
       },
       setPrefs: (p) => set({ prefs: { ...get().prefs, ...p } }),
     }),

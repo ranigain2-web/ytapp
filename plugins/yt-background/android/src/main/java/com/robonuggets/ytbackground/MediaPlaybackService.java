@@ -5,10 +5,15 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -84,6 +89,78 @@ public class MediaPlaybackService extends Service {
     private double duration = 0.0;
     private double position = 0.0;
     private boolean tornDown = false;
+
+    // ---- audio focus (phase 1: Premium-grade interruption handling) ----
+    //
+    // Ownership model: the WebView requests audio focus on its own the moment
+    // its <video> becomes audible — a second naive GAIN request from us would
+    // make the OS pause the WebView (the "second client wins" race). So the
+    // service requests focus ONCE, at user-gesture enable time (BEFORE the
+    // first audible frame), and from then on only REACTS to focus changes:
+    // loss → pause, transient loss → pause + remember to resume, can-duck →
+    // duck (volume-down control event to JS), gain → unduck and resume only
+    // if we were playing.
+    private AudioManager audioManager;
+    private AudioFocusRequest focusRequest; // API 26+
+    private boolean focusGranted = false;
+    private boolean ducked = false;
+    private boolean resumeOnFocusGain = false;
+    private boolean wasPlayingBeforeLoss = false;
+
+    private final AudioManager.OnAudioFocusChangeListener focusListener =
+            new AudioManager.OnAudioFocusChangeListener() {
+                @Override
+                public void onAudioFocusChange(int focusChange) {
+                    switch (focusChange) {
+                        case AudioManager.AUDIOFOCUS_LOSS:
+                            // another app took the stream for good (call started)
+                            resumeOnFocusGain = false;
+                            wasPlayingBeforeLoss = playing;
+                            setPlayingAndNotify(false);
+                            emitControl("pause");
+                            break;
+                        case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+                            // temporary interruption (ringtone) — resume after
+                            resumeOnFocusGain = true;
+                            wasPlayingBeforeLoss = playing;
+                            setPlayingAndNotify(false);
+                            emitControl("pause");
+                            break;
+                        case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+                            // keep playing, quietly (notification beep, nav prompt)
+                            ducked = true;
+                            emitControl("duck");
+                            break;
+                        case AudioManager.AUDIOFOCUS_GAIN:
+                            if (ducked) {
+                                ducked = false;
+                                emitControl("unduck");
+                            }
+                            if (resumeOnFocusGain && wasPlayingBeforeLoss) {
+                                setPlayingAndNotify(true);
+                                emitControl("play");
+                            }
+                            resumeOnFocusGain = false;
+                            wasPlayingBeforeLoss = false;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            };
+
+    // headphone unplug / BT disconnect → pause immediately (never blast the
+    // speaker), exactly like YouTube/YouTube Music
+    private final BroadcastReceiver noisyReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(intent.getAction())) {
+                setPlayingAndNotify(false);
+                emitControl("pause");
+            }
+        }
+    };
+    private boolean noisyRegistered = false;
 
     // ---- static command entrypoints (called from the plugin) ----
 
@@ -201,6 +278,7 @@ public class MediaPlaybackService extends Service {
         });
         mediaSession.setActive(true);
         acquireWakeLock();
+        registerNoisyReceiver();
     }
 
     @Override
@@ -285,6 +363,12 @@ public class MediaPlaybackService extends Service {
         }
         if (d > 0) duration = d;
         playing = true;
+        // Phase 1: request audio focus BEFORE the first audible start (enable
+        // fires at the user-gesture start, not after play begins), and renew
+        // the wakelock on every re-enable so long sessions never lose it.
+        requestAudioFocus();
+        renewWakeLock();
+        registerNoisyReceiver();
         startForeground(NOTIFICATION_ID, buildNotification());
         refreshSession();
         fetchArtwork();
@@ -311,6 +395,8 @@ public class MediaPlaybackService extends Service {
 
     private void teardown() {
         tornDown = true;
+        abandonAudioFocus();
+        unregisterNoisyReceiver();
         try {
             if (mediaSession != null) {
                 mediaSession.setActive(false);
@@ -360,6 +446,91 @@ public class MediaPlaybackService extends Service {
             }
         } catch (Throwable ignored) {
         }
+    }
+
+    /**
+     * Phase 1: re-assert the wakelock on every applyEnable. A session that
+     * outlives the 4h cap (or a wakelock the system quietly dropped) must not
+     * kill screen-off playback mid-video.
+     */
+    private void renewWakeLock() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) return;
+            releaseWakeLock();
+            acquireWakeLock();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    // ---- audio focus plumbing ----
+
+    private void requestAudioFocus() {
+        try {
+            if (audioManager == null) audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+            if (audioManager == null || focusGranted) return;
+            if (Build.VERSION.SDK_INT >= 26) {
+                if (focusRequest == null) {
+                    focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                            .setAudioAttributes(new AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .build())
+                            .setOnAudioFocusChangeListener(focusListener, main)
+                            .setWillPauseWhenDucked(false)
+                            .build();
+                }
+                focusGranted = audioManager.requestAudioFocus(focusRequest)
+                        == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+            } else {
+                focusGranted = audioManager.requestAudioFocus(focusListener,
+                        AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+                        == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+            }
+        } catch (Throwable ignored) {
+            // focus is best-effort: playback still works without it
+        }
+    }
+
+    private void abandonAudioFocus() {
+        try {
+            if (audioManager != null) {
+                if (Build.VERSION.SDK_INT >= 26 && focusRequest != null) {
+                    audioManager.abandonAudioFocusRequest(focusRequest);
+                } else {
+                    audioManager.abandonAudioFocus(focusListener);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        focusGranted = false;
+        ducked = false;
+        resumeOnFocusGain = false;
+        wasPlayingBeforeLoss = false;
+    }
+
+    private void registerNoisyReceiver() {
+        if (noisyRegistered) return;
+        try {
+            registerReceiver(noisyReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
+            noisyRegistered = true;
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void unregisterNoisyReceiver() {
+        if (!noisyRegistered) return;
+        try {
+            unregisterReceiver(noisyReceiver);
+        } catch (Throwable ignored) {
+        }
+        noisyRegistered = false;
+    }
+
+    /** Shared play/pause state mutation for focus/noisy paths (notifies UI). */
+    private void setPlayingAndNotify(boolean p) {
+        playing = p;
+        updateNotification();
+        refreshSession();
     }
 
     private void releaseWakeLock() {

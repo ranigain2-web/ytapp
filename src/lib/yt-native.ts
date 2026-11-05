@@ -85,11 +85,66 @@ export function nativeBackgroundDisable() {
   getNative()?.disable().catch(() => {});
 }
 
+/**
+ * Keep-screen-on while a video plays in the foreground (Android: WebView
+ * setKeepScreenOn via the plugin; web: silent no-op — the OS handles it).
+ * This replaces the never-existent `keepScreenOn` capacitor.config.ts key.
+ */
+export function nativeKeepAwake(enable: boolean) {
+  getNative()?.keepAwake({ enable }).catch(() => {});
+}
+
 export function addControlListener(
   cb: (e: YtBackgroundControlEvent) => void,
 ): () => void {
   const p = getNative();
   if (!p) return () => {};
+
+  // PHASE-1 BUG FIX — notification controls were silently dead on real devices.
+  //
+  // @capacitor/core's registerPlugin proxy THROWS "addListener() is not
+  // implemented on android" for native plugins (the PluginHeaders method list
+  // never contains addListener — Java treats it as a special snowflake — so
+  // createPluginMethod falls through to Unimplemented). The rejection was
+  // swallowed below, so lock-screen / notification / headset events NEVER
+  // reached the player on a real device; they only worked in the e2e stub.
+  //
+  // The path the real Android bridge provides is window.Capacitor.addListener
+  // (defined by the injected native-bridge.js via initEvents): it routes
+  // straight to nativeCallback(plugin, 'addListener', {eventName}, callback)
+  // and events arrive as storedCall.callback(result.data). Prefer it whenever
+  // present; fall back to the proxy for web/dev where it behaves.
+  const w = window as unknown as {
+    Capacitor?: {
+      addListener?: (
+        pluginName: string,
+        eventName: string,
+        callback: (data: YtBackgroundControlEvent) => void,
+      ) => { remove?: () => void | Promise<void> } | string | Promise<unknown>;
+      removeListener?: (pluginName: string, callbackId: string, eventName: string, callback: unknown) => void;
+    };
+  };
+  const bridge = w.Capacitor?.addListener?.bind(w.Capacitor);
+  if (bridge) {
+    try {
+      const ret = bridge("YtBackground", "control", cb) as
+        | { remove?: () => void | Promise<void> }
+        | string
+        | Promise<unknown>;
+      // native-bridge returns { remove } synchronously; be liberal about it
+      if (ret && typeof ret === "object" && typeof (ret as { remove?: unknown }).remove === "function") {
+        const rm = (ret as { remove: () => void | Promise<void> }).remove;
+        let disposed = false;
+        return () => { if (!disposed) { disposed = true; Promise.resolve(rm()).catch(() => {}); } };
+      }
+      // a promise or raw callbackId came back — nothing to un-register cleanly
+      return () => {};
+    } catch {
+      /* fall through to the proxy path */
+    }
+  }
+
+  // Proxy path (web dev server / e2e stub without a bridge addListener).
   let handle: PluginListenerHandle | null = null;
   let disposed = false;
   p.addListener("control", cb)
@@ -104,7 +159,15 @@ export function addControlListener(
   };
 }
 
-// ---- W3C MediaSession (web + Android WebView where available) ----
+// ---- W3C MediaSession (web + desktop ONLY) ----
+//
+// Phase 1 rule: on Android the plugin's MediaSessionCompat is the SOLE
+// media-session authority. Chromium's WebView ALSO implements the W3C API and
+// the two sessions flap (duplicate metadata, lockscreen controls that race the
+// notification), so every W3C call below is hard-gated off on native.
+
+const w3cSessionActive = () =>
+  typeof navigator !== "undefined" && "mediaSession" in navigator && !isNativeApp();
 
 type MsHandlers = {
   play?: () => void;
@@ -116,7 +179,7 @@ type MsHandlers = {
 };
 
 export function setMediaMetadata(meta: { title?: string; artist?: string; artwork?: string; duration?: number }) {
-  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  if (!w3cSessionActive()) return;
   try {
     navigator.mediaSession.metadata = new window.MediaMetadata({
       title: meta.title || "YouTube",
@@ -129,7 +192,7 @@ export function setMediaMetadata(meta: { title?: string; artist?: string; artwor
 }
 
 export function setMediaPlaybackState(playing: boolean) {
-  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  if (!w3cSessionActive()) return;
   try {
     navigator.mediaSession.playbackState = playing ? "playing" : "paused";
   } catch {
@@ -138,7 +201,7 @@ export function setMediaPlaybackState(playing: boolean) {
 }
 
 export function setMediaPositionState(position: number, duration: number, rate = 1) {
-  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  if (!w3cSessionActive()) return;
   if (!isFinite(position) || !isFinite(duration) || duration <= 0) return;
   try {
     navigator.mediaSession.setPositionState?.({ position: Math.max(0, Math.min(duration, position)), duration, playbackRate: rate || 1 });
@@ -148,7 +211,7 @@ export function setMediaPositionState(position: number, duration: number, rate =
 }
 
 export function setMediaHandlers(h: MsHandlers) {
-  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  if (!w3cSessionActive()) return;
   const ms = navigator.mediaSession;
   const set = (action: MediaSessionAction, fn: ((d?: MediaSessionActionDetails) => void) | null) => {
     try {

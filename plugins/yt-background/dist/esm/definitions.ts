@@ -21,8 +21,13 @@ export interface YtBackgroundUpdateOptions {
   artist?: string;
 }
 
+export interface YtBackgroundKeepAwakeOptions {
+  /** true = keep the screen on while the video plays (foreground). */
+  enable?: boolean;
+}
+
 export interface YtBackgroundControlEvent {
-  action: "play" | "pause" | "next" | "stop" | "seek";
+  action: "play" | "pause" | "next" | "stop" | "seek" | "duck" | "unduck";
   /** Target position in seconds (only for action === "seek"). */
   seekTo?: number;
 }
@@ -31,6 +36,8 @@ export interface YtBackgroundPlugin {
   enable(options: YtBackgroundEnableOptions): Promise<void>;
   update(options: YtBackgroundUpdateOptions): Promise<void>;
   disable(): Promise<void>;
+  /** Android: setKeepScreenOn on the WebView — no-op on web. */
+  keepAwake(options: YtBackgroundKeepAwakeOptions): Promise<void>;
   addListener(
     eventName: "control",
     listenerFunc: (event: YtBackgroundControlEvent) => void,

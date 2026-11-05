@@ -6,7 +6,7 @@ import { useYt } from "@/lib/yt-store";
 import { applyTheme, watchSystemTheme, type ThemeMode } from "@/lib/yt-theme";
 import { APP_VERSION } from "@/lib/version";
 import { isNativeApp } from "@/lib/yt-native";
-import { Check, X, RefreshCw, Globe, Server, Smartphone, Moon, Sun, Monitor, Headphones, PlayCircle } from "lucide-react";
+import { Check, X, RefreshCw, Globe, Server, Smartphone, Moon, Sun, Monitor, Headphones, PlayCircle, Gauge, Signal } from "lucide-react";
 
 function Toggle({ label, desc, value, onChange, labelIcon }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void; labelIcon?: React.ReactNode }) {
   return (
@@ -20,7 +20,7 @@ function Toggle({ label, desc, value, onChange, labelIcon }: { label: string; de
         role="switch"
         aria-checked={value}
         aria-label={label}
-        className={`w-11 h-6 rounded-full relative shrink-0 transition-colors ${value ? "bg-[var(--yt-blue)]" : "bg-[#555]"}`}
+        className={`w-11 h-6 rounded-full relative shrink-0 transition-colors ${value ? "bg-[var(--yt-blue)]" : "bg-[var(--yt-switch)]"}`}
       >
         <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${value ? "left-[22px]" : "left-0.5"}`} />
       </button>
@@ -205,6 +205,41 @@ export default function SettingsPage() {
           value={prefs.sponsorblock}
           onChange={v => setPrefs({ sponsorblock: v })}
         />
+
+        {/* Phase 1 — "Playback and performance": YouTube's quality row + Data saver */}
+        <div className="py-4 border-b border-[var(--yt-border)]" data-testid="quality-row">
+          <p className="text-[15px] text-[var(--yt-text)] flex items-center gap-2">
+            <Gauge className="w-4 h-4" /> Video quality
+          </p>
+          <p className="text-[13px] text-[var(--yt-text-2)] mt-0.5 mb-2">
+            Highest quality the player will pick on direct streams. Data saver caps at 360p and skips 60fps variants.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {(["auto", "2160", "1440", "1080", "720", "480", "360"] as const).map(q => {
+              const active = String(prefs.defaultQuality) === q;
+              return (
+                <button
+                  key={q}
+                  onClick={() => setPrefs({ defaultQuality: q === "auto" ? "auto" : Number(q) })}
+                  data-quality={q}
+                  className={`h-8 px-3 rounded-lg text-[13px] font-medium ${active ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]"}`}
+                >
+                  {q === "auto" ? "Auto" : `${q}p`}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setPrefs({ dataSaver: !prefs.dataSaver })}
+            role="switch"
+            aria-checked={!!prefs.dataSaver}
+            aria-label="Data saver"
+            data-testid="data-saver-toggle"
+            className={`mt-3 flex items-center gap-2 h-8 px-3.5 rounded-full text-[13px] font-medium ${prefs.dataSaver ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]"}`}
+          >
+            <Signal className="w-4 h-4" /> Data saver {prefs.dataSaver ? "on" : "off"}
+          </button>
+        </div>
       </section>
 
       {/* Data */}

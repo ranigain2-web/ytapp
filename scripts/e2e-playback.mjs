@@ -61,17 +61,23 @@ const initScript = (nativeStub) => `
   // PluginHeaders entry so registerPlugin() routes calls through nativePromise.
   // This means the test exercises the REAL yt-background proxy, not a mock of
   // our own wrapper.
+  // __emitControl(data) fires control events INTO the page the way the Java
+  // service's notifyListeners does (audio focus / becoming-noisy / buttons).
   (function () {
     window.__bgCalls = [];
+    window.__bgListeners = [];
     window.androidBridge = { postMessage: function () {} };
     window.Capacitor = {
       PluginHeaders: [
+        // NOTE: addListener/removeListener are deliberately NOT listed —
+        // @capacitor/core special-cases them and only routes the listener
+        // callback through nativeCallback when the header has NO rtype for
+        // them. Listing them as "promise" drops the callback entirely.
         { name: "YtBackground", methods: [
           { name: "enable", rtype: "promise" },
           { name: "update", rtype: "promise" },
           { name: "disable", rtype: "promise" },
-          { name: "addListener", rtype: "promise" },
-          { name: "removeListener", rtype: "promise" },
+          { name: "keepAwake", rtype: "promise" },
         ] },
       ],
       nativePromise: function (plugin, method, options) {
@@ -80,8 +86,33 @@ const initScript = (nativeStub) => `
       },
       nativeCallback: function (plugin, method, options, cb) {
         window.__bgCalls.push([method, options || null]);
+        if (method === "addListener" && cb) {
+          // Real Capacitor: returnResult calls storedCall.callback(result.data)
+          // — the listener receives the data object ITSELF, not wrapped.
+          window.__bgListeners.push(function (data) { cb(data); });
+        }
         if (cb) cb({}, method + "-" + window.__bgCalls.length);
       },
+      // The injected Android native-bridge defines these via initEvents(); the
+      // registerPlugin proxy alone CANNOT register listeners (throws
+      // Unimplemented) — the app's addControlListener uses this bridge path.
+      // remove() must ACTUALLY splice (the real bridge unregisters by
+      // callbackId) or stale listeners accumulate when React re-binds the
+      // effect and double-apply duck/unduck.
+      addListener: function (pluginName, eventName, callback) {
+        window.__bgCalls.push(["addListener", { eventName: eventName }]);
+        var fn = function (data) { callback(data); };
+        window.__bgListeners.push(fn);
+        return { remove: function () {
+          var i = window.__bgListeners.indexOf(fn);
+          if (i >= 0) window.__bgListeners.splice(i, 1);
+          window.__bgCalls.push(["removeListener", { eventName: eventName }]);
+        } };
+      },
+      removeListener: function () {},
+    };
+    window.__emitControl = function (data) {
+      window.__bgListeners.forEach(function (fn) { fn(data); });
     };
   })();
   ` : ""}
@@ -226,8 +257,12 @@ const hydrationErrors = (errors) =>
     const calls = () => page.evaluate(() => window.__bgCalls || []);
 
     const c1 = await calls();
-    if (c1.some((c) => c[0] === "enable")) ok("foreground service enabled once playback starts");
-    else bad(`service never enabled (calls: ${JSON.stringify(c1).slice(0, 160)})`);
+    // Phase-1 contract: muted autoplay alone must NOT start the service —
+    // enable fires at the user gesture (focus ownership) or on backgrounding.
+    if (c1.filter((c) => c[0] === "enable").length === 0)
+      ok("muted autoplay does not enable the service (gesture-gated)");
+    else
+      bad("service enabled without a user gesture — phase-1 focus-ownership contract broken");
 
     // ---- The core case, tested FIRST and from a clean state ----
     // Simulate Android pausing the <video> on its own (NOT a user pause) and
@@ -370,6 +405,234 @@ const hydrationErrors = (errors) =>
     if (sd.railsShown > 0) ok("desktop shows a guide rail at 1024px");
     else bad("desktop has no guide rail at 1024px");
     await d.ctx.close();
+  }
+
+  // ---- 6. Phase 1: audio-focus / becoming-noisy control reactions ----------
+  // These verify the JS REACTION to service events (the Java focus logic
+  // itself is a device-checklist item — it cannot be proven off-device).
+  console.log("== 6. Audio focus + becoming-noisy reactions ==");
+  {
+    const { ctx, page } = await newPage(browser, { native: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(2000);
+
+    // duck → volume 0.2
+    const vol0 = await page.evaluate(() => document.querySelector("video").volume);
+    await page.evaluate(() => window.__emitControl({ action: "duck" }));
+    await sleep(400);
+    const volDuck = await page.evaluate(() => document.querySelector("video").volume);
+    if (Math.abs(volDuck - 0.2) < 0.01) ok(`focus can-duck lowers volume to 0.2 (${volDuck})`);
+    else bad(`duck did not lower volume (still ${volDuck})`);
+
+    // unduck → restored
+    await page.evaluate(() => window.__emitControl({ action: "unduck" }));
+    await sleep(400);
+    const volBack = await page.evaluate(() => document.querySelector("video").volume);
+    if (Math.abs(volBack - vol0) < 0.01) ok("focus gain restores the previous volume");
+    else bad(`unduck did not restore volume (${volBack} vs ${vol0})`);
+
+    // focus LOSS (a call started) → pause + update(playing:false)
+    await page.evaluate(() => { window.__bgCalls.length = 0; });
+    await page.evaluate(() => window.__emitControl({ action: "pause" }));
+    await sleep(600);
+    const paused = await page.evaluate(() => document.querySelector("video").paused);
+    if (paused) ok("focus-loss pause event pauses the player");
+    else bad("player kept playing through a focus-loss pause");
+
+    // W3C MediaSession must be gated OFF on native (plugin is sole authority)
+    const msUsed = await page.evaluate(() => {
+      try { return "mediaSession" in navigator && !!navigator.mediaSession.metadata; } catch { return false; }
+    });
+    if (!msUsed) ok("W3C MediaSession not driven on Android (plugin is sole authority)");
+    else bad("W3C MediaSession is ALSO active on native — dual-session regression");
+    await ctx.close();
+  }
+
+  // ---- 7. Phase 1: seek-drag scrubbing ------------------------------------
+  console.log("== 7. Seek-drag scrubbing ==");
+  {
+    const { ctx, page } = await newPage(browser);
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.5;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(1500);
+
+    const bar = page.locator("[data-testid=seek-bar]");
+    if (await bar.count()) {
+      const box = await bar.boundingBox();
+      const startX = box.x + box.width * 0.1;
+      const endX = box.x + box.width * 0.7;
+      const y = box.y + box.height / 2;
+      await page.mouse.move(startX, y);
+      await page.mouse.down();
+      await page.mouse.move(endX, y, { steps: 12 });
+      await sleep(250);
+      // during the drag: thumb grown + bubble visible + position live
+      const during = await page.evaluate(() => {
+        const thumb = document.querySelector("[data-testid=seek-thumb]");
+        const bubble = document.querySelector("[data-testid=seek-bubble]");
+        const t = document.querySelector("[data-testid=time-display]");
+        return {
+          thumbW: thumb ? thumb.getBoundingClientRect().width : 0,
+          bubble: !!bubble,
+          timeText: t ? t.textContent : "",
+        };
+      });
+      if (during.thumbW >= 17) ok(`thumb grows during drag (${during.thumbW}px)`);
+      else bad(`thumb did not grow during drag (${during.thumbW}px)`);
+      if (during.bubble) ok("time bubble follows the drag");
+      else bad("no time bubble during drag");
+      await page.mouse.up();
+      await sleep(700);
+      const after = await page.evaluate(() => {
+        const v = document.querySelector("video");
+        return { t: v.currentTime, d: v.duration || 0, scrollY: window.scrollY };
+      });
+      if (after.d > 0 && after.t > after.d * 0.55 && after.t < after.d * 0.85) ok(`drag commits the target position (${after.t.toFixed(1)}s of ${after.d.toFixed(0)}s)`);
+      else bad(`drag did not commit (t=${after.t?.toFixed?.(1)}, d=${after.d?.toFixed?.(1)})`);
+      if (Math.abs(after.scrollY) < 4) ok("drag never scrolls the page");
+      else bad(`page scrolled during drag (${after.scrollY}px)`);
+    } else bad("seek-bar testid missing (phase-1 seek bar not rendered)");
+    await ctx.close();
+  }
+
+  // ---- 8. Phase 1: storyboard preview + chapters ---------------------------
+  console.log("== 8. Storyboard preview + chapters ==");
+  {
+    const { ctx, page } = await newPage(browser);
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.5;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(1500);
+
+    // hover the seek bar → bubble appears; storyboard tile if the video has one
+    const bar = page.locator("[data-testid=seek-bar]");
+    if (await bar.count()) {
+      const box = await bar.boundingBox();
+      await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
+      await sleep(400);
+      const bubble = await page.evaluate(() => !!document.querySelector("[data-testid=seek-bubble]"));
+      if (bubble) ok("seek bubble appears on hover");
+      else bad("no seek bubble on hover");
+    }
+
+    // chapters row: dQw4w9WgXcQ has no chapters — assert the row renders only
+    // when chapters exist (negative here is correct behavior: no fake chapter UI)
+    const chapterRow = await page.evaluate(() => !!document.querySelector("[data-testid=chapter-row]"));
+    if (!chapterRow) ok("no fake chapter row on a chapterless video");
+    else bad("chapter row rendered for a video without chapters");
+
+    // debug surface: ?debug=1 populates __ytDebug
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}&debug=1`, { waitUntil: "domcontentloaded" });
+    await sleep(4000);
+    const dbg = await page.evaluate(() => (window).__ytDebug || null);
+    if (dbg && dbg.mode && typeof dbg.formatCount === "number") ok(`__ytDebug populated (mode=${dbg.mode}, formats=${dbg.formatCount}, storyboard=${dbg.hasStoryboard})`);
+    else bad("__ytDebug not populated with ?debug=1");
+    await ctx.close();
+  }
+
+  // ---- 9. Phase 1: c-key captions + keepAwake contract ----------------------
+  console.log("== 9. Captions key + keepAwake ==");
+  {
+    const { ctx, page } = await newPage(browser, { native: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(2000);
+
+    // keepAwake: enable recorded while playing; disable after user pause
+    const calls1 = await page.evaluate(() => window.__bgCalls.filter(c => c[0] === "keepAwake").map(c => c[1]));
+    if (calls1.some(c => c && c.enable === true)) ok("keepAwake(true) recorded while playing");
+    else bad(`no keepAwake(true) while playing (${JSON.stringify(calls1).slice(0, 80)})`);
+
+    // c key toggles the first caption track (dQw4w9WgXcQ has captions)
+    const hasCaps = await page.evaluate(() => !!document.querySelector("video track"));
+    if (hasCaps) {
+      await page.keyboard.press("c");
+      await sleep(600);
+      const showing = await page.evaluate(() => Array.from(document.querySelector("video").textTracks).some(t => t.mode === "showing"));
+      if (showing) ok("`c` key turns captions on");
+      else bad("`c` key did not enable captions");
+      await page.keyboard.press("c");
+      await sleep(400);
+      const off = await page.evaluate(() => Array.from(document.querySelector("video").textTracks).every(t => t.mode !== "showing"));
+      if (off) ok("`c` key toggles captions back off");
+      else bad("`c` key did not toggle captions off");
+    } else {
+      bad("fixture video has no caption tracks — cannot verify `c`");
+    }
+    await ctx.close();
+  }
+
+  // ---- 10. Phase 1: data saver + quality persistence ------------------------
+  console.log("== 10. Data saver + quality prefs ==");
+  {
+    const { ctx, page } = await newPage(browser);
+    await page.goto(`${BASE}/?page=settings`, { waitUntil: "domcontentloaded" });
+    await sleep(2500);
+    const qualityRow = await page.$("[data-testid=quality-row]");
+    if (qualityRow) ok("settings shows the Video quality row");
+    else bad("quality row missing in settings");
+
+    const ds = await page.$("[data-testid=data-saver-toggle]");
+    if (!ds) bad("data saver toggle missing");
+    else {
+      await ds.click();
+      await sleep(600);
+      const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("yt-app-store") || "{}").state?.prefs?.dataSaver);
+      if (stored === true) ok("data saver toggle persists to the store");
+      else bad(`data saver not persisted (${stored})`);
+    }
+    // pick 720p and verify persistence across reload
+    await page.click("[data-quality='720']").catch(() => {});
+    await sleep(500);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await sleep(2500);
+    const q = await page.evaluate(() => JSON.parse(localStorage.getItem("yt-app-store") || "{}").state?.prefs?.defaultQuality);
+    if (Number(q) === 720) ok("quality selection 720p survives reload");
+    else bad(`quality pref lost across reload (${q})`);
+    // reset for other suites
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem("yt-app-store") || "{}");
+      s.state.prefs.dataSaver = false;
+      s.state.prefs.defaultQuality = "auto";
+      localStorage.setItem("yt-app-store", JSON.stringify(s));
+    });
+    await ctx.close();
+  }
+
+  // ---- 11. Phase 1: enable-at-gesture ordering ------------------------------
+  console.log("== 11. Enable-at-gesture (focus ownership) ==");
+  {
+    const { ctx, page } = await newPage(browser, { native: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    // wait for muted autoplay to be running, then simulate the FIRST user
+    // gesture (unmute/play tap) and check enable lands at the gesture.
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(1500);
+    await page.evaluate(() => { window.__bgCalls.length = 0; });
+    // the unmute nudge button is the canonical first gesture
+    await page.click("button:has-text('Tap to unmute')").catch(() => {});
+    await sleep(1200);
+    const seq = await page.evaluate(() => (window.__bgCalls || []).slice(0, 8).map(c => c[0]));
+    const enableIdx = seq.indexOf("enable");
+    if (enableIdx >= 0) ok(`service enable fires at the user gesture (call #${enableIdx + 1}: ${seq.join(",")})`);
+    else if (seq.filter(c => c === "update").length) bad(`only updates, no enable at gesture (${seq.join(",")})`);
+    else bad(`no service calls at the user gesture (${seq.join(",")})`);
+    await ctx.close();
   }
 
   await browser.close();

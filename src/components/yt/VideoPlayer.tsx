@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import Hls from "hls.js";
 import type { YtVideoFull, YtFormat, YtCaption, SbSegment } from "@/lib/yt-api";
 import { absStream, fetchSponsorBlock } from "@/lib/yt-api";
@@ -8,6 +8,7 @@ import { formatTime } from "@/lib/yt-format";
 import { useYt } from "@/lib/yt-store";
 import {
   addControlListener, nativeBackgroundDisable, nativeBackgroundEnable, nativeBackgroundUpdate, isNativeApp,
+  nativeKeepAwake,
   setMediaHandlers, setMediaMetadata, setMediaPlaybackState, setMediaPositionState, clearMediaHandlers,
 } from "@/lib/yt-native";
 import {
@@ -32,7 +33,14 @@ interface Props {
   minimal?: boolean;
 }
 
-export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onProgress, onFallback, minimal = false }: Props) {
+/** Imperative handle the host (WatchPage) can use — chapter chips seek the player. */
+export interface VideoPlayerHandle {
+  seekTo: (seconds: number) => void;
+}
+
+const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer({
+  video, startAt = 0, onEnded, onNext, onProgress, onFallback, minimal = false,
+}, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -76,6 +84,24 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
   // Premium-style preferences: background playback + audio-only mode
   const backgroundPlay = useYt(s => s.prefs.backgroundPlay);
   const audioOnly = useYt(s => s.prefs.audioOnly);
+  // Phase 1: data saver + pinned quality ("Playback and performance" prefs)
+  const dataSaver = useYt(s => !!s.prefs.dataSaver);
+  const defaultQuality = useYt(s => s.prefs.defaultQuality || "auto");
+
+  // seek-drag scrubbing (phase 1): live position while dragging, fat thumb
+  const [scrubbing, setScrubbing] = useState(false);
+  const [scrubTime, setScrubTime] = useState(0);
+  // long-press 2× speed (phase 1, YouTube mobile behavior)
+  const [longPress2x, setLongPress2x] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speedRef = useRef(1);
+  // audio-focus duck bookkeeping (volume to restore on unduck)
+  const preDuckVolRef = useRef<number | null>(null);
+  // stable refs so the `c` keyboard shortcut can toggle captions without
+  // rebinding the global keydown listener on every caption-state change
+  const pickCaptionRef = useRef<(lang: string) => void>(() => {});
+  const captionsRef = useRef<YtCaption[]>([]);
+  const activeCaptionRef = useRef("");
 
   // stable next-video handle for media-session / notification actions
   const onNextRef = useRef(onNext);
@@ -178,6 +204,22 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
         setLevels(lv);
         hlsRef.current?.startLoad(-1);
       });
+      // Phase 1: apply the pinned-quality / data-saver prefs every time a new
+      // source loads (level list may differ per video).
+      const applyQualityPrefs = (h: Hls) => {
+        const target = dataSaver ? 360 : (defaultQuality !== "auto" ? parseInt(defaultQuality, 10) : 0);
+        if (!target) { h.autoLevelCapping = -1; return; }
+        // autoLevelCapping works on level INDEX (ascending quality): pick the
+        // highest index whose height stays within target, and skip 60fps
+        // variants when data saver is on (they cost ~2× bitrate at same height).
+        let cap = -1;
+        data.levels.forEach((l, i) => {
+          const h60 = (l.frameRate || 0) > 50 || /60/.test(l.name || "");
+          if (l.height && l.height <= target && !(dataSaver && h60)) cap = i;
+        });
+        h.autoLevelCapping = cap;
+      };
+      applyQualityPrefs(hls);
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => setCurrentLevel(hlsRef.current?.autoLevelEnabled ? -1 : data.level));
       let netErrors = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
@@ -218,7 +260,7 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       hls?.destroy();
       if (hlsRef.current === hls) hlsRef.current = null;
     };
-  }, [video.id, video.hls, fallbackFormat, audioOnly, audioFormat]);
+  }, [video.id, video.hls, fallbackFormat, audioOnly, audioFormat, dataSaver, defaultQuality]);
 
   // --- Captions tracks (native <track>) ---
   useEffect(() => {
@@ -248,6 +290,19 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
   }, [video.id]);
 
   // --- Big-tap to start (unmute + play) ---
+  // Phase 1: the one place (plus toggleMute) that ENABLES the background
+  // service — at the user gesture, before the first audible frame.
+  const ensureBgEnabled = useCallback(() => {
+    if (!backgroundPlay || bgActiveRef.current) return;
+    bgActiveRef.current = true;
+    nativeBackgroundEnable({
+      title: video.title || "YouTube",
+      artist: video.channel || "",
+      artwork: video.thumb_lg || video.thumb || "",
+      duration: durationRef.current || video.duration || 0,
+    });
+  }, [backgroundPlay, video.title, video.channel, video.thumb_lg, video.thumb, video.duration]);
+
   const userStart = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -256,7 +311,13 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     el.volume = volume;
     el.play().catch(() => {});
     setStarted(true);
-  }, [volume]);
+    // Phase 1 (audio-focus ownership): enable the service AT the gesture —
+    // BEFORE the first audible frame — so the service's GAIN request precedes
+    // the WebView's own focus grab instead of racing it.
+    ensureBgEnabled();
+    // Phase 1 (keepAwake): the screen must not sleep while watching.
+    if (!minimal) nativeKeepAwake(true);
+  }, [volume, minimal, ensureBgEnabled]);
 
   // --- Media events ---
   useEffect(() => {
@@ -356,7 +417,13 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     if (bgActiveRef.current) {
       nativeBackgroundUpdate({ playing, position: positionRef.current, duration: durationRef.current, title: video.title, artist: video.channel });
     }
-  }, [playing, video.title, video.channel]);
+    // Phase 1 (keepAwake): screen stays on while playing in the foreground;
+    // released on pause so a paused player can let the screen sleep.
+    if (!minimal) nativeKeepAwake(playing);
+  }, [playing, video.title, video.channel, minimal]);
+
+  // keepAwake must also be released when the player unmounts paused-mid-video
+  useEffect(() => () => { nativeKeepAwake(false); }, []);
 
   // --- Premium: native foreground service (Android) ---
   // This service is what keeps the app process — and therefore the stream —
@@ -376,7 +443,12 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       }
       return;
     }
-    if (!playing && !started) return; // nothing has started yet — stay idle
+    // Phase 1 (gesture rule): this effect only KEEPS AN ALREADY-ACTIVE service
+    // in sync (metadata / playing state / position). The enable itself fires
+    // at the user gesture (userStart / toggleMute → ensureBgEnabled) or at the
+    // backgrounding re-assert below — muted autoplay alone must not start a
+    // service whose audio-focus GAIN would race the WebView's own request.
+    if (!bgActiveRef.current) return;
     const payload = {
       title: video.title || "YouTube",
       artist: video.channel || "",
@@ -456,10 +528,37 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
 
   // --- Fullscreen ---
   useEffect(() => {
-    const onFs = () => setFullscreen(!!document.fullscreenElement);
+    const onFs = () => {
+      setFullscreen(!!document.fullscreenElement);
+      // landscape-fullscreen exits (user pressed back / rotated to portrait)
+      if (!document.fullscreenElement) document.documentElement.classList.remove("yt-lands");
+    };
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
   }, []);
+
+  // --- Phase 1: landscape → fullscreen (Android) ---
+  // YouTube's rotation behavior: turn the phone sideways and the player fills
+  // the screen; back to portrait and it docks again. `yt-lands` on <html> lets
+  // the shell hide its chrome while landscape-fullscreen.
+  useEffect(() => {
+    if (!isNativeApp() || minimal) return;
+    const onOrient = () => {
+      const type = (screen.orientation?.type as string) || "";
+      const angle = screen.orientation?.angle ?? 0;
+      const landscape = /landscape/.test(type) || angle === 90 || angle === 270
+        || (type === "" && window.innerWidth > window.innerHeight * 1.2);
+      if (landscape && !document.fullscreenElement) {
+        document.documentElement.classList.add("yt-lands");
+        containerRef.current?.requestFullscreen?.().catch(() => {});
+      } else if (!landscape && document.fullscreenElement) {
+        document.documentElement.classList.remove("yt-lands");
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+    screen.orientation?.addEventListener?.("change", onOrient);
+    return () => screen.orientation?.removeEventListener?.("change", onOrient);
+  }, [minimal]);
 
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen();
@@ -533,6 +632,32 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     singleTapTimer.current = setTimeout(singleTapAction, 260);
   }, [zoneAt, seekBy, showRipple, singleTapAction]);
 
+  // --- Phase 1: long-press → 2× speed while held (YouTube mobile) ---
+  // touchstart on the surface without movement for 500ms ramps to 2×; any
+  // touchend/cancel/scroll restores the previous speed. A "2×" chip confirms.
+  const onSurfaceTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!(e.target as HTMLElement).dataset.playerSurface) return;
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      const el = videoRef.current;
+      if (!el || el.paused || minimal) return;
+      speedRef.current = el.playbackRate;
+      el.playbackRate = 2;
+      setLongPress2x(true);
+    }, 500);
+  }, [minimal]);
+  const endLongPress = useCallback(() => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    if (longPress2x) {
+      const el = videoRef.current;
+      if (el) el.playbackRate = speedRef.current || 1;
+      setLongPress2x(false);
+    }
+  }, [longPress2x]);
+  useEffect(() => () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }, []);
+
   useEffect(() => () => {
     if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
     if (rippleTimer.current) clearTimeout(rippleTimer.current);
@@ -545,8 +670,17 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
 
   const toggleMute = useCallback(() => {
     const el = videoRef.current;
-    if (el) { el.muted = !el.muted; setMuted(el.muted); if (!el.muted && el.volume === 0) setVol(0.5); }
-  }, [setVol]);
+    if (el) {
+      el.muted = !el.muted;
+      setMuted(el.muted);
+      if (!el.muted) {
+        // unmute = a user gesture that makes playback audible → the service
+        // (and its audio-focus request) must exist from this moment
+        ensureBgEnabled();
+        if (el.volume === 0) setVol(0.5);
+      }
+    }
+  }, [setVol, ensureBgEnabled]);
 
   // --- Keyboard ---
   useEffect(() => {
@@ -561,6 +695,13 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
         case "l": seekBy(10); break;
         case "f": e.preventDefault(); toggleFullscreen(); break;
         case "m": toggleMute(); break;
+        // Phase 1: the captions quick-toggle promised by the aria-label — `c`
+        // actually toggles subtitles now (refs keep the closure fresh).
+        case "c": {
+          const caps = captionsRef.current;
+          pickCaptionRef.current(activeCaptionRef.current ? "" : (caps[0]?.lang || ""));
+          break;
+        }
         case "ArrowUp": e.preventDefault(); setVol(Math.min(1, volume + 0.1)); break;
         case "ArrowDown": e.preventDefault(); setVol(Math.max(0, volume - 0.1)); break;
         default:
@@ -592,26 +733,93 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       else if (e.action === "pause") { userPausedRef.current = true; el?.pause(); }
       else if (e.action === "next") onNextRef.current?.();
       else if (e.action === "stop") { userPausedRef.current = true; el?.pause(); }
+      // Phase 1 (audio focus): the service's focus listener routes duck/gain
+      // as control events — the player reacts by lowering/restoring volume.
+      // Idempotent: a duplicate duck must not overwrite the remembered volume.
+      else if (e.action === "duck") {
+        if (el && preDuckVolRef.current == null) { preDuckVolRef.current = el.volume; el.volume = 0.2; }
+      }
+      else if (e.action === "unduck") {
+        if (el && preDuckVolRef.current != null) { el.volume = preDuckVolRef.current; preDuckVolRef.current = null; }
+      }
       else if (e.action === "seek" && e.seekTo != null && el) { el.currentTime = Math.max(0, Math.min((el.duration || 0) - 0.2, e.seekTo)); poke(); }
     });
     return () => { off(); clearMediaHandlers(); };
   }, [started, userStart, seekBy, poke]);
 
-  // --- Seek bar ---
-  const pct = duration > 0 ? (current / duration) * 100 : 0;
+  // --- Seek bar (phase 1: pointer-drag scrubbing) ---
+  // pointerdown → capture → live position updates + fat thumb + time bubble
+  // (with storyboard preview when the video has one); pointerup commits.
+  // touch-action:none on the band so a drag never scrolls the page; the band
+  // is 44px tall so mobile fingers can actually grab it.
+  const displayTime = scrubbing ? scrubTime : current;
+  const pct = duration > 0 ? (displayTime / duration) * 100 : 0;
   const bufPct = duration > 0 ? Math.min(100, (buffered / duration) * 100) : 0;
+
+  // storyboard sprite preview tile for the hovered/dragged position
+  const sbPreview = useMemo(() => {
+    const sb = video.storyboard;
+    if (!sb || hoverTime == null || !duration) return null;
+    const idx = Math.max(0, Math.floor(hoverTime / sb.interval));
+    const perSheet = sb.columns * sb.rows;
+    const sheet = Math.floor(idx / perSheet);
+    const inSheet = idx % perSheet;
+    const col = inSheet % sb.columns;
+    const row = Math.floor(inSheet / sb.columns);
+    const pattern = sb.templateUrlPattern || sb.template_url || "";
+    if (!pattern.includes("$M$")) return null;
+    return { url: pattern.replace("$M$", String(sheet)), col, row, cols: sb.columns, rows: sb.rows };
+  }, [video.storyboard, hoverTime, duration]);
+
+  // current chapter (title + start) for the chapters row above the seek bar
+  const activeChapter = useMemo(() => {
+    const ch = video.chapters || [];
+    if (ch.length < 2) return null;
+    let cur = ch[0];
+    for (const c of ch) if (displayTime >= c.start) cur = c;
+    return cur;
+  }, [video.chapters, displayTime]);
+
+  const scrubAt = useCallback((clientX: number, bar: HTMLElement) => {
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const t = ratio * (duration || 0);
+    setScrubTime(t);
+    setHoverTime(t);
+  }, [duration]);
+
+  const onSeekPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setScrubbing(true);
+    scrubAt(e.clientX, e.currentTarget);
+    poke();
+  }, [scrubAt, poke]);
+
+  const onSeekPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (scrubbing) scrubAt(e.clientX, e.currentTarget);
+    else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      setHoverTime(ratio * (duration || 0));
+    }
+  }, [scrubbing, scrubAt, duration]);
+
+  const commitScrub = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!scrubbing) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const el = videoRef.current;
+    if (el && duration) el.currentTime = ratio * duration;
+    setScrubbing(false);
+    poke();
+  }, [scrubbing, duration, poke]);
 
   const seekTo = (clientX: number, bar: HTMLElement) => {
     const rect = bar.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const el = videoRef.current;
     if (el && duration) el.currentTime = ratio * duration;
-  };
-
-  const onSeekHover = (clientX: number, bar: HTMLElement) => {
-    const rect = bar.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    setHoverTime(ratio * duration);
   };
 
   // --- Quality switch ---
@@ -625,11 +833,12 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
   const pickSpeed = (s: number) => {
     const el = videoRef.current;
     if (el) el.playbackRate = s;
+    speedRef.current = s;
     setSpeed(s);
     setMenu(null);
   };
 
-  const pickCaption = (lang: string) => {
+  const pickCaption = useCallback((lang: string) => {
     const el = videoRef.current;
     if (el) {
       Array.from(el.textTracks).forEach(t => t.mode = "disabled");
@@ -640,7 +849,42 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
     }
     setActiveCaption(lang);
     setMenu(null);
-  };
+  }, []);
+  // keep the keyboard shortcut's refs pointing at the latest state
+  pickCaptionRef.current = pickCaption;
+  captionsRef.current = captions;
+  activeCaptionRef.current = activeCaption;
+
+  // --- Phase 1: debug surface (?debug=1) ---
+  // window.__ytDebug on watch: source mode, format ladder, storyboard presence,
+  // deciphered count (phase 5 adds that field). For humans + the e2e suite.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get("debug") !== "1") return;
+      (window as unknown as { __ytDebug?: Record<string, unknown> }).__ytDebug = {
+        videoId: video.id,
+        mode: audioOnly && audioFormat ? "audio" : (video.hls ? "hls" : (fallbackFormat ? "progressive" : "none")),
+        formatCount: video.formats?.length || 0,
+        formatsDeciphered: 0, // phase 5 fills this in
+        hasStoryboard: !!video.storyboard,
+        chapters: video.chapters?.length || 0,
+        levels: levels.map(l => l.label),
+        dataSaver, defaultQuality,
+      };
+    } catch { /* not in a browser */ }
+  }, [video, audioOnly, audioFormat, fallbackFormat, levels, dataSaver, defaultQuality]);
+
+  // --- Phase 1: imperative handle — chapter chips / description links seek ---
+  useImperativeHandle(ref, () => ({
+    seekTo: (seconds: number) => {
+      const el = videoRef.current;
+      if (el && isFinite(seconds)) {
+        el.currentTime = Math.max(0, Math.min((el.duration || duration || 0) - 0.2, seconds));
+        poke();
+      }
+    },
+  }), [duration, poke]);
 
   const VolIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
   const playRatio = duration ? current / duration : 0;
@@ -652,7 +896,10 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       onMouseMove={poke}
       onMouseLeave={() => { if (playing && !menu && !minimal) setControlsVisible(false); }}
       onClick={onSurfaceTap}
-      onTouchEnd={onSurfaceTouch}
+      onTouchEnd={(e) => { endLongPress(); onSurfaceTouch(e); }}
+      onTouchStart={onSurfaceTouchStart}
+      onTouchMove={endLongPress}
+      onTouchCancel={endLongPress}
       onDoubleClick={(e) => { if (!minimal && (e.target as HTMLElement).dataset.playerSurface) toggleFullscreen(); }}
     >
       {/* error / no stream */}
@@ -736,8 +983,9 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
         </div>
       )}
 
-      {/* unmute nudge (autoplay started muted) */}
-      {!error && muted && playing && started !== false && (
+      {/* unmute nudge (autoplay started muted) — shows whenever playback is
+          running muted; any gesture path (big-tap userStart) clears it */}
+      {!error && muted && playing && (
         <button
           onClick={() => toggleMute()}
           className="absolute top-3 left-3 z-20 flex items-center gap-2 px-3 h-9 rounded-lg bg-black/80 text-white text-[13px] hover:bg-black"
@@ -750,6 +998,13 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       {audioOnly && audioFormat && !error && (
         <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-black/80 text-white text-[12px] font-medium pointer-events-none">
           <Headphones className="w-4 h-4" /> Audio mode
+        </div>
+      )}
+
+      {/* long-press 2× chip (phase 1) */}
+      {longPress2x && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 px-3 h-8 rounded-full bg-black/85 text-white text-[13px] font-medium flex items-center gap-1.5 pointer-events-none" data-testid="longpress-2x">
+          <Gauge className="w-4 h-4" /> 2× speed
         </div>
       )}
 
@@ -813,24 +1068,48 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       <div
         className={`yt-controls absolute left-0 right-0 bottom-0 z-20 ${minimal ? "pt-6 pb-2 px-3" : "yt-scrim-bottom pt-10 pb-1 px-2 sm:px-4"} ${minimal ? "" : (controlsVisible || !playing) ? "" : "yt-controls-hidden"}`}
       >
-        {/* seek bar */}
+        {/* chapters row (phase 1): current chapter title + timestamp above the
+            seek bar while the controls are visible — YouTube's pattern */}
+        {!minimal && activeChapter && (controlsVisible || !playing) && !scrubbing && (
+          <div className="flex items-baseline gap-2 px-1 pb-0.5 text-white" data-testid="chapter-row">
+            <span className="text-[13px] font-medium truncate max-w-[62%]">{activeChapter.title}</span>
+            <span className="text-[12px] text-white/60 tabular-nums">{formatTime(activeChapter.start)}</span>
+          </div>
+        )}
+
+        {/* seek bar — pointer-drag scrubbing (phase 1) */}
         <div
           ref={seekHoverRef}
-          className="relative h-[18px] flex items-center cursor-pointer group/seek mb-[2px]"
-          onMouseMove={(e) => onSeekHover(e.clientX, e.currentTarget)}
-          onMouseLeave={() => setHoverTime(null)}
-          onClick={(e) => { seekTo(e.clientX, e.currentTarget); poke(); }}
+          className="relative flex items-center cursor-pointer group/seek py-[13px] -my-[6px]"
+          style={{ touchAction: "none" }}
+          data-testid="seek-bar"
+          onPointerDown={onSeekPointerDown}
+          onPointerMove={onSeekPointerMove}
+          onPointerUp={commitScrub}
+          onPointerCancel={commitScrub}
+          onMouseLeave={() => { if (!scrubbing) setHoverTime(null); }}
         >
-          {/* hover time bubble */}
+          {/* hover/drag bubble: storyboard tile when available, time otherwise */}
           {hoverTime !== null && (
             <div
-              className="absolute -top-8 px-1.5 py-0.5 rounded bg-black/90 text-white text-[12px] pointer-events-none"
-              style={{ left: `calc(${duration ? (hoverTime / duration) * 100 : 0}% - 20px)` }}
+              className="absolute z-30 pointer-events-none flex flex-col items-center gap-1"
+              style={{ left: `calc(${duration ? (hoverTime / duration) * 100 : 0}% - 40px)`, top: scrubbing ? -64 : -58 }}
+              data-testid="seek-bubble"
             >
-              {formatTime(hoverTime)}
+              {sbPreview ? (
+                <div
+                  className="w-[80px] h-[45px] rounded-md border border-white/30 bg-black shadow-lg overflow-hidden"
+                  style={{
+                    backgroundImage: `url(${sbPreview.url})`,
+                    backgroundSize: `${sbPreview.cols * 100}% ${sbPreview.rows * 100}%`,
+                    backgroundPosition: `${sbPreview.cols > 1 ? (sbPreview.col / (sbPreview.cols - 1)) * 100 : 0}% ${sbPreview.rows > 1 ? (sbPreview.row / (sbPreview.rows - 1)) * 100 : 0}%`,
+                  }}
+                />
+              ) : null}
+              <div className="px-1.5 py-0.5 rounded bg-black/90 text-white text-[12px] tabular-nums">{formatTime(hoverTime)}</div>
             </div>
           )}
-          <div className="relative w-full h-[3px] group-hover/seek:h-[5px] transition-all rounded-full bg-white/25">
+          <div className={`relative w-full transition-all rounded-full bg-white/25 ${scrubbing ? "h-[5px]" : "h-[3px] group-hover/seek:h-[5px]"}`}>
             {/* buffered */}
             <div className="absolute left-0 top-0 h-full bg-white/40 rounded-full" style={{ width: `${bufPct}%` }} />
             {/* played */}
@@ -843,8 +1122,12 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
             {(video.chapters || []).map((c, i) => (
               <div key={`c${i}`} className="absolute top-0 h-full w-[2px] bg-white/60" style={{ left: `${(c.start / duration) * 100}%` }} title={c.title} />
             ))}
-            {/* thumb */}
-            <div className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[13px] h-[13px] rounded-full bg-[#ff0000] yt-progress-glow ${controlsVisible ? "scale-100" : "scale-0"} transition-transform`} style={{ left: `${pct}%` }} />
+            {/* thumb — grows during a drag, YouTube-style */}
+            <div
+              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-[#ff0000] yt-progress-glow transition-transform ${scrubbing ? "w-[19px] h-[19px]" : "w-[13px] h-[13px]"} ${controlsVisible || scrubbing ? "scale-100" : "scale-0"}`}
+              style={{ left: `${pct}%` }}
+              data-testid="seek-thumb"
+            />
           </div>
         </div>
 
@@ -873,8 +1156,8 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
             />
           </div>
 
-          <span className="text-[13px] tabular-nums ml-1 text-white/95">
-            {formatTime(current)} / {formatTime(duration)}
+          <span className="text-[13px] tabular-nums ml-1 text-white/95" data-testid="time-display">
+            {formatTime(displayTime)} / {formatTime(duration)}
           </span>
 
           <div className="flex-1" />
@@ -1031,4 +1314,6 @@ export default function VideoPlayer({ video, startAt = 0, onEnded, onNext, onPro
       </div>
     </div>
   );
-}
+});
+
+export default VideoPlayer;
