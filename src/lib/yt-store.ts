@@ -60,12 +60,21 @@ interface YtStore {
   toggleDislike: (id: string) => void;
   isDisliked: (id: string) => boolean;
 
+  // Phase 3: comment votes (local only — YouTube keeps real votes server-side)
+  commentVotes: Record<string, 1 | -1>;
+  voteComment: (commentId: string, vote: 1 | -1) => void;
+
+  // Phase 3: not-interested memory — the 3-dot menu's "hide" actions persist
+  hiddenVideos: string[];
+  hiddenChannels: string[];
+  hideVideo: (id: string) => void;
+  hideChannel: (id: string) => void;
+
   // Preferences
   prefs: {
     sponsorblock: boolean;
     autoplay: boolean;
     defaultQuality: "auto" | number;
-    cinemaMode: boolean;
     /** YouTube Appearance setting: dark / light / follow the device. */
     theme: "dark" | "light" | "system";
     /** Premium-style: keep playing (audio + video) when the app is backgrounded
@@ -150,13 +159,28 @@ export const useYt = create<YtStore>()(
         if (disliked.includes(id)) set({ disliked: disliked.filter(d => d !== id) });
         else set({ disliked: [id, ...disliked], liked: liked.filter(l => l.id !== id) });
       },
+
+      commentVotes: {},
+      voteComment: (commentId, vote) => {
+        const cur = get().commentVotes[commentId];
+        set(s => {
+          const next = { ...s.commentVotes };
+          if (cur === vote) delete next[commentId];
+          else next[commentId] = vote;
+          return { commentVotes: next };
+        });
+      },
+
+      hiddenVideos: [],
+      hiddenChannels: [],
+      hideVideo: (id) => set(s => ({ hiddenVideos: [...s.hiddenVideos, id] })),
+      hideChannel: (id) => set(s => ({ hiddenChannels: [...s.hiddenChannels, id] })),
       isDisliked: (id) => get().disliked.includes(id),
 
       prefs: {
         sponsorblock: true,
         autoplay: true,
         defaultQuality: "auto",
-        cinemaMode: false,
         theme: "dark",
         backgroundPlay: true,
         audioOnly: false,

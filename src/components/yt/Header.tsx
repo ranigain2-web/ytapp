@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Menu, Search, Mic, Video, Bell, Cast, UserRound, Clock, Moon, Sun, Monitor } from "lucide-react";
+import { Menu, Search, Video, UserRound, Clock, Moon, Sun, Monitor } from "lucide-react";
 import { useRouter, type Route } from "@/lib/yt-router";
 import SearchOverlay, { addRecentSearch, getRecentSearches } from "./SearchOverlay";
 import { fetchSuggestions } from "@/lib/yt-api";
@@ -228,9 +228,7 @@ export default function Header({ onToggleSidebar, onSearch }: {
             >
               <Search className="w-5 h-5 text-[var(--yt-text)]" />
             </button>
-            <div className="hidden md:flex w-10 h-10 ml-2 rounded-full bg-[var(--yt-bg-elev2)] items-center justify-center hover:bg-[var(--yt-hover)] cursor-pointer shrink-0" title="Search with your voice">
-              <Mic className="w-5 h-5 text-[var(--yt-text)]" />
-            </div>
+            {/* PHASE3-REMOVED: mic (voice search is a project, a dead mic is a lie) */}
           </div>
         </form>
 
@@ -252,12 +250,8 @@ export default function Header({ onToggleSidebar, onSearch }: {
               ? <Sun className="w-6 h-6 text-[var(--yt-text)]" />
               : <Moon className="w-6 h-6 text-[var(--yt-text)]" />}
           </button>
-          <button className="hidden md:flex w-10 h-10 rounded-full items-center justify-center hover:bg-[var(--yt-bg-elev2)]" aria-label="Cast">
-            <Cast className="w-6 h-6 text-[var(--yt-text)]" />
-          </button>
-          <button className="hidden md:flex w-10 h-10 rounded-full items-center justify-center hover:bg-[var(--yt-bg-elev2)] relative" aria-label="Notifications">
-            <Bell className="w-6 h-6 text-[var(--yt-text)]" />
-          </button>
+          {/* PHASE3-REMOVED: Cast (Chromecast out of scope) and Bell (returns
+              in phase 4 WITH the local notifications drawer — wire-or-remove) */}
           <button
             onClick={() => navigate({ name: "settings" })}
             className="w-8 h-8 rounded-full bg-[var(--yt-blue)] flex items-center justify-center shrink-0 ml-1"

@@ -5,7 +5,7 @@
 // Opens with ONE tap from the header search icon; input auto-focuses.
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ArrowLeft, Search, Mic, Clock, X } from "lucide-react";
+import { ArrowLeft, Search, Clock, X } from "lucide-react";
 import { useRouter } from "@/lib/yt-router";
 import { fetchSuggestions } from "@/lib/yt-api";
 
@@ -100,6 +100,9 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
     return () => clearTimeout(t);
   }, [q]);
 
+  const [active, setActive] = useState(-1); // keyboard nav: -1 = the raw query
+  useEffect(() => { setActive(-1); }, [q]);
+
   const submit = useCallback((query: string) => {
     const clean = query.trim();
     if (!clean) return;
@@ -108,16 +111,27 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
     onClose();
   }, [onSearch, onClose]);
 
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") submit(q);
-    else if (e.key === "Escape") onClose();
-  };
-
   if (!open) return null;
 
   const list = q.trim()
     ? [{ text: q, exact: true }, ...suggestions.map(s => ({ text: s, exact: false }))]
     : recents.map(s => ({ text: s, recent: true }));
+  void list;
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive(a => {
+        const n = list.length;
+        if (!n) return -1;
+        return e.key === "ArrowDown" ? (a + 1) % n : (a <= 0 ? n - 1 : a - 1);
+      });
+    } else if (e.key === "Enter") {
+      submit(active >= 0 && list[active] ? list[active].text : q);
+    } else if (e.key === "Escape") {
+      onClose();
+    }
+  };
 
   return (
     <div
@@ -142,6 +156,10 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
             onKeyDown={onKey}
             placeholder="Search YouTube"
             aria-label="Search YouTube"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="yt-suggestion-listbox"
+            aria-activedescendant={active >= 0 ? `yt-sugg-${active}` : undefined}
             autoComplete="off"
             autoCorrect="off"
             enterKeyHint="search"
@@ -157,16 +175,13 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
             </button>
           )}
         </div>
-        <button
-          aria-label="Search with your voice"
-          className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-[var(--yt-bg-elev2)] shrink-0"
-        >
-          <Mic className="w-5 h-5 text-[var(--yt-text)]" />
-        </button>
+        {/* PHASE3-REMOVED: mic — voice search is a project, a dead mic is a lie */}
       </div>
 
       {/* suggestions / recents */}
-      <div className="overflow-y-auto overscroll-contain" style={{ height: "calc(100% - var(--yt-header-h))" }} data-testid="search-suggestion-list">
+      <div className="overflow-y-auto overscroll-contain" style={{ height: "calc(100% - var(--yt-header-h))" }} data-testid="search-suggestion-list"
+        role="listbox"
+        id="yt-suggestion-listbox">
         {!q.trim() && recents.length === 0 && (
           <div className="pt-16 text-center text-[13px] text-[#717171] px-8">
             No recent searches yet — start typing to see suggestions.
@@ -186,8 +201,11 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
         {list.map((item, i) => (
           <button
             key={`${item.text}-${i}`}
+            role="option"
             onClick={() => submit(item.text)}
-            className="w-full flex items-center gap-4 px-4 py-3 hover:bg-[var(--yt-elev2-60)] active:bg-[var(--yt-bg-elev2)] text-left"
+            id={`yt-sugg-${i}`}
+            aria-selected={active === i}
+            className={`w-full flex items-center gap-4 px-4 py-3 hover:bg-[var(--yt-elev2-60)] active:bg-[var(--yt-bg-elev2)] text-left ${active === i ? "bg-[var(--yt-elev2-60)]" : ""}`}
             data-testid={item.exact ? "suggestion-exact" : "suggestion-item"}
           >
             {("recent" in item && item.recent)

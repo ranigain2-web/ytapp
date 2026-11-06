@@ -21,6 +21,7 @@ import WhatsNew from "./WhatsNew";
 // surface's gated ones while the Shorts route owns the audio.
 import VideoSurface from "./VideoSurface";
 import MiniPlayer from "./MiniPlayer";
+import { ToastHost } from "@/lib/yt-toast";
 
 export default function AppShell() {
   const { route, navigate } = useRouter();
@@ -147,6 +148,9 @@ export default function AppShell() {
 
       {/* phase-2 miniplayer — the surface's second mount point */}
       <MiniPlayer />
+
+      {/* phase-3 mutation confirmations */}
+      <ToastHost />
 
       {/* once-per-version feature tour */}
       <WhatsNew />

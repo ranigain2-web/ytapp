@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchComments, fetchCommentsMore, type YtComment } from "@/lib/yt-api";
 import { formatCount } from "@/lib/yt-format";
+import { useYt } from "@/lib/yt-store";
 
 function CommentAvatar({ name }: { name: string }) {
   const colors = ["#3ea6ff", "#ff4e45", "#ffb13b", "#2ba640", "#9c4dcc", "#e91e63", "#00bcd4"];
@@ -23,6 +24,11 @@ export default function Comments({ videoId }: { videoId: string }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const seenRef = useRef<Set<string>>(new Set());
   const loading = comments === null && error === null;
+  // phase 3: comment votes are local-only (YouTube keeps real votes with the
+  // account that cast them — ours can't sync, so they don't pretend to)
+  const commentVotes = useYt(s => s.commentVotes);
+  const voteComment = useYt(s => s.voteComment);
+  const commentKey = (c: YtComment) => `${videoId}:${c.author}:${c.text.slice(0, 60)}`;
 
   useEffect(() => {
     let alive = true;
@@ -79,17 +85,11 @@ export default function Comments({ videoId }: { videoId: string }) {
         </button>
       </div>
 
-      {/* comment composer (visual only — anonymous) */}
-      <div className="flex gap-4 mb-8">
-        <span className="w-10 h-10 rounded-full bg-[var(--yt-blue)]/20 text-[var(--yt-blue)] font-bold flex items-center justify-center shrink-0">Y</span>
-        <div className="flex-1 border-b border-[var(--yt-border)] pb-2">
-          <input
-            placeholder="Add a comment..."
-            className="w-full bg-transparent text-[14px] outline-none placeholder:text-[#888]"
-            aria-label="Add a comment"
-          />
-        </div>
-      </div>
+      {/* phase 3: the fake composer is gone — typing into a box that can
+          never post was a lie. Honest note instead. */}
+      <p className="mb-8 text-[13px] leading-[18px] text-[var(--yt-text-2)] bg-[var(--yt-elev2-70)] rounded-xl px-3 py-2.5" data-testid="comments-anonymous-note">
+        Commenting needs a YouTube account — unavailable in ytapp. Reading, sorting and paging work; votes stay on this device.
+      </p>
 
       {loading ? (
         <div className="space-y-6">
@@ -125,19 +125,35 @@ export default function Comments({ videoId }: { videoId: string }) {
                 </div>
                 <p className="mt-1 text-[14px] leading-[21px] text-[var(--yt-text-2)] whitespace-pre-wrap break-words">{c.text}</p>
                 <div className="flex items-center gap-4 mt-2 text-[var(--yt-text-2)]">
-                  <button className="flex items-center gap-1.5 hover:text-[var(--yt-text)]" aria-label="Like comment">
-                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 10v11M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" /></svg>
-                    {c.likes > 0 && formatCount(c.likes)}
-                  </button>
-                  <button className="hover:text-[var(--yt-text)]" aria-label="Dislike comment">
-                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 14V3M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" /></svg>
-                  </button>
-                  <button className="text-[12px] font-medium hover:text-[var(--yt-text)]">Reply</button>
-                  {c.replies > 0 && (
-                    <button className="text-[13px] font-medium text-[var(--yt-blue)] hover:text-[#6bc1ff]">
-                      {c.replies} {c.replies === 1 ? "reply" : "replies"}
-                    </button>
-                  )}
+                  {(() => {
+                    const key = commentKey(c);
+                    const vote = commentVotes[key];
+                    return (
+                      <>
+                        <button
+                          onClick={() => voteComment(key, 1)}
+                          className={`flex items-center gap-1.5 hover:text-[var(--yt-text)] ${vote === 1 ? "text-[var(--yt-blue)]" : ""}`}
+                          aria-label="Like comment"
+                          aria-pressed={vote === 1}
+                          data-testid="comment-like"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-4 h-4" fill={vote === 1 ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5"><path d="M7 10v11M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" /></svg>
+                          {c.likes > 0 && formatCount(c.likes + (vote === 1 ? 1 : 0))}
+                        </button>
+                        <button
+                          onClick={() => voteComment(key, -1)}
+                          className={`hover:text-[var(--yt-text)] ${vote === -1 ? "text-[var(--yt-blue)]" : ""}`}
+                          aria-label="Dislike comment"
+                          aria-pressed={vote === -1}
+                          data-testid="comment-dislike"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-4 h-4" fill={vote === -1 ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5"><path d="M17 14V3M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" /></svg>
+                        </button>
+                      </>
+                    );
+                  })()}
+                  {/* PHASE3-REMOVED: Reply (posting needs an account) and the
+                      replies count (thread READING is a phase-4 surface) */}
                 </div>
               </div>
             </article>

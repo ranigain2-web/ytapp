@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { APP_VERSION } from "@/lib/version";
-import { Headphones, MoonStar, PlayCircle, RotateCcw, SkipForward, X, CheckCircle2, Volume2, Gauge, Subtitles, Smartphone, Image, PictureInPicture2 } from "lucide-react";
+import { Headphones, PlayCircle, SkipForward, X, CheckCircle2, Volume2, Gauge, MoreVertical, PictureInPicture2 } from "lucide-react";
 
 const SEEN_KEY = "yt_whatsnew_seen";
 
@@ -32,14 +32,14 @@ export default function WhatsNew() {
   if (!open) return null;
 
   const features: { icon: React.ReactNode; title: string; where: string }[] = [
-    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Miniplayer everywhere", where: "Scroll past the video — or tap anywhere away from the watch page — and playback continues in a corner miniplayer: same position, same stream, nothing reloads. Drag it down to dismiss, tap it to come back." },
-    { icon: <Smartphone className="w-5 h-5" />, title: "Picture-in-picture (Android)", where: "Press Home while a video plays and it shrinks into a floating window. The player's new PiP button does it on demand. Settings → Playback can turn the Home behavior off." },
-    { icon: <SkipForward className="w-5 h-5" />, title: "Autoplay countdown", where: "When a video ends, an Up-next card counts down 5 seconds — Cancel stops it, exactly like YouTube. Works for embed videos too." },
-    { icon: <RotateCcw className="w-5 h-5" />, title: "Prev button on the lock screen", where: "The notification is now Prev / Pause / Next (+ Close expanded): Prev goes back through what you played, or restarts the current video." },
-    { icon: <Volume2 className="w-5 h-5" />, title: "Smarter interruptions", where: "Incoming call or notification? Playback ducks or pauses and comes back exactly where it was. Unplug your headphones and it pauses instantly." },
-    { icon: <Gauge className="w-5 h-5" />, title: "Video quality + Data saver (fixed)", where: "Pinned quality and Data saver now actually cap the stream — a silent bug had killed both. Settings → Playback." },
-    { icon: <PlayCircle className="w-5 h-5" />, title: "Background play", where: "Minimize or screen-off keeps playing with lock-screen controls. On by default: Settings → Playback." },
-    { icon: <Headphones className="w-5 h-5" />, title: "Audio mode (data saver)", where: "Sound-only streaming with the thumbnail on screen — the Audio button under any playing video." },
+    { icon: <CheckCircle2 className="w-5 h-5" />, title: "Every action confirms itself", where: "Share, Save, Subscribe, clearing history, playlist changes — a toast appears at the bottom-left telling you exactly what happened. No more silent buttons." },
+    { icon: <MoreVertical className="w-5 h-5" />, title: "3-dot menu on every video card", where: "Save to Watch later, Share, Not interested and Don't recommend channel — right on the card. Hidden videos stay hidden (it remembers, even after a restart)." },
+    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Miniplayer + Picture-in-picture", where: "Scroll past the video or navigate away — playback continues in the corner miniplayer. On Android, press Home while playing for the floating window." },
+    { icon: <SkipForward className="w-5 h-5" />, title: "Autoplay countdown + Prev button", where: "When a video ends, an Up-next card counts down 5 seconds (Cancel stops it). The lock-screen notification gained Prev / Pause / Next." },
+    { icon: <Volume2 className="w-5 h-5" />, title: "Honest comments", where: "The fake comment box is gone — replaced by a straight note that commenting needs a YouTube account. Reading, sorting, paging and local likes/dislikes all work." },
+    { icon: <Gauge className="w-5 h-5" />, title: "Search keyboard navigation", where: "Arrow keys move through search suggestions, Enter picks the highlighted one, Esc closes. Desktop and the mobile overlay both support it." },
+    { icon: <Headphones className="w-5 h-5" />, title: "Audio mode + background play", where: "Sound-only streaming with the thumbnail on screen, and playback that keeps going when you switch apps or turn the screen off." },
+    { icon: <PlayCircle className="w-5 h-5" />, title: "Quality + Data saver (fixed)", where: "Pinned quality and Data saver now actually cap the stream — a silent bug had killed both. Settings → Playback." },
   ];
 
   return (

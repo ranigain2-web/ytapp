@@ -878,3 +878,49 @@ commit.
   resumeAfterLoad on the audio path (suspect the stale-readyState immediate
   apply); then `git tag v1.4.0` + release; phase 3 (interaction truth
   serum) per the amended plan.
+
+## Session 16 (2026-11-06) — v1.4.0 tagged + Phase 3 core (truth serum)
+
+- **CI was red on 2a580e1**: the audio-mode swap failure was NOT a flake —
+  it reproduced in CI and locally. Root cause (probed with an event-level
+  instrument): two races in `resumeAfterLoad`. (1) `keepPos`/`wasPlaying`
+  were read from the element AFTER the effect-cleanup's `hls.destroy()` had
+  reset it (readyState 0, paused) — every audio-mode swap lost position and
+  play. Now captured from `positionRef` (continuously tracked) + the
+  render-time `playing` state. (2) An immediate apply/play races the media
+  load algorithm (which pauses the element + rejects pending play promises)
+  — apply now ALWAYS defers through a `loadedmetadata` listener. Same fix
+  applied to the Shorts VideoPlayer. **e2e 76/76 → v1.4.0 tagged on 5ebc735
+  (CI green on that exact commit).** The CI-only up-next check now WAITS for
+  the takeover instead of a fixed sleep and accepts the honest
+  bot-gated "video unavailable" state.
+- **Phase 3 core built** (v1.5.0):
+  - `src/lib/yt-toast.tsx` — `ytToast()` + ToastHost (bottom-left, 3 max,
+    2.6s). Wired: WatchPage share/clip(with-timestamp)/save/subscribe,
+    Library clear-history + row-remove + playlist create/delete, Settings
+    clear-history, VideoCard save-later.
+  - **Dead buttons removed** (wire-or-remove): header mic + cast + bell
+    (bell returns in phase 4 WITH the notifications drawer), search-overlay
+    mic, sidebar Sign in + "Your videos" (duplicate of Liked). Dead
+    `cinemaMode` pref deleted from the store.
+  - **Comments truth**: fake composer + dead Reply/replies buttons removed →
+    honest "Commenting needs a YouTube account" note; like/dislike are now
+    local-store-backed with real pressed state.
+  - **VideoCard 3-dot menu**: Save later / Share / Not interested / Don't
+    recommend channel; `hiddenVideos`/`hiddenChannels` slices persist via the
+    store (cards render null everywhere). Both card variants restructured to
+    fix nested interactive HTML (compact root `<button>` → div[role=button];
+    grid outer `<a>` → div + real inner link, middle-click kept).
+  - **Search keyboard nav**: ↑/↓ (wrapping, -1 = raw query), Enter selects
+    the highlighted suggestion, Esc closes; role=combobox/listbox/option +
+    aria-activedescendant.
+  - e2e section 18 (13 checks): toasts, 3-dot, not-interested persist across
+    reload, comment votes, keyboard nav, dead-button absence. **89/89 green.**
+- **Deferred (documented, phase-3 remainder)**: search filters sheet (needs
+  REA-verified sp= proto strings — do NOT guess), save-to-playlist sheet,
+  Shorts more-sheet + subscribe identity, haptics plugin, pull-to-refresh,
+  focus traps, watched progress bar on thumbs, skeleton column fix.
+- Version 1.5.0; tag after CI green.
+- Next session: phase 3 remainder (filters sheet via REA capture first),
+  then phase 4 (subs feed, channel tabs, comments threads, Shorts truth,
+  notifications drawer).

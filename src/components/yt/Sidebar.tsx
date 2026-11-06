@@ -4,7 +4,7 @@ import { useRouter, type Route } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
 import {
   Home, Play, Clock, ThumbsUp, BookmarkPlus, Flame, Music2, Gamepad2, Newspaper,
-  Trophy, GraduationCap, Podcast, UtensilsCrossed, Film, Settings, UserRound, ListVideo, Radio, Zap,
+  Trophy, GraduationCap, Podcast, UtensilsCrossed, Film, Settings, ListVideo, Radio, Zap,
 } from "lucide-react";
 
 interface NavItem {
@@ -36,7 +36,6 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
   const you: NavItem[] = [
     { label: "History", icon: Clock, route: { name: "history" } },
     { label: "Playlists", icon: ListVideo, route: { name: "playlists" } },
-    { label: "Your videos", icon: Video_Icon, route: { name: "liked" } },
     { label: "Watch later", icon: BookmarkPlus, route: { name: "later" } },
     { label: "Liked videos", icon: ThumbsUp, route: { name: "liked" } },
   ];
@@ -110,24 +109,12 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
       {renderSection("Explore", explore)}
       {renderSection(undefined, settings)}
 
-      <div className="px-6 pt-6 pb-4 border-b border-[var(--yt-border)]">
-        <p className="text-[13px] leading-5 text-[var(--yt-text-2)] mb-3">
-          Sign in to like videos, comment, and subscribe.
-        </p>
-        <button className="flex items-center gap-2 h-9 px-4 rounded-full border border-[var(--yt-blue)] text-[14px] text-[var(--yt-blue)] hover:bg-[var(--yt-blue)]/10">
-          <UserRound className="w-5 h-5" /> Sign in
-        </button>
-      </div>
+      {/* PHASE3-REMOVED: Sign in — no account system; a dead button is a lie */}
       <p className="px-6 pt-4 text-[13px] leading-5 text-[#717171]">
         YouTube client · data fetched on-device
       </p>
     </nav>
   );
-}
-
-// inline icon to avoid extra import in list above
-function Video_Icon({ className }: { className?: string }) {
-  return <Radio className={className} />;
 }
 
 export function MiniSidebar() {

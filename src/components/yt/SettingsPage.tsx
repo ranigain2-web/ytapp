@@ -6,6 +6,7 @@ import { useYt } from "@/lib/yt-store";
 import { applyTheme, watchSystemTheme, type ThemeMode } from "@/lib/yt-theme";
 import { APP_VERSION } from "@/lib/version";
 import { isNativeApp } from "@/lib/yt-native";
+import { ytToast } from "@/lib/yt-toast";
 import { Check, X, RefreshCw, Globe, Server, Smartphone, Moon, Sun, Monitor, Headphones, PlayCircle, Gauge, Signal } from "lucide-react";
 
 function Toggle({ label, desc, value, onChange, labelIcon }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void; labelIcon?: React.ReactNode }) {
@@ -259,7 +260,7 @@ export default function SettingsPage() {
             <p className="text-[15px] text-[var(--yt-text)]">Clear watch history</p>
             <p className="text-[13px] text-[var(--yt-text-2)] mt-0.5">Removes all watched videos from this device</p>
           </div>
-          <button onClick={() => clearHistory()} className="h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[13px] shrink-0">
+          <button onClick={() => { clearHistory(); ytToast("Watch history cleared"); }} data-testid="settings-clear-history" className="h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[13px] shrink-0">
             Clear
           </button>
         </div>

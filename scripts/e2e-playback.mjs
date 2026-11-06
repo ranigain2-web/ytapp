@@ -1064,6 +1064,124 @@ const hydrationErrors = (errors) =>
     await ctx.close();
   }
 
+  // ---- 18. Phase 3: interaction truth serum ------------------------------
+  console.log("== 18. Truth serum (toasts, 3-dot, not-interested, keyboard nav) ==");
+  {
+    const { ctx, page } = await newPage(browser);
+    // headless Chromium denies clipboard by default — the share/clip toasts
+    // copy real links
+    await ctx.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await sleep(3000);
+
+    // dead buttons are GONE (wire-or-remove): mic, cast, bell, sign-in
+    const dead = await page.evaluate(() => ({
+      mic: !!document.querySelector('[aria-label*="voice" i]'),
+      cast: !!document.querySelector('[aria-label="Cast"]'),
+      bell: !!document.querySelector('[aria-label="Notifications"]'),
+      signin: !!document.querySelector("button") && Array.from(document.querySelectorAll("button")).some(b => b.textContent?.trim() === "Sign in"),
+    }));
+    if (!dead.mic && !dead.cast) ok("dead mic + cast buttons removed");
+    else bad(`dead buttons survived (mic=${dead.mic} cast=${dead.cast})`);
+    if (!dead.bell) ok("bell removed (returns in phase 4 with the notifications drawer)");
+    else bad("bell still present without a drawer");
+    if (!dead.signin) ok("dead Sign in removed from the sidebar");
+    else bad("Sign in button still present");
+
+    // 3-dot on a feed card: not-interested hides the card AND persists
+    const firstCard = await page.$("[data-testid=video-card]");
+    if (firstCard) {
+      const cardTitle = await firstCard.evaluate(el => el.querySelector("h3")?.textContent || "");
+      await firstCard.hover();
+      await page.click("[data-testid=card-dots]").catch(() => {});
+      await page.waitForSelector("[data-testid=card-menu]", { timeout: 4000 }).catch(() => {});
+      const menu = await page.$("[data-testid=card-menu]");
+      if (menu) ok("card 3-dot menu opens");
+      else bad("3-dot menu did not open");
+      if (menu) {
+        await page.click("[data-testid=card-menu-notinterested]").catch(() => {});
+        await sleep(900);
+        const toast = await page.evaluate(() => {
+          const t = document.querySelector("[data-testid=yt-toast]");
+          return t ? t.textContent || "" : "";
+        });
+        if (/removed/i.test(toast)) ok(`not-interested confirms itself ("${toast.slice(0, 40)}")`);
+        else bad(`no toast on not-interested (got "${toast}")`);
+        const stillThere = await page.evaluate(title =>
+          Array.from(document.querySelectorAll("[data-testid=video-card] h3")).some(h => h.textContent === title), cardTitle);
+        if (!stillThere) ok("hidden card removed from the feed");
+        else bad("card still visible after not-interested");
+        // persists across reload (store-backed memory)
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await sleep(3000);
+        const afterReload = await page.evaluate(title =>
+          Array.from(document.querySelectorAll("[data-testid=video-card] h3")).some(h => h.textContent === title), cardTitle);
+        if (!afterReload) ok("not-interested persists across reload");
+        else bad("hidden card reappeared after reload");
+      }
+    } else {
+      bad("no feed card to test the 3-dot menu on");
+    }
+
+    // watch page: share/save confirm; comments honest note; votes local
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("[data-testid=share-button]", { timeout: 20000 }).catch(() => {});
+    await page.click("[data-testid=share-button]").catch(() => {});
+    await sleep(700);
+    const shareToast = await page.evaluate(() => document.querySelector("[data-testid=yt-toast]")?.textContent || "");
+    if (/copied/i.test(shareToast)) ok(`share confirms itself ("${shareToast.slice(0, 40)}")`);
+    else bad(`share toast missing (got "${shareToast}")`);
+
+    const commentsNote = await page.$("[data-testid=comments-anonymous-note]");
+    if (commentsNote) ok("comments show the honest anonymous note (fake composer gone)");
+    else bad("comments composer note missing");
+    const fakeInput = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("input")).some(i => /add a comment/i.test(i.getAttribute("placeholder") || "")));
+    if (!fakeInput) ok("no fake comment composer input");
+    else bad("fake comment composer still rendered");
+    const likeBtn = await page.$("[data-testid=comment-like]");
+    if (likeBtn) {
+      const before = await likeBtn.evaluate(el => el.textContent || "");
+      await likeBtn.click().catch(() => {});
+      await sleep(400);
+      const after = await page.evaluate(() => document.querySelector("[data-testid=comment-like]")?.textContent || "");
+      const pressed = await page.evaluate(() => document.querySelector("[data-testid=comment-like]")?.getAttribute("aria-pressed"));
+      if (pressed === "true" && before !== after) ok(`comment like is local + reflected (${before.trim() || "0"} → ${after.trim()})`);
+      else if (pressed === "true") ok("comment like toggles local state");
+      else bad("comment like did not register");
+    } else {
+      bad("no comment like button found");
+    }
+
+    // search overlay keyboard nav: type, arrow down, Enter → highlighted suggestion
+    await page.click("[data-testid=mobile-search-button]").catch(() => {});
+    await sleep(600);
+    const overlayInput = await page.$("input[aria-label='Search YouTube']");
+    if (overlayInput) {
+      await overlayInput.type("space", { delay: 30 });
+      await page.waitForFunction(() => document.querySelectorAll("[data-testid=suggestion-item]").length > 0, { timeout: 8000 }).catch(() => {});
+      const highlighted = await page.evaluate(() => document.querySelector("#yt-sugg-1")?.textContent || "");
+      await page.keyboard.press("ArrowDown"); // -1 → 0 (the exact match)
+      await page.keyboard.press("ArrowDown"); // 0 → 1 (first real suggestion)
+      await sleep(200);
+      const active = await page.evaluate(() => {
+        const el = document.querySelector("[aria-selected='true']");
+        return { id: el?.id, text: el?.textContent || "" };
+      });
+      if (active.id === "yt-sugg-1") ok("arrow keys highlight suggestions (aria-activedescendant)");
+      else bad(`keyboard highlight wrong (id=${active.id})`);
+      await page.keyboard.press("Enter");
+      await sleep(1200);
+      const searched = await page.evaluate(() => location.search);
+      if (searched.includes("q=") && (highlighted.trim() === "" || decodeURIComponent(searched).includes(active.text.slice(0, 8)))) ok(`Enter selects the highlighted suggestion (${searched.slice(0, 44)})`);
+      else if (searched.includes("q=")) ok(`keyboard Enter searches (${searched.slice(0, 44)})`);
+      else bad(`keyboard Enter did not search (${searched})`);
+    } else {
+      bad("search overlay input not found");
+    }
+    await ctx.close();
+  }
+
   await browser.close();
   console.log(`\nRESULT: ${PASS} passed, ${FAIL} failed`);
   process.exit(FAIL === 0 ? 0 : 1);

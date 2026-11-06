@@ -205,7 +205,7 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   gauntlet baseline (ours=2 ref=2 — baseline losses are the point of a
   bar; `--until-win` flips them in later phases).
 
-## 3. Current state (as of 2026-11-06, session 15 — plan phase 2 executed: miniplayer + PiP + countdown; e2e 74/76)
+## 3. Current state (as of 2026-11-06, session 16 — v1.4.0 tagged; phase 3 core done (truth serum); e2e 89/89)
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,
@@ -294,6 +294,26 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   headless Chrome): the ENDED-overlay E2E uses the `window.__ytEmbedEnded`
   debug hook to verify the render + routing path; the IFrame-API event
   wiring (state 0 → overlay) is code-verified and fires on real devices.
+
+### Phase 3 additions (session 16, v1.5.0)
+
+- `src/lib/yt-toast.tsx` — ytToast() + ToastHost mounted in AppShell; every
+  mutation confirms itself. Store gained `commentVotes`, `hiddenVideos`,
+  `hiddenChannels`; dead `cinemaMode` pref deleted.
+- Dead buttons REMOVED: header mic/cast/bell, overlay mic, sidebar Sign in +
+  "Your videos". Bell returns in phase 4 with the notifications drawer.
+- Comments: no fake composer; honest anonymous note; local like/dislike.
+- VideoCard: 3-dot menu (save/share/not-interested/ban-channel) + valid
+  interactive nesting (outer <a>/<button> roots became div + inner link).
+  Hidden videos render null EVERYWHERE (store filter inside the card).
+- SearchOverlay: full keyboard nav + combobox ARIA.
+- Deferred phase-3 items (do next): filters sheet (needs REA sp= capture),
+  save-to-playlist sheet, Shorts more-sheet/subscribe identity, haptics,
+  pull-to-refresh, focus traps, thumb progress bar, skeleton col fix.
+- The v1.4.0 audio-swap fix lives in `resumeAfterLoad` (VideoSurface +
+  VideoPlayer): keepPos/wasPlaying come from positionRef/`playing` state, and
+  apply ALWAYS defers via loadedmetadata — the load algorithm rejects
+  immediate plays. Read that comment before touching src-swap logic.
 
 ### Phase 2 additions (session 15)
 

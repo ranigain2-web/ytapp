@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useYt, type HistoryEntry } from "@/lib/yt-store";
+import { ytToast } from "@/lib/yt-toast";
 import { useRouter } from "@/lib/yt-router";
 import { formatTime } from "@/lib/yt-format";
 import { VideoGrid } from "./VideoCard";
@@ -64,7 +65,7 @@ export function HistoryPage() {
   return (
     <div className="px-2 sm:px-6 pb-16 pt-2">
       <PageTitle actions={history.length > 0 ? (
-        <button onClick={clearHistory} className="flex items-center gap-2 px-4 h-9 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[14px]">
+        <button onClick={() => { clearHistory(); ytToast("Watch history cleared"); }} data-testid="clear-history" className="flex items-center gap-2 px-4 h-9 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[14px]">
           <Trash2 className="w-4 h-4" /> Clear all
         </button>
       ) : undefined}>
@@ -78,7 +79,7 @@ export function HistoryPage() {
         />
       ) : (
         <div className="grid gap-x-4 gap-y-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {history.map(e => <HistoryRow key={e.id} e={e} onRemove={() => removeHistory(e.id)} />)}
+          {history.map(e => <HistoryRow key={e.id} e={e} onRemove={() => { removeHistory(e.id); ytToast("Removed from watch history"); }} />)}
         </div>
       )}
     </div>
@@ -167,7 +168,7 @@ export function PlaylistsPage() {
     <div className="px-2 sm:px-6 pb-16 pt-2">
       <PageTitle>Playlists</PageTitle>
       <form
-        onSubmit={(e) => { e.preventDefault(); if (name.trim()) { createPlaylist(name.trim()); setName(""); } }}
+        onSubmit={(e) => { e.preventDefault(); if (name.trim()) { createPlaylist(name.trim()); setName(""); ytToast(`Playlist "${name.trim()}" created`); } }}
         className="flex gap-2 mb-8 max-w-md"
       >
         <input
@@ -190,7 +191,7 @@ export function PlaylistsPage() {
                 <Play className="w-10 h-10 text-[var(--yt-text-2)]" fill="#aaa" />
                 <span className="text-[13px] text-[var(--yt-text-2)]">{p.videoIds.length} videos</span>
                 <button
-                  onClick={(e) => { e.stopPropagation(); deletePlaylist(p.id); }}
+                  onClick={(e) => { e.stopPropagation(); deletePlaylist(p.id); ytToast(`Playlist "${p.name}" deleted`); }}
                   className="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/70 hover:bg-black hidden group-hover:flex items-center justify-center"
                   aria-label="Delete playlist"
                 >

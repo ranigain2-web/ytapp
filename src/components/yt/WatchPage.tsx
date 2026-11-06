@@ -11,6 +11,7 @@ import { VideoCard } from "./VideoCard";
 import Comments from "./Comments";
 import { CountdownCard } from "./CountdownCard";
 import { parkSurfaceVideoIfInside } from "./VideoSurface";
+import { ytToast } from "@/lib/yt-toast";
 import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Scissors, Bell, AlertTriangle, SkipForward, Headphones, Play, RotateCcw } from "lucide-react";
 
 export default function WatchPage({ videoId, startAt }: { videoId: string; startAt?: number }) {
@@ -390,7 +391,11 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               <p className="text-[12px] text-[var(--yt-text-2)] truncate">{v.channel_subs || `${formatViews(v.views)} subscribers`}</p>
             </div>
             <button
-              onClick={() => toggleSub({ id: v.channel_id || v.channel, name: v.channel, avatar: v.channel_thumb || "", subscribers: v.channel_subs || "" })}
+              onClick={() => {
+                toggleSub({ id: v.channel_id || v.channel, name: v.channel, avatar: v.channel_thumb || "", subscribers: v.channel_subs || "" });
+                ytToast(isSubbed ? `Unsubscribed from ${v.channel || "channel"}` : `Subscribed to ${v.channel || "channel"}`);
+              }}
+              data-testid="subscribe-button"
               className={`ml-2 shrink-0 h-9 px-4 rounded-full text-[14px] font-medium flex items-center gap-2 transition-colors ${isSubbed ? "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]" : "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)] hover:bg-[var(--yt-invert-hover)]"}`}
             >
               {isSubbed && <Bell className="w-4 h-4" />}
@@ -419,21 +424,37 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               </button>
             </div>
             <button
-              onClick={() => { navigator.clipboard?.writeText(`https://youtu.be/${v.id}`).catch(() => {}); }}
+              onClick={() => {
+                navigator.clipboard?.writeText(`https://youtu.be/${v.id}`)
+                  .then(() => ytToast("Link copied to clipboard"))
+                  .catch(() => ytToast("Copy failed — long-press the address instead"));
+              }}
+              data-testid="share-button"
               className="flex items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
               title="Copy video link"
             >
               <Share2 className="w-5 h-5" /> Share
             </button>
             <button
-              onClick={() => { navigator.clipboard?.writeText(`https://www.youtube.com/watch?v=${v.id}`).catch(() => {}); }}
+              onClick={() => {
+                const t = Math.floor(usePlayback.getState().current || 0);
+                navigator.clipboard?.writeText(`https://www.youtube.com/watch?v=${v.id}${t ? `&t=${t}` : ""}`)
+                  .then(() => ytToast(`Link copied at ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`))
+                  .catch(() => ytToast("Copy failed"));
+              }}
+              data-testid="clip-button"
               className="hidden sm:flex items-center gap-2 h-9 px-4 rounded-full bg-[var(--yt-bg-elev2)] text-[14px] hover:bg-[var(--yt-hover)] shrink-0"
-              title="Copy YouTube link"
+              title="Copy link with timestamp"
             >
               <Scissors className="w-5 h-5" /> Clip
             </button>
             <button
-              onClick={() => v.title && toggleLater({ id: v.id, title: v.title, channel: v.channel, channel_id: v.channel_id, thumb: v.thumb_lg || "", views: String(v.views ?? ""), duration: "", published: "" })}
+              onClick={() => {
+                if (!v.title) return;
+                toggleLater({ id: v.id, title: v.title, channel: v.channel, channel_id: v.channel_id, thumb: v.thumb_lg || "", views: String(v.views ?? ""), duration: "", published: "" });
+                ytToast(isLater ? "Removed from Watch later" : "Saved to Watch later");
+              }}
+              data-testid="save-button"
               className={`flex items-center gap-2 h-9 px-4 rounded-full text-[14px] shrink-0 ${isLater ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]"}`}
             >
               <BookmarkPlus className="w-5 h-5" /> {isLater ? "Saved" : "Save"}
