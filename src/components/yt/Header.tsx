@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Menu, Search, Video, UserRound, Clock, Moon, Sun, Monitor } from "lucide-react";
+import { NotificationsBell } from "./Notifications";
+import { AccountButton } from "./AccountMenu";
 import { useRouter, type Route } from "@/lib/yt-router";
 import SearchOverlay, { addRecentSearch, getRecentSearches } from "./SearchOverlay";
 import { fetchSuggestions } from "@/lib/yt-api";
@@ -160,13 +162,7 @@ export default function Header({ onToggleSidebar, onSearch }: {
           >
             <Search className="w-6 h-6 text-[var(--yt-text)]" />
           </button>
-          <button
-            onClick={() => navigate({ name: "settings" })}
-            className="w-8 h-8 rounded-full bg-[var(--yt-blue)] flex items-center justify-center shrink-0 ml-1"
-            aria-label="Account"
-          >
-            <UserRound className="w-5 h-5 text-[var(--yt-invert-text)]" />
-          </button>
+          <AccountButton />
         </div>
 
         {/* DESKTOP: inline search bar + suggestions dropdown */}
@@ -232,8 +228,8 @@ export default function Header({ onToggleSidebar, onSearch }: {
           </div>
         </form>
 
-        {/* DESKTOP right: actions */}
-        <div className="hidden sm:flex items-center gap-1 shrink-0">
+        {/* right actions — bell + avatar on every width like YouTube mobile */}
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => {
               const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
@@ -250,15 +246,10 @@ export default function Header({ onToggleSidebar, onSearch }: {
               ? <Sun className="w-6 h-6 text-[var(--yt-text)]" />
               : <Moon className="w-6 h-6 text-[var(--yt-text)]" />}
           </button>
-          {/* PHASE3-REMOVED: Cast (Chromecast out of scope) and Bell (returns
-              in phase 4 WITH the local notifications drawer — wire-or-remove) */}
-          <button
-            onClick={() => navigate({ name: "settings" })}
-            className="w-8 h-8 rounded-full bg-[var(--yt-blue)] flex items-center justify-center shrink-0 ml-1"
-            aria-label="Account"
-          >
-            <UserRound className="w-5 h-5 text-[var(--yt-invert-text)]" />
-          </button>
+          {/* Cast stays removed (Chromecast out of scope). The bell is back —
+              phase 4 pairs it with the local notifications drawer. */}
+          <NotificationsBell />
+          <AccountButton />
         </div>
       </header>
 

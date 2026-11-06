@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { APP_VERSION } from "@/lib/version";
-import { Headphones, PlayCircle, SkipForward, X, CheckCircle2, Volume2, Gauge, MoreVertical, PictureInPicture2 } from "lucide-react";
+import { Headphones, PlayCircle, SkipForward, X, CheckCircle2, Volume2, Gauge, MoreVertical, PictureInPicture2, Bell, Rss, LayoutPanelTop, ListVideo, MessageCircle, UserRound } from "lucide-react";
 
 const SEEN_KEY = "yt_whatsnew_seen";
 
@@ -32,14 +32,14 @@ export default function WhatsNew() {
   if (!open) return null;
 
   const features: { icon: React.ReactNode; title: string; where: string }[] = [
-    { icon: <CheckCircle2 className="w-5 h-5" />, title: "Every action confirms itself", where: "Share, Save, Subscribe, clearing history, playlist changes — a toast appears at the bottom-left telling you exactly what happened. No more silent buttons." },
-    { icon: <MoreVertical className="w-5 h-5" />, title: "3-dot menu on every video card", where: "Save to Watch later, Share, Not interested and Don't recommend channel — right on the card. Hidden videos stay hidden (it remembers, even after a restart)." },
-    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Miniplayer + Picture-in-picture", where: "Scroll past the video or navigate away — playback continues in the corner miniplayer. On Android, press Home while playing for the floating window." },
-    { icon: <SkipForward className="w-5 h-5" />, title: "Autoplay countdown + Prev button", where: "When a video ends, an Up-next card counts down 5 seconds (Cancel stops it). The lock-screen notification gained Prev / Pause / Next." },
-    { icon: <Volume2 className="w-5 h-5" />, title: "Honest comments", where: "The fake comment box is gone — replaced by a straight note that commenting needs a YouTube account. Reading, sorting, paging and local likes/dislikes all work." },
-    { icon: <Gauge className="w-5 h-5" />, title: "Search keyboard navigation", where: "Arrow keys move through search suggestions, Enter picks the highlighted one, Esc closes. Desktop and the mobile overlay both support it." },
-    { icon: <Headphones className="w-5 h-5" />, title: "Audio mode + background play", where: "Sound-only streaming with the thumbnail on screen, and playback that keeps going when you switch apps or turn the screen off." },
-    { icon: <PlayCircle className="w-5 h-5" />, title: "Quality + Data saver (fixed)", where: "Pinned quality and Data saver now actually cap the stream — a silent bug had killed both. Settings → Playback." },
+    { icon: <Rss className="w-5 h-5" />, title: "Subscriptions feed", where: "Open Subscriptions and see the latest videos from every channel you follow — new uploads first, with All / Today / Continue watching / Unwatched filters. One dead channel never breaks the feed." },
+    { icon: <Bell className="w-5 h-5" />, title: "Notifications (local, honest)", where: "The bell is back. It counts new videos from your subscriptions since you last looked — nothing is pushed, nothing leaves your device, and it says so." },
+    { icon: <LayoutPanelTop className="w-5 h-5" />, title: "Channel pages with real tabs", where: "Home, Videos, Shorts, Playlists and About — each tab loads its own section, playlists open as watchable queues." },
+    { icon: <ListVideo className="w-5 h-5" />, title: "Playlists that play", where: "Open a playlist from a channel page and get a queue: Play from here, Prev / Next, and autoplay that walks the list when a video ends." },
+    { icon: <MessageCircle className="w-5 h-5" />, title: "Comment threads", where: "Tap the replies count under a comment and the conversation expands inline — plus pinned and creator-heart badges. Page-through for more comments now works in server mode too." },
+    { icon: <PlayCircle className="w-5 h-5" />, title: "Shorts, truthful", where: "Real channel names, avatars and working Subscribe on shorts, a comments sheet, double-tap-to-like with the heart pop, and a sound toggle that remembers your choice. Share copies the link." },
+    { icon: <UserRound className="w-5 h-5" />, title: "Account menu", where: "The header avatar opens a menu: Your channel, Appearance, and a plain-language page about what's stored and where (everything, locally)." },
+    { icon: <MoreVertical className="w-5 h-5" />, title: "Everything from 1.5", where: "Action toasts, card 3-dot menus with Not-interested memory, honest comments note, search keyboard navigation — all still there." },
   ];
 
   return (

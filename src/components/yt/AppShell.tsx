@@ -12,6 +12,7 @@ import HomePage from "./HomePage";
 import SearchPage from "./SearchPage";
 import WatchPage from "./WatchPage";
 import ChannelPage from "./ChannelPage";
+import PlaylistPage from "./PlaylistPage";
 import SettingsPage from "./SettingsPage";
 import { HistoryPage, SubscriptionsPage, LikedPage, LaterPage, PlaylistsPage } from "./LibraryPages";
 import ShortsPage from "./ShortsPage";
@@ -90,11 +91,14 @@ export default function AppShell() {
     case "channel":
       content = <ChannelPage key={route.id} channelId={route.id} />;
       break;
+    case "playlist":
+      content = <PlaylistPage key={route.id} playlistId={route.id} />;
+      break;
     case "subscriptions":
       content = <SubscriptionsPage />;
       break;
     case "shorts":
-      content = <ShortsPage />;
+      content = <ShortsPage startId={route.id} />;
       break;
     case "history":
       content = <HistoryPage />;

@@ -924,3 +924,73 @@ commit.
 - Next session: phase 3 remainder (filters sheet via REA capture first),
   then phase 4 (subs feed, channel tabs, comments threads, Shorts truth,
   notifications drawer).
+
+## Session 17 (2026-11-06) — Phase 4 complete: missing surfaces (v1.6.0)
+
+- **Server additions** (all curl-verified against live YouTube):
+  - `GET /api/channel/:id/tabs?tab=videos|shorts|playlists|about` — youtubei
+    v18 `getVideos()/getShorts()/getPlaylists()/getAbout()`. Shorts tab items
+    are `ShortsLockupView` (id via `on_tap_endpoint.payload.videoId`,
+    title/views in `overlay_metadata`); playlists are `LockupView` (thumb at
+    `content_image.primary_thumbnail.image[0]`); about data lives under
+    `AboutChannel.metadata`. Guards: `has_videos/has_shorts/has_playlists`
+    (getPlaylists THROWS when the channel has no playlists tab).
+  - `GET /api/playlist/:id` — queue contents (normalizeVideo + author fill).
+  - Comments: per-thread `replies_token` + `pinned` + page `continuation`
+    (page token = the page-level ContinuationItem — the walk MUST skip
+    CommentThread subtrees or it grabs a replies token by mistake); new
+    `GET /api/video/:id/comments/replies|more?token=` via a stateless
+    `actions.execute('/next')` continuation executor.
+  - **Empty-continuation guard**: a gated/empty continuation response throws
+    instead of returning `{replies: []}` — returning it cached a LIE for
+    30 min and poisoned every retry (this was the e2e flake).
+- **Client**: fetchChannelTab / fetchPlaylist / fetchCommentReplies; server
+  mode now supports comments paging; YtComment += pinned/replies_token.
+- **Subscriptions feed** (`yt-subs-feed.ts`): ONE single-flight cached fetch
+  (TTL 20min) feeding BOTH the page and the notification badge; cap-4 worker
+  pool, per-channel allSettled isolation with an error chip, progressive
+  render, 3 videos/channel, day-bucket ordering (publishedTimeText is all
+  the API gives — documented). Chips: All/Today/Continue watching/Unwatched.
+- **Notifications**: bell restored (all widths, YouTube-mobile style header)
+  + badge (new-since-last-look from a localStorage seen-set) + drawer
+  ("From your subscriptions — local only, no push"); opening marks seen.
+  Fixed a rename bug: markAllSeen/getUnseenItems still called the deleted
+  `readSeen()` — silently never persisted.
+- **ChannelPage**: 5 tabs (Home/Videos/Shorts/Playlists/About), per-tab
+  cache + lazy fetch; verified badge; shorts grid → shorts entry route;
+  playlist cards → playlist route. Sort chips NOT built: the WEB client
+  exposes no sort sub-menu (`sort_filters: []`, applySort throws) — dropped
+  honestly rather than guessing proto params (would need REA capture).
+- **Comments**: reply threads expand inline (fetched by token, collapse
+  toggle), pinned 📌 + creator-heart ❤️ badges.
+- **Shorts truth**: real channel identity from the fetched video (the
+  search-seeded lockup carries NO identity — probed), working Subscribe,
+  comments bottom sheet, double-tap-to-like with heart pop, remembered
+  sound toggle (localStorage; applies to direct player + embed src), honest
+  like button WITHOUT a fake count, share toast, back-chevron →
+  history-back. Dead More/dislike rail buttons removed. VideoPlayer
+  `minimal` already had the scrubber.
+- **Playlist route** (`/?page=playlist&id=`): queue page with Play from
+  here / Prev / Next / Play this; after the watch surface loads, the
+  playlist order swaps into the playback store's queue so the up-next
+  countdown + notification Next walk the playlist (autoplay-all). Shorts
+  entry route `/?page=shorts&id=` leads the feed with that short.
+- **Account menu** (header avatar): Your channel → subscriptions,
+  Appearance cycle, "Your data in ytapp" privacy modal (local-only
+  storage, stated plainly), Settings.
+- **AppShell bug**: the new playlist case fell through to subscriptions
+  (missing break) — the e2e caught it.
+- **Header**: right-actions block visible at ALL widths (YouTube mobile
+  shows search/bell/avatar); theme toggle stays md+.
+- **e2e section 19** (20 checks): subs feed render + chips, badge counts +
+  clears, drawer lists + tap→watch, channel tabs per-tab, playlist queue +
+  play + queue-swap, reply threads, shorts entry + comments sheet, account
+  menu + privacy modal. **108/108 green.**
+- Deferred (documented): pull-to-refresh on subs, avatar-strip badges,
+  Community/Live tabs (plan §7.4 droppable), subs feed skeleton col fix.
+- **Token encoding fix** (found via e2e instrumentation): youtubei.js stores
+  continuation tokens percent-encoded — the API was shipping `%3D%3D`-suffixed
+  tokens and the client's encodeURIComponent double-encoded them, causing
+  cache misses + slow fresh executes. All three server token paths now
+  normalize via `rawToken()` (decode-on-extract); contract = raw token.
+- v1.6.0 suite: **108/108** (sections 1–19).

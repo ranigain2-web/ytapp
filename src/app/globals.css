@@ -513,3 +513,20 @@ html.yt-android [data-yt-mobile-nav] { display: flex; }
   to   { opacity: 1; transform: none; }
 }
 .yt-mini-in { animation: yt-mini-in 0.18s cubic-bezier(0.2, 0.7, 0.3, 1); }
+
+/* Phase 4 — shorts truth: the double-tap heart pop (likes land with a
+   visible heartbeat, YouTube-style) and the comments bottom sheet. */
+@keyframes heart-pop {
+  0%   { opacity: 0; transform: scale(0.4); }
+  35%  { opacity: 1; transform: scale(1.25); }
+  60%  { transform: scale(0.95); }
+  80%  { transform: scale(1.05); }
+  100% { opacity: 0; transform: scale(1); }
+}
+.heart-pop { animation: heart-pop 0.8s ease-out both; }
+
+@keyframes yt-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.yt-sheet-up { animation: yt-sheet-up 0.22s cubic-bezier(0.2, 0.7, 0.3, 1); }

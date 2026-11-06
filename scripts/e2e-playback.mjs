@@ -1083,8 +1083,10 @@ const hydrationErrors = (errors) =>
     }));
     if (!dead.mic && !dead.cast) ok("dead mic + cast buttons removed");
     else bad(`dead buttons survived (mic=${dead.mic} cast=${dead.cast})`);
-    if (!dead.bell) ok("bell removed (returns in phase 4 with the notifications drawer)");
-    else bad("bell still present without a drawer");
+    // phase 4 restored the bell WITH the local notifications drawer — section
+    // 19 proves the drawer; here we only confirm it's the wired one, not a dead icon
+    if (dead.bell) ok("bell present (phase 4: wired to the local notifications drawer)");
+    else bad("bell missing — phase 4 restored it");
     if (!dead.signin) ok("dead Sign in removed from the sidebar");
     else bad("Sign in button still present");
 
@@ -1178,6 +1180,195 @@ const hydrationErrors = (errors) =>
       else bad(`keyboard Enter did not search (${searched})`);
     } else {
       bad("search overlay input not found");
+    }
+    await ctx.close();
+  }
+
+  // ---- 19. Phase 4: missing surfaces ------------------------------
+  console.log("== 19. Missing surfaces (subs feed, notifications, channel tabs, threads, playlist) ==");
+  {
+    const { ctx, page } = await newPage(browser);
+    // seed a subscription so the subs feed + notifications have real data
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await sleep(2500);
+    await page.evaluate(() => {
+      try {
+        const raw = localStorage.getItem("yt-app-store");
+        const parsed = raw ? JSON.parse(raw) : { state: {}, version: 0 };
+        parsed.state = parsed.state || {};
+        parsed.state.subs = parsed.state.subs || [];
+        if (!parsed.state.subs.some(s => s.id === "UCuAXFkgsw1L7xaCfnd5JJOw")) {
+          parsed.state.subs.push({ id: "UCuAXFkgsw1L7xaCfnd5JJOw", name: "Rick Astley", avatar: "", subscribers: "" });
+        }
+        localStorage.setItem("yt-app-store", JSON.stringify(parsed));
+        localStorage.removeItem("yt_subs_seen"); // fresh: everything is "new"
+      } catch (e) {}
+    });
+
+    // 19a — subscriptions feed: videos from the seeded sub render
+    await page.goto(`${BASE}/?page=subscriptions`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("[data-testid=subscriptions-page]", { timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => document.querySelectorAll("[data-testid=video-card] h3").length > 0, { timeout: 30000 }).catch(() => {});
+    const subsCount = await page.evaluate(() => document.querySelectorAll("[data-testid=video-card]").length);
+    if (subsCount > 0) ok(`subscriptions feed renders videos from the seeded channel (${subsCount})`);
+    else bad("subscriptions feed rendered no videos");
+    const chipsWork = await page.evaluate(() => !!document.querySelector("[data-testid=subs-chip-today]"));
+    if (chipsWork) ok("subs filter chips render (All/Today/Continue watching/Unwatched)");
+    else bad("subs filter chips missing");
+
+    // 19b — notifications: badge counts the sub's videos, drawer opens, marks seen
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await sleep(3500); // the shared feed is TTL-cached from the subs page visit
+    const badge = await page.evaluate(() => document.querySelector("[data-testid=notifications-badge]")?.textContent || "");
+    if (/^[1-9]/.test(badge) || badge === "9+") ok(`notification badge counts new sub videos (${badge})`);
+    else bad(`notification badge missing or zero (${badge || "none"})`);
+    await page.click("[data-testid=notifications-bell]").catch(() => {});
+    await sleep(600);
+    const drawer = await page.$("[data-testid=notifications-drawer]");
+    if (drawer) ok("notifications drawer opens with the local-only header");
+    else bad("notifications drawer did not open");
+    if (drawer) {
+      const itemCount = await page.evaluate(() => document.querySelectorAll("[data-testid=notification-item]").length);
+      if (itemCount > 0) ok(`drawer lists the new videos (${itemCount})`);
+      else bad("drawer listed no videos");
+      await page.click("[data-testid=notification-item]").catch(() => {});
+      // direct videos mount player-slot; embed-fallback videos mount the
+      // official iframe; gated ones show the honest unavailable state — all
+      // three mean the notification chain worked
+      const watchLanded = () => /v=/.test(location.search) && (
+        !!document.querySelector("[data-testid=player-slot]")
+        || !!document.querySelector("iframe[src*='youtube-nocookie.com']")
+        || !!document.querySelector("[data-testid=blocked-video]")
+        || /Video unavailable/.test(document.body.innerText));
+      await page.waitForFunction(watchLanded, { timeout: 25000 }).catch(() => {});
+      const wentToWatch = await page.evaluate(watchLanded);
+      if (wentToWatch) ok("notification tap → watch page");
+      else bad(`notification tap did not open a watch page (${await page.evaluate(() => location.search)})`);
+      // back home: badge should be clear now (marked seen on open)
+      await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+      await sleep(2500);
+      const badgeAfter = await page.evaluate(() => document.querySelector("[data-testid=notifications-badge]")?.textContent || "");
+      if (!badgeAfter) ok("badge clears after the drawer was opened (read receipt)");
+      else bad(`badge did not clear (${badgeAfter})`);
+    }
+
+    // 19c — channel tabs: videos/shorts/playlists/about per-tab structure
+    await page.goto(`${BASE}/?channel=UCuAXFkgsw1L7xaCfnd5JJOw`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("[data-testid=channel-page]", { timeout: 30000 }).catch(() => {});
+    await page.waitForSelector("[data-testid=channel-tab-playlists]", { timeout: 8000 }).catch(() => {});
+    const tabOk = await page.evaluate(() => !!document.querySelector("[data-testid=channel-tab-videos]") && !!document.querySelector("[data-testid=channel-tab-about]"));
+    if (tabOk) ok("channel tabs render (Home/Videos/Shorts/Playlists/About)");
+    else bad("channel tab bar incomplete");
+    await page.click("[data-testid=channel-tab-videos]").catch(() => {});
+    await page.waitForFunction(() => document.querySelectorAll("[data-testid=video-card]").length > 0, { timeout: 30000 }).catch(() => {});
+    const videosCount = await page.evaluate(() => document.querySelectorAll("[data-testid=video-card]").length);
+    if (videosCount > 0) ok(`Videos tab loads the videos grid (${videosCount})`);
+    else bad("Videos tab empty");
+    await page.click("[data-testid=channel-tab-playlists]").catch(() => {});
+    await page.waitForFunction(() => document.querySelectorAll("[data-testid=playlist-card]").length > 0, { timeout: 30000 }).catch(() => {});
+    const plCount = await page.evaluate(() => document.querySelectorAll("[data-testid=playlist-card]").length);
+    if (plCount > 0) ok(`Playlists tab lists playlists (${plCount})`);
+    else bad("Playlists tab empty");
+    await page.click("[data-testid=channel-tab-about]").catch(() => {});
+    await page.waitForFunction(() => /Joined|videos\b/i.test(document.querySelector("[data-testid=channel-about]")?.innerText || ""), { timeout: 30000 }).catch(() => {});
+    const aboutText = await page.evaluate(() => document.querySelector("[data-testid=channel-about]")?.innerText || "");
+    if (/Joined|videos/i.test(aboutText)) ok("About tab shows channel stats (joined/views/videos)");
+    else bad(`About tab missing stats (${aboutText.slice(0, 40)})`);
+
+    // 19d — playlist page: queue-style watch with index + prev/next
+    await page.click("[data-testid=channel-tab-playlists]").catch(() => {});
+    await page.waitForFunction(() => document.querySelectorAll("[data-testid=playlist-card]").length > 0, { timeout: 30000 }).catch(() => {});
+    await page.click("[data-testid=playlist-card]").catch(() => {});
+    await page.waitForSelector("[data-testid=playlist-page]", { timeout: 30000 }).catch(() => {});
+    const playlistPage = await page.$("[data-testid=playlist-page]");
+    if (playlistPage) {
+      const queueLen = await page.evaluate(() => document.querySelectorAll("[data-testid^=playlist-play-]").length);
+      if (queueLen > 0) ok(`playlist page renders the queue (${queueLen} items)`);
+      else bad("playlist queue empty");
+      await page.click("[data-testid=playlist-play]").catch(() => {});
+      await sleep(3000);
+      const playing = await page.evaluate(() => (window.__ytPlayback?.getState?.() || {}).videoId || "");
+      if (playing) ok(`playlist Play starts the video (${playing})`);
+      else bad("playlist Play did not start a video");
+      const queue = await page.evaluate(() => (window.__ytPlayback?.getState?.() || {}).queue?.length || 0);
+      if (queue > 0) ok(`playlist order swapped into the play queue (${queue}) — autoplay walks it`);
+      else bad("playlist queue not set");
+      await page.goBack().catch(() => {});
+      await sleep(1200);
+    } else {
+      bad("playlist page did not open");
+    }
+
+    // 19e — comments: reply threads expand inline (server mode)
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("[data-testid=comment-like]", { timeout: 30000 }).catch(() => {});
+    // warm the replies endpoint server-side first — under suite load YouTube
+    // gates cold comment-continuation fetches; retry the warmup until the
+    // token's answer is cached (cache is per-token, 30 min, successes only)
+    {
+      let warmed = false;
+      for (let i = 0; i < 4 && !warmed; i++) {
+        try {
+          const cdata = await (await fetch(`${API}/api/video/${VIDEO}/comments`)).json();
+          const tok = (cdata.comments || []).find(c => c.replies_token)?.replies_token;
+          if (!tok) break;
+          const r = await (await fetch(`${API}/api/video/${VIDEO}/comments/replies?token=${encodeURIComponent(tok)}`)).json();
+          warmed = (r.replies || []).length > 0;
+        } catch (e) { /* retry */ }
+        if (!warmed) await sleep(2500);
+      }
+      if (!warmed) console.log("   (replies warmup did not succeed — YouTube gating this run; the browser click may be slow)");
+    }
+    const repliesBtn = await page.$("[data-testid=comment-replies-toggle]");
+    if (repliesBtn) {
+      // the replies fetch can be slow on a cold, loaded server — retry the
+      // click once before giving up (the catch-swallows make failures silent)
+      let threadCount = 0;
+      const replyResponses = [];
+      const onResp = r => { if (r.url().includes("replies")) replyResponses.push(r.status()); };
+      page.on("response", onResp);
+      for (let attempt = 0; attempt < 2 && !threadCount; attempt++) {
+        await page.click("[data-testid=comment-replies-toggle]", { timeout: 8000 }).catch(() => {});
+        await page.waitForFunction(() => document.querySelectorAll("[data-testid=comment-thread]").length > 0, { timeout: 25000 }).catch(() => {});
+        threadCount = await page.evaluate(() => document.querySelectorAll("[data-testid=comment-thread] > div").length);
+      }
+      page.off("response", onResp);
+      if (threadCount > 0) ok(`reply thread expands inline (${threadCount} replies)`);
+      else bad("reply thread did not expand");
+    } else {
+      bad("no comment with a replies toggle found");
+    }
+
+    // 19f — shorts: entry route leads with the requested short + comments sheet
+    await page.goto(`${BASE}/?page=shorts&id=41UzbuW6wJs`, { waitUntil: "domcontentloaded" });
+    await sleep(6000);
+    const entryShort = await page.evaluate(() => !!document.querySelector("[data-testid=short-card]"));
+    if (entryShort) ok("shorts entry route opens the shorts feed on the requested short");
+    else bad("shorts entry route did not render a short");
+    const commentsBtn = await page.$("[data-testid=short-comments]");
+    if (commentsBtn) {
+      await commentsBtn.click().catch(() => {});
+      await sleep(900);
+      const sheet = await page.$("[data-testid=short-comments-sheet]");
+      if (sheet) ok("shorts comments bottom sheet opens");
+      else bad("shorts comments sheet did not open");
+      await page.keyboard.press("Escape").catch(() => {});
+    } else bad("shorts comments button missing");
+
+    // 19g — account menu
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await sleep(2000);
+    await page.click("[data-testid=account-button]").catch(() => {});
+    await sleep(500);
+    const menu = await page.$("[data-testid=account-menu]");
+    if (menu) ok("account menu opens (Your channel / Appearance / Your data / Settings)");
+    else bad("account menu did not open");
+    if (menu) {
+      await page.click("[data-testid=account-data]").catch(() => {});
+      await sleep(500);
+      const modal = await page.$("[data-testid=data-modal]");
+      if (modal) ok("Your-data privacy modal opens (local-only storage, stated plainly)");
+      else bad("privacy modal did not open");
     }
     await ctx.close();
   }

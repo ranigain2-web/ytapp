@@ -243,6 +243,9 @@ export interface YtComment {
   time: string;
   replies: number;
   creator_heart?: boolean;
+  pinned?: boolean;
+  /** phase 4: continuation token for the reply thread (server mode) */
+  replies_token?: string;
 }
 
 export interface YtChannel {
@@ -252,6 +255,37 @@ export interface YtChannel {
   avatar: string;
   banner: string;
   subscribers: string;
+  videos: YtVideo[];
+}
+
+// phase 4: channel tabs
+export interface YtPlaylistCard {
+  id: string;
+  title: string;
+  thumb: string;
+  count: string;
+}
+export interface YtChannelAbout {
+  description: string;
+  total_views: string;
+  joined: string;
+  country: string;
+  video_count: string;
+  links: string[];
+}
+export interface YtChannelTab {
+  tab: "videos" | "shorts" | "playlists" | "about";
+  videos?: YtVideo[];
+  shorts?: { id: string; title: string; views: string }[];
+  playlists?: YtPlaylistCard[];
+  about?: YtChannelAbout;
+}
+export interface YtPlaylist {
+  id: string;
+  title: string;
+  channel: string;
+  channel_id: string;
+  count: string;
   videos: YtVideo[];
 }
 
@@ -361,7 +395,16 @@ export async function fetchCommentsMore(token: string): Promise<{ comments: YtCo
     const r = await itCommentsContinue(token);
     return { comments: r.comments, continuation: r.token };
   }
-  throw new ApiError("No more comments in this mode");
+  const r = await api<{ comments: YtComment[]; continuation: string | null }>(
+    `/api/video/x/comments/more?token=${encodeURIComponent(token)}`, { timeoutMs: 30000 });
+  return { comments: r.comments || [], continuation: r.continuation || null };
+}
+
+/** phase 4: a comment's reply thread (server mode — the token comes from fetchComments) */
+export async function fetchCommentReplies(token: string): Promise<{ replies: YtComment[]; continuation: string | null }> {
+  const r = await api<{ replies: YtComment[]; continuation: string | null }>(
+    `/api/video/x/comments/replies?token=${encodeURIComponent(token)}`, { timeoutMs: 30000 });
+  return { replies: r.replies || [], continuation: r.continuation || null };
 }
 
 export async function fetchChannel(id: string): Promise<YtChannel> {
@@ -369,6 +412,16 @@ export async function fetchChannel(id: string): Promise<YtChannel> {
   if (mode === "standalone") return itChannel(id);
   if (mode === "community") return communityChannel(id);
   return api<YtChannel>(`/api/channel/${id}`, { timeoutMs: 60000 });
+}
+
+/** phase 4: a channel tab (videos | shorts | playlists | about) — server mode */
+export async function fetchChannelTab(id: string, tab: "videos" | "shorts" | "playlists" | "about"): Promise<YtChannelTab> {
+  return api<YtChannelTab>(`/api/channel/${encodeURIComponent(id)}/tabs?tab=${tab}`, { timeoutMs: 60000 });
+}
+
+/** phase 4: playlist contents — server mode */
+export async function fetchPlaylist(id: string): Promise<YtPlaylist> {
+  return api<YtPlaylist>(`/api/playlist/${encodeURIComponent(id)}`, { timeoutMs: 60000 });
 }
 
 export async function fetchChannelMore(token: string): Promise<YtFeedPage> {

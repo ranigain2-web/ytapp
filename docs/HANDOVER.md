@@ -205,7 +205,7 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   gauntlet baseline (ours=2 ref=2 — baseline losses are the point of a
   bar; `--until-win` flips them in later phases).
 
-## 3. Current state (as of 2026-11-06, session 16 — v1.4.0 tagged; phase 3 core done (truth serum); e2e 89/89)
+## 3. Current state (as of 2026-11-06, session 17 — phase 4 complete (missing surfaces); e2e 108/108)
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,
@@ -294,6 +294,28 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   headless Chrome): the ENDED-overlay E2E uses the `window.__ytEmbedEnded`
   debug hook to verify the render + routing path; the IFrame-API event
   wiring (state 0 → overlay) is code-verified and fires on real devices.
+
+### Phase 4 additions (session 17, v1.6.0)
+
+- Server: `/api/channel/:id/tabs?tab=videos|shorts|playlists|about`,
+  `/api/playlist/:id`, `/api/video/:id/comments/replies|more?token=`.
+  Comments responses now carry per-thread `replies_token` + `pinned` + a
+  page `continuation`. Empty comment continuations THROW (never cache a
+  gated-empty response for 30 min — that poisoned retries once).
+- `src/lib/yt-subs-feed.ts`: the ONE shared subs fetch (single-flight,
+  TTL 20 min, cap-4, allSettled, progressive) — feeds the Subscriptions
+  page AND the notification badge. Seen-set in localStorage keys "new".
+- Notifications: bell + badge + drawer (local only). Account menu with the
+  privacy modal. Channel tabs + playlist queue route (`/?page=playlist&id=`)
+  + shorts entry (`/?page=shorts&id=`). Comment threads expand inline.
+- Known shapes (youtubei v18): shorts tab = `.videos` of ShortsLockupView
+  (`on_tap_endpoint.payload.videoId`); playlist thumb =
+  `content_image.primary_thumbnail.image[0]`; about = `.metadata` of
+  AboutChannel; comments page token needs a walk that SKIPS CommentThread
+  subtrees (replies tokens live inside them).
+- NOT built (honest): channel sort chips (WEB client has no sort sub-menu;
+  needs REA-verified params), Community/Live tabs (§7.4 droppable),
+  subs pull-to-refresh.
 
 ### Phase 3 additions (session 16, v1.5.0)
 

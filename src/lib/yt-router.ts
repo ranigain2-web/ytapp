@@ -12,7 +12,8 @@ export type Route =
   | { name: "watch"; v: string; t?: number }
   | { name: "channel"; id: string }
   | { name: "subscriptions" }
-  | { name: "shorts" }
+  | { name: "shorts"; id?: string }
+  | { name: "playlist"; id: string }
   | { name: "history" }
   | { name: "liked" }
   | { name: "later" }
@@ -29,7 +30,8 @@ export function parseRoute(): Route {
   const page = p.get("page");
   switch (page) {
     case "subscriptions": return { name: "subscriptions" };
-    case "shorts": return { name: "shorts" };
+    case "shorts": return { name: "shorts", id: p.get("id") || undefined };
+    case "playlist": return p.get("id") ? { name: "playlist", id: p.get("id")! } : { name: "home" };
     case "history": return { name: "history" };
     case "liked": return { name: "liked" };
     case "later": return { name: "later" };
@@ -45,6 +47,8 @@ export function href(route: Route): string {
     case "search": return `/?q=${encodeURIComponent(route.q)}`;
     case "watch": return `/?v=${encodeURIComponent(route.v)}${route.t ? `&t=${route.t}` : ""}`;
     case "channel": return `/?channel=${encodeURIComponent(route.id)}`;
+    case "shorts": return route.id ? `/?page=shorts&id=${encodeURIComponent(route.id)}` : "/?page=shorts";
+    case "playlist": return `/?page=playlist&id=${encodeURIComponent(route.id)}`;
     default: return `/?page=${route.name}`;
   }
 }

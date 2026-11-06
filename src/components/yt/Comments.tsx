@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { fetchComments, fetchCommentsMore, type YtComment } from "@/lib/yt-api";
+import { fetchComments, fetchCommentsMore, fetchCommentReplies, type YtComment } from "@/lib/yt-api";
 import { formatCount } from "@/lib/yt-format";
 import { useYt } from "@/lib/yt-store";
 
@@ -29,6 +29,26 @@ export default function Comments({ videoId }: { videoId: string }) {
   const commentVotes = useYt(s => s.commentVotes);
   const voteComment = useYt(s => s.voteComment);
   const commentKey = (c: YtComment) => `${videoId}:${c.author}:${c.text.slice(0, 60)}`;
+  // phase 4: reply threads — expanded per top-level comment, loaded inline
+  const [threads, setThreads] = useState<Record<string, { items: YtComment[]; open: boolean; loading: boolean }>>({});
+  const threadKey = (c: YtComment, i: number) => `${i}:${c.author}:${c.text.slice(0, 40)}`;
+
+  const toggleThread = async (c: YtComment, i: number) => {
+    const key = threadKey(c, i);
+    const th = threads[key];
+    if (th?.items?.length) {
+      setThreads(prev => ({ ...prev, [key]: { ...th, open: !th.open } }));
+      return;
+    }
+    if (!c.replies_token || th?.loading) return;
+    setThreads(prev => ({ ...prev, [key]: { items: [], open: true, loading: true } }));
+    try {
+      const r = await fetchCommentReplies(c.replies_token);
+      setThreads(prev => ({ ...prev, [key]: { items: r.replies, open: true, loading: false } }));
+    } catch {
+      setThreads(prev => ({ ...prev, [key]: { items: [], open: false, loading: false } }));
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -121,6 +141,8 @@ export default function Comments({ videoId }: { videoId: string }) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-[13px]">
                   <span className="font-medium text-[var(--yt-text)] truncate">{c.author}</span>
+                  {c.pinned && <span className="text-[11px] text-[var(--yt-text-2)] shrink-0" title="Pinned by the creator">📌 Pinned</span>}
+                  {c.creator_heart && <span className="text-[11px] shrink-0" title="Loved by the creator">❤️</span>}
                   <span className="text-[var(--yt-text-2)] shrink-0">{c.time}</span>
                 </div>
                 <p className="mt-1 text-[14px] leading-[21px] text-[var(--yt-text-2)] whitespace-pre-wrap break-words">{c.text}</p>
@@ -152,9 +174,45 @@ export default function Comments({ videoId }: { videoId: string }) {
                       </>
                     );
                   })()}
-                  {/* PHASE3-REMOVED: Reply (posting needs an account) and the
-                      replies count (thread READING is a phase-4 surface) */}
+                  {/* PHASE3-REMOVED: Reply (posting needs an account) */}
+                  {c.replies > 0 && c.replies_token && (
+                    <button
+                      onClick={() => toggleThread(c, i)}
+                      className="text-[13px] font-medium text-[var(--yt-blue)] hover:text-[#6bc1ff]"
+                      data-testid="comment-replies-toggle"
+                      aria-expanded={!!threads[threadKey(c, i)]?.open}
+                    >
+                      {threads[threadKey(c, i)]?.loading ? "Loading…"
+                        : threads[threadKey(c, i)]?.open ? "Hide"
+                        : `${c.replies} ${c.replies === 1 ? "reply" : "replies"}`}
+                    </button>
+                  )}
                 </div>
+                {threads[threadKey(c, i)]?.open && (
+                  <div className="mt-3 pl-6 space-y-4 border-l-2 border-[var(--yt-border)]" data-testid="comment-thread">
+                    {(threads[threadKey(c, i)]?.items || []).map((r, j) => (
+                      <div key={j} className="flex gap-3">
+                        {r.author_thumb ? (
+                          <img src={r.author_thumb} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" loading="lazy" />
+                        ) : (
+                          <span className="w-6 h-6 rounded-full bg-[var(--yt-blue)]/20 text-[var(--yt-blue)] text-[11px] font-bold flex items-center justify-center shrink-0">
+                            {(r.author || "?").replace(/^@/, "")[0]?.toUpperCase() || "?"}
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 text-[12px]">
+                            <span className="font-medium text-[var(--yt-text)] truncate">{r.author}</span>
+                            <span className="text-[var(--yt-text-2)] shrink-0">{r.time}</span>
+                          </div>
+                          <p className="mt-0.5 text-[13px] leading-[19px] text-[var(--yt-text-2)] whitespace-pre-wrap break-words">{r.text}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {!(threads[threadKey(c, i)]?.items || []).length && !threads[threadKey(c, i)]?.loading && (
+                      <p className="text-[13px] text-[var(--yt-text-2)]">Replies unavailable for this thread.</p>
+                    )}
+                  </div>
+                )}
               </div>
             </article>
           ))}
