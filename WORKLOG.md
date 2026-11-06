@@ -1216,3 +1216,14 @@ gauntlet (named bar + harsh fresh-context critic, "OURS WINS" after fixes).
   Android uses the same plugin/bridge paths CI compiles and the mock
   exercises; extraction success on residential IPs is the operating
   assumption (this datacenter IP is hard-gated for all clients).
+
+### Session 21 addendum — CI fix
+
+The first v2.2.0 CI run went red: the runner image no longer ships ffmpeg
+("ffmpeg: not found"), which the background suite used to generate its media.
+Fix: the VP8/Opus test files are now COMMITTED fixtures
+(scripts/fixtures/bgmedia-*.webm — 1.2MB video / 0.6MB audio, verified
+playable in bundled Chromium), and the suite uses the fixture first, with the
+ffmpeg /tmp regeneration only as a local-sandbox fallback. A pure-Node WebM
+muxer was attempted and abandoned (Chromium rejected the hand-muxed files —
+not worth the rabbit hole when committed fixtures have zero dependencies).

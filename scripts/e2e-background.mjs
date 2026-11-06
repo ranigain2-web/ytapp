@@ -38,18 +38,23 @@ const bad = (m) => { FAIL++; console.log(`  ✗ ${m}`); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // media: VP8/Opus WebM (bundled Chromium decodes these — not H.264/AAC).
-// Auto-generated with ffmpeg when missing (CI runners ship ffmpeg); if
-// ffmpeg is absent the suite FAILS loudly — never a fake pass.
+// COMMITTED fixtures under scripts/fixtures/ so CI needs no system deps
+// (the ubuntu runner image dropped ffmpeg — red run b387d84). The /tmp
+// fallback regenerates via ffmpeg for local runs against a fresh sandbox;
+// if neither exists the suite FAILS loudly — never a fake pass.
 import { execSync as _execSync } from "node:child_process";
-for (const p of [MEDIA.video, MEDIA.audio]) {
+import { copyFileSync as _cp } from "node:fs";
+const FIXDIR = "scripts/fixtures";
+for (const [which, p] of [["video", MEDIA.video], ["audio", MEDIA.audio]]) {
+  const committed = `${FIXDIR}/bgmedia-${which}.webm`;
   if (!existsSync(p)) {
-    try {
-      if (p === MEDIA.video) {
-        _execSync(`ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=320x180:rate=15:duration=60" -f lavfi -i "sine=frequency=440:duration=60" -c:v libvpx -b:v 200k -c:a libopus ${p}`);
-      } else {
-        _execSync(`ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=330:duration=60" -c:a libopus ${p}`);
-      }
-    } catch (e) { console.error(`cannot generate ${p}: ffmpeg missing — install ffmpeg to run this suite`); process.exit(2); }
+    if (existsSync(committed)) _cp(committed, p);
+    else {
+      try {
+        if (which === "video") _execSync(`ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=320x180:rate=15:duration=62" -f lavfi -i "sine=frequency=440:duration=62" -c:v libvpx -b:v 150k -c:a libopus ${p}`);
+        else _execSync(`ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=330:duration=62" -c:a libopus ${p}`);
+      } catch (e) { console.error(`no ${p} and no ${committed} (ffmpeg missing) — cannot run without real media`); process.exit(2); }
+    }
   }
 }
 
