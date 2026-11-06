@@ -1043,3 +1043,37 @@ commit.
   fallback asserts the honest notice, 2160p ladder proof. **11/0/1.**
 - Full regression green: playback 108/108, parity 9/9, decipher 5/5, ads
   11/0/1, electron bundle test passed. v1.7.0.
+
+## Session 18b (2026-11-06) — v1.7.0 tagged; phase 6 opened with the goldfish review
+
+- **v1.7.0 tagged on 854c538** (CI green on all three workflows).
+- **Phase 6 pre-code goldfish review** (EGM discipline, fresh-context
+  reviewer): `docs/reviews/phase6-goldfish-review.md` — 11 findings with
+  file:line evidence. The ones that reshape phase 6:
+  1. `.yt-pop` is NOT dead (VideoCard/AccountMenu/Notifications/yt-toast use
+     it — phases 3–4 wired it AFTER the 2026-11-05 audit snapshot). The plan's
+     delete list must be re-derived from the current tree (also: keep
+     `.yt-card-lift` while deleting `.yt-media` is a no-op — both rules target
+     .yt-media).
+  2. The audit's hardcoded-color probe only matches 7 gray RGBs on 3
+     properties of visible elements — "= 0" is weaker than the plan assumes;
+     hover states, gradients, placeholders, `#3ea6ff` focus-visible, and
+     AccountMenu's `#0f0f0f`-on-token light-theme bug pass the gate. Widen the
+     probe (or at least fix the spots it misses) as part of the sweep.
+  3. The final 4×9 gauntlet is not runnable from this datacenter as specced
+     (archived references are phone-only; skips pass silently; --until-win
+     never retries SKIPPED). Needs the adfree-summary-style device-checklist
+     re-scope, and the "settings vs YouTube home" comparison is nonsense —
+     fix the surface list first.
+  4. The matrix is 8 surfaces (no playlist) in both gauntlet-loop.mjs and
+     fidelity-bar.mjs — "all 9 surfaces" requires adding the playlist surface
+     to the tools first.
+  5. The ~30-spot sweep list has drifted (Settings #555 already fixed;
+     #717171 ×15→×10; ChannelPage 70→132) — re-baseline with grep before
+     writing code.
+- Phase 6 execution order (per the review, riskiest first): re-derive the
+  color/dead-CSS lists from the current tree → widen the audit probe →
+  surface-list fixes to the gauntlet/fidelity tools → token sweep → motion
+  wire/delete → skeletons + chips-remount → PWA → gauntlet.
+- Phase 6 code itself NOT started (session ended at the review boundary —
+  per the plan's rule that the goldfish review precedes the code).

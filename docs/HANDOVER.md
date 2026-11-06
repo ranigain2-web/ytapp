@@ -205,7 +205,17 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   gauntlet baseline (ours=2 ref=2 — baseline losses are the point of a
   bar; `--until-win` flips them in later phases).
 
-## 3. Current state (as of 2026-11-06, session 18 — phases 4+5 complete; e2e 108/108 + ads 11/0/1 + decipher 5/5)
+## 3. Current state (as of 2026-11-06, session 18 — phases 4+5 SHIPPED (v1.6.0, v1.7.0); phase 6 opened, goldfish-reviewed, code not started
+
+### Phase 6 entry point (read docs/reviews/phase6-goldfish-review.md FIRST)
+- The plan's phase-6 lists are STALE: re-derive the color + dead-CSS lists
+  from the current tree (yt-pop is NOT dead; .yt-card-lift without .yt-media
+  is a no-op; Settings #555 already fixed).
+- The audit probe needs widening before "hardcoded = 0" is meaningful.
+- gauntlet-loop/fidelity-bar have 8 surfaces (no playlist) and the gauntlet
+  needs device-checklist re-scoping for reference-capture limits.
+- Execution order: re-derive lists → widen probe → tool surface fixes →
+  token sweep → motion → skeletons/chips → PWA → gauntlet → v2.0.0.
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,
