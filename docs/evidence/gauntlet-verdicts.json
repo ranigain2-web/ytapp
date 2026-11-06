@@ -1,29 +1,29 @@
 {
   "phone/home": {
     "verdict": "WINNER=reference",
-    "reason": "Image 2 reproduces YouTube's populated home feed — category chips, video cards with thumbnails, channel avatars, metadata, duration badges, and full bottom nav — while Image 1 is a mostly empty empty-state screen that fails to demonstrate the home surface at all.",
-    "gap": "Image 1 lacks any actual feed content (video cards, thumbnail grid, chips row), leaving two-thirds of the screen blank and the information density near zero.",
+    "reason": "Image 1 reproduces YouTube's actual home surface with correct dark-theme chips, full-bleed thumbnails with duration badges, metadata rows with channel avatars, and the four-tab bottom bar, while Image 2 is merely a sparse empty-state screen with a non-native header, only three nav tabs, and no feed content at all.",
+    "gap": "Image 2 lacks any feed content or filter chips and its layout (missing subscriptions tab, centered giant logo, no notification/avatar icons) diverges from YouTube's home design language.",
     "confidence": "high",
     "refSource": "archived"
   },
   "phone/watch": {
     "verdict": "WINNER=reference",
-    "reason": "Image 1 is a fully realized dark-theme YouTube watch page with correct layout, chips, and hierarchy, while Image 2 is not a watch surface at all — it is a reCAPTCHA traffic-block page with no video, metadata, or YouTube design language whatsoever.",
-    "gap": "Image 2 contains no watch-page UI whatsoever — no player, title, channel row, action chips, or comments — making it a total failure of the surface.",
+    "reason": "Image 1 renders a fully realized dark-theme watch page with correct YouTube-style player controls, title/channel metadata, pill-shaped action chips, and bottom nav, while Image 2 shows only a bare unstyled reCAPTCHA interstitial with none of YouTube's design language.",
+    "gap": "Image 2 fails to display the watch surface at all — no player, metadata, actions, or themed styling — making it a total functional and visual failure.",
     "confidence": "high",
     "refSource": "archived"
   },
   "phone/search": {
     "verdict": "WINNER=ours",
-    "reason": "Image 2 faithfully reproduces YouTube's mobile search surface — edge-to-edge thumbnails, top search bar with filter/mic icons, live badge with signal icon, overflow menus, and compact metadata rows — while Image 1 reads as a desktop dark-mode home feed awkwardly squeezed into a phone frame, with a hamburger menu, redundant search icon, non-native filter chips, and oversized rounded thumbnails.",
-    "gap": "Image 1's layout is desktop-derived rather than the mobile search pattern (edge-to-edge results, condensed metadata on one line, overflow menu per result).",
+    "reason": "Image 1 nails the YouTube mobile search surface — compact search bar with filter icon and voice, edge-to-edge vertical list with correct metadata hierarchy (title, channel • views • date), overlaid duration badges, and the authentic bottom nav — whereas Image 2 presents a cluttered desktop-style header (hamburger, logo, duplicate search and moon icons, avatar cluster) that contradicts the mobile search pattern, oversized two-line avatars beside titles instead of inline, and an unexplained \"Unwatched/Recently uploaded\" chip row more akin to a feed than search results.",
+    "gap": "Image 2's header and list structure abandon the mobile search layout entirely — it reads as a modified feed page, not a search results screen.",
     "confidence": "high",
     "refSource": "fresh"
   },
   "phone/shorts": {
     "verdict": "WINNER=ours",
-    "reason": "Image 2 nails the authentic YouTube Shorts layout — proper header branding, right-rail with labeled engagement counts, channel handle with white subscribe pill, title, and linked-audio/scrim pill at the bottom — while Image 1 is littered with collisions (subscribe button overlapping \"Shorts feed\" text, a stray progress bar/timestamp crashing into the avatar row), missing like-count context, and a muddled top bar with mismatched icons.",
-    "gap": "Image 1's bottom metadata row is broken — overlapping subscribe button, garbled timestamp \"00/0:00\" colliding with the channel avatar, and a floating progress bar that fights the title text for space.",
+    "reason": "Image 2 presents a clean, canonical Shorts vertical layout with properly stacked action icons (counts, labels, sound disc, channel row), while Image 1 is a cluttered landscape player with overlapping text (\"0:00 / 0:00\" colliding with the channel name), a stray scrubber bar, and mismatched control clusters that break YouTube's design language.",
+    "gap": "Image 1's bottom meta area is visibly broken — the channel name and Subscribe pill overlap the timestamp/progress bar, and the duplicated mute icon plus search/gear cluster reads as a web player crammed into a phone frame.",
     "confidence": "high",
     "refSource": "fresh"
   }

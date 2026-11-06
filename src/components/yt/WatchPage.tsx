@@ -187,7 +187,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
 
       {(v as { is_premiere?: boolean }).is_premiere && (
         <div className="mb-3 rounded-xl bg-[var(--yt-bg-elev)] border border-[var(--yt-border)] px-4 py-3 flex items-center gap-3" data-testid="premiere-banner">
-          <span className="w-2 h-2 rounded-full bg-[#ff0000] animate-pulse shrink-0" aria-hidden />
+          <span className="w-2 h-2 rounded-full bg-[var(--yt-red)] animate-pulse shrink-0" aria-hidden />
           <p className="text-[14px] text-[var(--yt-text)]">
             <span className="font-medium">Premiere</span>
             <span className="text-[var(--yt-text-2)]"> — {(v as { playability_reason?: string }).playability_reason || "starts soon"}. The player below shows YouTube&apos;s own countdown.</span>
@@ -295,7 +295,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
                     <div className="flex items-center gap-3">
                       <button
                         onClick={replayEmbed}
-                        className="flex items-center gap-2 h-10 px-5 rounded-full bg-[var(--yt-bg-elev2)] text-white text-[14px] font-medium hover:bg-[#3f3f3f]"
+                        className="flex items-center gap-2 h-10 px-5 rounded-full bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] text-[14px] font-medium hover:bg-[var(--yt-hover)]"
                       >
                         <RotateCcw className="w-5 h-5" /> Replay
                       </button>
@@ -324,7 +324,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         )}
         {embedActive && !blockedMessage && (
           <p className="px-4 sm:px-0 py-2 text-[12px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev)] sm:rounded-lg sm:mt-2 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#ffb13b] shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-[var(--yt-status-warn)] shrink-0" />
             {standaloneMode
               ? "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Background play works when a video streams directly."
               : communityMode

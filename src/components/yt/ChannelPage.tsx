@@ -101,7 +101,7 @@ export default function ChannelPage({ channelId }: { channelId: string }) {
     return (
       <div className="py-20 text-center">
         <p className="text-[var(--yt-text-2)] mb-2">Couldn&apos;t load this channel</p>
-        <p className="text-sm text-[#717171] mb-6">{err}</p>
+        <p className="text-sm text-[var(--yt-text-2)] mb-6">{err}</p>
         <button onClick={() => setRetry(r => r + 1)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-sm">
           <RefreshCw className="w-4 h-4" /> Retry
         </button>
@@ -129,7 +129,7 @@ export default function ChannelPage({ channelId }: { channelId: string }) {
 
         <img src={c.banner} alt="" className="w-full h-[100px] sm:h-[160px] object-cover rounded-xl mb-6" />
       ) : (
-        <div className="w-full h-[100px] sm:h-[160px] rounded-xl mb-6 bg-gradient-to-r from-[#1a1a2e] via-[#16213e] to-[#1a1a2e]" />
+        <div className="w-full h-[100px] sm:h-[160px] rounded-xl mb-6 bg-gradient-to-r from-[var(--yt-banner-1)] via-[var(--yt-banner-2)] to-[var(--yt-banner-1)]" />
       )}
 
       {/* channel header */}

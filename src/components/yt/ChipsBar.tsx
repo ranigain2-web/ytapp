@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useRouter } from "@/lib/yt-router";
 
 export const CATEGORIES = [
@@ -20,6 +21,12 @@ export const CATEGORIES = [
 
 export default function ChipsBar({ active, onSelect }: { active: string; onSelect: (cat: string) => void }) {
   const { navigate } = useRouter();
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+  // phase 6: the active chip scrolls into view on category change (YouTube
+  // keeps the selected chip visible when the row is wider than the viewport)
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [active]);
   return (
     <div className="sticky top-[var(--yt-header-h)] z-30 bg-[var(--yt-bg)]">
       <div className="yt-chips-fade flex gap-3 px-2 sm:px-6 py-3 overflow-x-auto no-scrollbar" role="tablist" aria-label="Categories">
@@ -28,10 +35,11 @@ export default function ChipsBar({ active, onSelect }: { active: string; onSelec
           return (
             <button
               key={c.id}
+              ref={isActive ? activeRef : undefined}
               role="tab"
               aria-selected={isActive}
               onClick={() => { onSelect(c.id); navigate({ name: "home", category: c.id }); }}
-              className={`shrink-0 h-8 px-3 rounded-lg text-[14px] font-medium transition-colors ${isActive ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]"}`}
+              className={`yt-chip shrink-0 h-8 px-3 rounded-lg text-[14px] font-medium ${isActive ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)] hover:bg-[var(--yt-hover)]"}`}
             >
               {c.label}
             </button>

@@ -205,7 +205,19 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   gauntlet baseline (ours=2 ref=2 — baseline losses are the point of a
   bar; `--until-win` flips them in later phases).
 
-## 3. Current state (as of 2026-11-06, session 18 — phases 4+5 SHIPPED (v1.6.0, v1.7.0); phase 6 opened, goldfish-reviewed, code not started
+## 3. Current state (as of 2026-11-06, session 19 — THE PLAN IS COMPLETE: v1.6.0, v1.7.0, v2.0.0 shipped
+
+### v2.0.0 (phase 6 — appearance final)
+- Zero hardcoded colors (audit-colors.mjs, CI-gated) + zero dead CSS
+  (audit-deadcss.mjs, CI-gated); status/banner tokens in both themes.
+- Motion layer wired (page-enter fill-mode:none — the both-mode trap broke
+  position:fixed pages; see globals.css), chips-remount fixed, suggestion
+  skeletons both surfaces, grid parity 3xl:6, PWA installable.
+- Gauntlet/fidelity tools: 8 real surfaces incl. playlist; the full-matrix
+  --until-win gauntlet is the owner-device item (datacenter references are
+  bot-gated shells — docs/evidence/phase6-summary.md).
+- Owner device checklist: run gauntlet --until-win on a clean network; the
+  deciphering −10pp measurement (phase 5); gzip base.js verification.
 
 ### Phase 6 entry point (read docs/reviews/phase6-goldfish-review.md FIRST)
 - The plan's phase-6 lists are STALE: re-derive the color + dead-CSS lists

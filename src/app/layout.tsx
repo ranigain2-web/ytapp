@@ -20,6 +20,8 @@ export const metadata: Metadata = {
   title: "YouTube",
   description: "Watch videos — ad-free",
   applicationName: "YouTube",
+  manifest: "/manifest.webmanifest", // phase 6: installable PWA on web
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
@@ -28,8 +30,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0f0f0f" },
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f0f0f" }, // hex-ok: the dark theme value itself
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" }, // hex-ok: the light theme value itself
   ],
 };
 

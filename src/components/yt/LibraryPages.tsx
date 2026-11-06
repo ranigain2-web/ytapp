@@ -40,7 +40,7 @@ function HistoryRow({ e, onRemove }: { e: HistoryEntry; onRemove: () => void }) 
         {e.duration && <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[12px] font-medium px-1 rounded">{formatTime(e.length || 0) || e.duration}</span>}
         {pct > 0 && (
           <div className="absolute bottom-0 inset-x-0 h-[3px] bg-white/30">
-            <div className="h-full bg-[#ff0000]" style={{ width: `${pct}%` }} />
+            <div className="h-full bg-[var(--yt-red)]" style={{ width: `${pct}%` }} />
           </div>
         )}
         <button
@@ -255,7 +255,7 @@ export function PlaylistsPage() {
           {playlists.map(p => (
             <div key={p.id} className="group cursor-pointer" onClick={() => navigate({ name: "later" })}>
               <div className="aspect-video rounded-xl bg-[var(--yt-bg-elev2)] flex flex-col items-center justify-center gap-2 mb-3 relative">
-                <Play className="w-10 h-10 text-[var(--yt-text-2)]" fill="#aaa" />
+                <Play className="w-10 h-10 text-[var(--yt-text-2)]" fill="currentColor" />
                 <span className="text-[13px] text-[var(--yt-text-2)]">{p.videoIds.length} videos</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); deletePlaylist(p.id); ytToast(`Playlist "${p.name}" deleted`); }}

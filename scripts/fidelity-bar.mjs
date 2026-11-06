@@ -55,8 +55,9 @@ const CASES = [
   { name: "shorts", ours: "/?page=shorts", ref: "/shorts" },
   { name: "channel", ours: "/?channel=UCuAXFkgsw1L7xaCfnd5JJOw", ref: "/@RickAstleyYT" },
   { name: "subscriptions", ours: "/?page=subscriptions", ref: "/feed/subscriptions" },
-  { name: "settings", ours: "/?page=settings", ref: "/" }, // YouTube has no settings page on the surface; home carries the chrome bar
   { name: "history", ours: "/?page=history", ref: "/feed/history" },
+  // phase 6: playlist in, settings out (no reference exists — see gauntlet-loop)
+  { name: "playlist", ours: "/?page=playlist&id=PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu", ref: "/playlist?list=PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu" },
 ];
 
 // Runs inside the page. Dependency-free.
@@ -296,7 +297,7 @@ function diffTable(ours, ref) {
           err = String(e).slice(0, 120);
           report[key][side] = { error: err };
         }
-        await ctx.close();
+        await ctx.close().catch(() => { /* headless teardown flake — the captures are already on disk */ });
       }
       const a = report[key].ours, b = report[key].ref;
       console.log(`\n${"=".repeat(72)}\n${key}\n${"=".repeat(72)}`);

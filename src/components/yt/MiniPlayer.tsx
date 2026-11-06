@@ -106,7 +106,7 @@ export default function MiniPlayer() {
           data-testid="mini-frame"
         >
           {/* progress hairline */}
-          <div className="absolute bottom-0 left-0 h-[2px] bg-[#ff0000] z-10" style={{ width: `${pct}%` }} data-testid="mini-hairline" />
+          <div className="absolute bottom-0 left-0 h-[2px] bg-[var(--yt-red)] z-10" style={{ width: `${pct}%` }} data-testid="mini-hairline" />
         </div>
 
         {/* info + controls */}

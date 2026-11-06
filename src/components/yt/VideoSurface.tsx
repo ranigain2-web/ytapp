@@ -1046,8 +1046,8 @@ export default function VideoSurface() {
       {/* error (no-source hands off to the embed instead — [A2]) */}
       {error && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/90" data-player-surface="1">
-          <p className="text-[#aaa] text-sm">{error}</p>
-          <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-full bg-[#272727] text-sm hover:bg-[#3f3f3f]">Reload</button>
+          <p className="text-[var(--yt-text-2)] text-sm">{error}</p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-full bg-[var(--yt-bg-elev2)] text-sm hover:bg-[var(--yt-hover)]">Reload</button>
         </div>
       )}
 

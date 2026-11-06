@@ -110,7 +110,7 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
       {renderSection(undefined, settings)}
 
       {/* PHASE3-REMOVED: Sign in — no account system; a dead button is a lie */}
-      <p className="px-6 pt-4 text-[13px] leading-5 text-[#717171]">
+      <p className="px-6 pt-4 text-[13px] leading-5 text-[var(--yt-text-2)]">
         YouTube client · data fetched on-device
       </p>
     </nav>

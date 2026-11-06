@@ -176,6 +176,27 @@ async function newPage(browser, viewport = { width: 390, height: 844 }) {
     await ctx.close();
   }
 
+  // phase 6: PWA installability surface (manifest + icons resolve)
+  {
+    try {
+      const m = await (await fetch(`${BASE}/manifest.webmanifest`)).json();
+      if (m.icons?.length >= 2 && m.display === "standalone") ok("PWA manifest loads with icons (installable)");
+      else bad("PWA manifest malformed");
+      const icon = await fetch(`${BASE}${m.icons[0].src}`);
+      if (icon.ok && (await icon.arrayBuffer()).byteLength > 1000) ok("PWA icon resolves (non-trivial bytes)");
+      else bad("PWA icon missing");
+      const pctx = await browser.newContext();
+      const p = await pctx.newPage();
+      await p.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+      const link = await p.evaluate(() => !!document.querySelector('link[rel="manifest"]'));
+      if (link) ok("manifest linked in the document head");
+      else bad("manifest link missing from head");
+      await pctx.close();
+    } catch (e) {
+      bad(`PWA checks failed: ${String(e).slice(0, 80)}`);
+    }
+  }
+
   await browser.close();
   console.log(`\nRESULT: ${PASS} passed, ${FAIL} failed`);
   process.exit(FAIL === 0 ? 0 : 1);

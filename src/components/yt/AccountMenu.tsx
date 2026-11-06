@@ -38,7 +38,7 @@ function DataModal({ onClose }: { onClose: () => void }) {
           source) and are not stored. Clearing the app storage (Settings → Clear watch history,
           or browser site data) removes all of it permanently.
         </p>
-        <button onClick={onClose} className="mt-5 h-9 px-4 rounded-full bg-[var(--yt-blue)] text-[#0f0f0f] text-[14px] font-medium">
+        <button onClick={onClose} className="mt-5 h-9 px-4 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] text-[14px] font-medium">
           Got it
         </button>
       </div>

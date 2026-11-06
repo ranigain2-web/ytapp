@@ -178,7 +178,7 @@ export default function Comments({ videoId }: { videoId: string }) {
                   {c.replies > 0 && c.replies_token && (
                     <button
                       onClick={() => toggleThread(c, i)}
-                      className="text-[13px] font-medium text-[var(--yt-blue)] hover:text-[#6bc1ff]"
+                      className="text-[13px] font-medium text-[var(--yt-blue)] hover:text-[var(--yt-blue)] hover:brightness-110"
                       data-testid="comment-replies-toggle"
                       aria-expanded={!!threads[threadKey(c, i)]?.open}
                     >

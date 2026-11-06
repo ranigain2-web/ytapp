@@ -38,6 +38,7 @@ export default function Header({ onToggleSidebar, onSearch }: {
   const [focus, setFocus] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggLoading, setSuggLoading] = useState(false);
   const [suggOpen, setSuggOpen] = useState(false);
   const [recents, setRecents] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,18 +77,22 @@ export default function Header({ onToggleSidebar, onSearch }: {
     setFocus(false);
   }, [onSearch]);
 
-  // Desktop suggestions dropdown (debounced) + recents — scheduled, not sync
+  // Desktop suggestions dropdown (debounced) + recents — scheduled, not sync.
+  // phase 6: suggLoading drives the dropdown skeleton (the dropdown used to
+  // simply not render while loading)
   useEffect(() => {
     const t = setTimeout(() => {
       const query = q.trim();
       if (!query || !focus) {
         setSuggestions([]);
+        setSuggLoading(false);
         if (focus) setRecents(getRecentSearches());
         return;
       }
+      setSuggLoading(true);
       fetchSuggestions(query)
-        .then(s => setSuggestions(s.filter(s2 => s2.toLowerCase() !== query.toLowerCase()).slice(0, 9)))
-        .catch(() => setSuggestions([]));
+        .then(s => { setSuggestions(s.filter(s2 => s2.toLowerCase() !== query.toLowerCase()).slice(0, 9)); setSuggLoading(false); })
+        .catch(() => { setSuggestions([]); setSuggLoading(false); });
     }, 170);
     return () => clearTimeout(t);
   }, [q, focus]);
@@ -114,7 +119,7 @@ export default function Header({ onToggleSidebar, onSearch }: {
           <button
             onClick={onToggleSidebar}
             aria-label="Guide"
-            className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-[var(--yt-bg-elev2)] active:bg-[var(--yt-hover)] transition-colors"
+            className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-[var(--yt-bg-elev2)] active:bg-[var(--yt-hover)] yt-icon-btn"
           >
             <Menu className="w-6 h-6 text-[var(--yt-text)]" />
           </button>
@@ -185,27 +190,38 @@ export default function Header({ onToggleSidebar, onSearch }: {
                   placeholder="Search"
                   aria-label="Search"
                   autoComplete="off"
-                  className={`flex-1 min-w-0 bg-transparent text-[16px] text-[var(--yt-text)] placeholder:text-[#888] outline-none px-4 ${focus ? "pl-1" : ""}`}
+                  className={`flex-1 min-w-0 bg-transparent text-[16px] text-[var(--yt-text)] placeholder:text-[var(--yt-text-2)] outline-none px-4 ${focus ? "pl-1" : ""}`}
                 />
                 {q && (
                   <button type="button" onClick={() => { setQ(""); inputRef.current?.focus(); }} aria-label="Clear search" className="w-10 flex items-center justify-center shrink-0">
-                    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="#aaa" strokeWidth="1.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                    <svg viewBox="0 0 24 24" className="w-6 h-6 text-[var(--yt-text-2)]" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
                   </button>
                 )}
               </div>
               {/* suggestions dropdown */}
-              {suggOpen && focus && desktopList.length > 0 && (
+              {suggOpen && focus && (desktopList.length > 0 || suggLoading) && (
                 <div
                   ref={suggBoxRef}
                   className="absolute top-11 left-0 right-0 rounded-xl bg-[var(--yt-bg-elev)] border border-[var(--yt-border)] shadow-2xl py-2 z-50"
                   data-testid="desktop-suggestions"
                 >
-                  {desktopList.map((item, i) => (
+                  {suggLoading && q.trim() && desktopList.length <= 1 ? (
+                    /* phase 6: skeleton rows while suggestions load (the exact-match
+                       entry renders above them once present) */
+                    <div data-testid="suggestion-skeleton">
+                      {[0, 1, 2, 3].map(i => (
+                        <div key={i} className="flex items-center gap-4 px-4 py-2.5" aria-hidden>
+                          <span className="w-6 h-6 rounded-full bg-[var(--yt-skel)] animate-pulse" />
+                          <span className={`h-3.5 rounded bg-[var(--yt-skel)] animate-pulse ${i % 2 ? "w-[45%]" : "w-[62%]"}`} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : desktopList.map((item, i) => (
                     <button
                       key={`${item.text}-${i}`}
                       type="button"
                       onMouseDown={(e) => { e.preventDefault(); submitQuery(item.text); }}
-                      className="w-full flex items-center gap-4 px-4 py-2.5 text-left hover:bg-[#2f2f2f]"
+                      className="w-full flex items-center gap-4 px-4 py-2.5 text-left hover:bg-[var(--yt-hover)]"
                       data-testid={item.exact ? "suggestion-exact" : "suggestion-item"}
                     >
                       {("recent" in item && item.recent)
@@ -220,7 +236,7 @@ export default function Header({ onToggleSidebar, onSearch }: {
             <button
               type="submit"
               aria-label="Search"
-              className="w-16 h-10 rounded-r-full bg-[#222222] border border-l-0 border-[var(--yt-border)] flex items-center justify-center hover:bg-[#1f1f1f] shrink-0"
+              className="w-16 h-10 rounded-r-full bg-[var(--yt-bg-elev2)] border border-l-0 border-[var(--yt-border)] flex items-center justify-center hover:bg-[var(--yt-hover)] shrink-0"
             >
               <Search className="w-5 h-5 text-[var(--yt-text)]" />
             </button>

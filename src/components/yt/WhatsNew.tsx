@@ -32,11 +32,11 @@ export default function WhatsNew() {
   if (!open) return null;
 
   const features: { icon: React.ReactNode; title: string; where: string }[] = [
-    { icon: <ShieldCheck className="w-5 h-5" />, title: "The ad-free guarantee, asserted", where: "A new test suite proves what only insiders could claim: every media request a video makes goes to googlevideo or our own proxy, HLS manifests carry no ad tags, and no ad network is ever contacted — and when a video falls back to the official embed, the player says so honestly." },
-    { icon: <PlayCircle className="w-5 h-5" />, title: "Deciphering, on your device", where: "When YouTube scrambles stream URLs, ytapp now untangles them locally — a tiny slice of YouTube's own player code runs in the app to restore direct, ad-free playback. Failures fall back to the embed quietly, never to a broken page." },
-    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Seek previews everywhere", where: "The storyboard thumbnails when you hover the seek bar now work in standalone mode too — and we fixed a bug that had silently killed them in both modes." },
-    { icon: <Gauge className="w-5 h-5" />, title: "Honest live and premiere states", where: "Live streams show a LIVE bar with a jump-to-live button instead of a fake scrubber; scheduled premieres say so with YouTube's own countdown instead of pretending to be unavailable." },
-    { icon: <SkipForward className="w-5 h-5" />, title: "Everything from 1.6", where: "Subscriptions feed, notifications, channel tabs, comment threads, truthful Shorts, playlist queues, the account menu — all still there." },
+    { icon: <ShieldCheck className="w-5 h-5" />, title: "Two full versions in one update", where: "1.6 brought subscriptions, notifications, channel tabs, comment threads, truthful Shorts and playlist queues. 1.7 added on-device URL deciphering, seek-preview thumbnails everywhere, honest live and premiere states, and a test suite that proves no ad network is ever contacted." },
+    { icon: <Gauge className="w-5 h-5" />, title: "Light theme, fixed for real", where: "Three genuine light-mode bugs are gone — the Replay button, toasts and the sign-in button all had dark-only colors baked in. Every color in the app now comes from the theme system, with zero exceptions, enforced by a new automated check." },
+    { icon: <PlayCircle className="w-5 h-5" />, title: "It moves like YouTube now", where: "Pages rise in on navigation, chips press down when tapped, thumbnails zoom on hover, and switching category chips keeps your place instead of jumping back — with a smooth cross-fade into the new feed." },
+    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Loading states everywhere", where: "Search suggestions show skeleton rows while loading on both mobile and desktop, the video grid keeps six columns at very wide sizes just like the skeleton promised, and everything respects your reduce-motion setting." },
+    { icon: <LayoutPanelTop className="w-5 h-5" />, title: "Install it like an app", where: "On the web, ytapp is now an installable PWA — add it to your home screen or desktop and it opens in its own window with its own icon." },
   ];
 
   return (
@@ -64,7 +64,7 @@ export default function WhatsNew() {
             ))}
           </ul>
           <p className="mt-4 flex items-start gap-2 text-[12px] leading-[17px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev2)] rounded-xl p-3">
-            <CheckCircle2 className="w-4 h-4 shrink-0 mt-px text-[#2ba640]" />
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-px text-[var(--yt-status-ok)]" />
             You can always confirm your version in Settings → About (it should say v{APP_VERSION}). If it says something older, install the latest APK from the GitHub Releases page.
           </p>
         </div>

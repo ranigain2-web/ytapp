@@ -49,8 +49,11 @@ const SURFACES = [
   { name: "shorts", ours: "/?page=shorts", ref: "/shorts" },
   { name: "channel", ours: "/?channel=UCuAXFkgsw1L7xaCfnd5JJOw", ref: "/@RickAstleyYT" },
   { name: "subscriptions", ours: "/?page=subscriptions", ref: "/feed/subscriptions" },
-  { name: "settings", ours: "/?page=settings", ref: "/" },
   { name: "history", ours: "/?page=history", ref: "/feed/history" },
+  // phase 6: playlist surface added (the "4x9" was really 4x8); settings
+  // REMOVED: YouTube has no settings page — the old settings-vs-home
+  // comparison was meaningless (goldfish finding)
+  { name: "playlist", ours: "/?page=playlist&id=PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu", ref: "/playlist?list=PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu" },
 ];
 const QUICK_SURFACES = ["home", "watch", "search", "shorts"];
 const QUICK_PROFILES = ["phone"];

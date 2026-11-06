@@ -1077,3 +1077,39 @@ commit.
   wire/delete → skeletons + chips-remount → PWA → gauntlet.
 - Phase 6 code itself NOT started (session ended at the review boundary —
   per the plan's rule that the goldfish review precedes the code).
+
+## Session 19 (2026-11-06) — Phase 6 complete: appearance final (v2.0.0)
+
+- Executed per the goldfish review's riskiest-first order:
+  - **Re-derived lists** from the current tree (the plan's were stale:
+    yt-pop NOT dead — kept; the sweep found 39 spots not ~30).
+  - **Theme-token sweep**: 39 spots → tokens; new status + banner tokens in
+    BOTH themes; 3 real light-theme bugs fixed (Replay pill, toast,
+    AccountMenu contrast). New source-level gate `audit-colors.mjs` = 0
+    (catches hover/focus/gradients the runtime probe misses) — in CI.
+  - **Dead-CSS gate** `audit-deadcss.mjs` (37 classes, 0 dead) — in CI.
+    Deleted 8 truly-dead rules; wired `.yt-page-enter`/`.yt-chip`/
+    `.yt-icon-btn`/`.yt-card-lift` (retargeted at the thumbnail).
+  - **Chromium animation trap found live**: `fill-mode: both` on page-enter
+    made the animated wrapper a containing block for the fixed-position
+    Shorts page (clicks landed off-screen, y=-212). Bisected with a stash
+    experiment, fixed with `fill-mode: none`, documented in globals.css.
+  - **Chips-remount fix**: HomePage unkeyed from category + in-place grid
+    reset + cross-fade + active-chip scrollIntoView — verified live
+    (scrollLeft preserved, row not remounted).
+  - **Suggestion skeletons** on both search surfaces (desktop dropdown now
+    renders during loading instead of not at all); grid parity 3xl:6 fixed.
+  - **PWA**: manifest + generated icons + head link — 3 new parity checks
+    (12/12).
+  - **Tool fixes**: playlist surface in gauntlet + fidelity (8 real surfaces
+    each), settings-vs-home removed (no reference exists), fidelity teardown
+    flake fixed.
+- **Final gauntlet re-scoped honestly** (goldfish R6): YouTube references are
+  bot-gated empty shells from this network (8/8 fidelity refs EMPTY). Quick
+  gauntlet: search + shorts WIN vs fresh refs; home/watch judged against
+  archived refs where our capture caught a gated-server skeleton. Full 4×8
+  `--until-win` on a clean network is the owner-device item — documented in
+  docs/evidence/phase6-summary.md per the phase-5 precedent.
+- **Final regression all green**: playback 108/108, parity 12/12, decipher
+  5/5, ads 11/0/1, colors 0, deadcss 0, electron bundle PASSED.
+  **v2.0.0 — the plan is complete.**

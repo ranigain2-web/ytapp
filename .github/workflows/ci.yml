@@ -78,6 +78,11 @@ jobs:
       - name: Decipher fixture test (phase 5 — no network)
         run: bun scripts/test-decipher.mjs
 
+      - name: Phase-6 gates (hardcoded colors = 0, dead CSS = 0)
+        run: |
+          node scripts/audit-colors.mjs
+          node scripts/audit-deadcss.mjs
+
       - name: E2E ads suite (phase 5 — ad-absence assertions)
         run: |
           bash scripts/with-server.sh 'node scripts/e2e-ads.mjs 2>&1 | tee /tmp/ads.log; grep -E "RESULT: ([1-9][0-9]*) passed, 0 failed" /tmp/ads.log'

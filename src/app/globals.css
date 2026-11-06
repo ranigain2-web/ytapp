@@ -182,6 +182,14 @@ html.yt-dark {
   --yt-scroll: #5b5b5b;
   --yt-scroll-hover: #787878;
   --yt-chip-fade: #0f0f0f;
+  /* phase 6 status tokens (dark values) */
+  --yt-status-warn: #ffb13b;
+  --yt-status-ok: #2ba640;
+  --yt-status-err: #ff4e45;
+  /* channel banner gradient (dark) */
+  --yt-banner-1: #1a1a2e;
+  --yt-banner-2: #16213e;
+  --yt-banner-3: #0f3460;
 }
 
 html.yt-light {
@@ -206,6 +214,14 @@ html.yt-light {
   --yt-scroll: #c1c1c1;
   --yt-scroll-hover: #9a9a9a;
   --yt-chip-fade: #ffffff;
+  /* phase 6 status tokens — light values tuned for white bg readability */
+  --yt-status-warn: #9e6a00;
+  --yt-status-ok: #137333;
+  --yt-status-err: #d93025;
+  /* channel banner gradient (light) */
+  --yt-banner-1: #e8eaf6;
+  --yt-banner-2: #d7e0f2;
+  --yt-banner-3: #c3d4f0;
 }
 
 /* The app canvas follows the theme tokens (overrides the shadcn body bg).
@@ -241,9 +257,6 @@ html.yt-light { color-scheme: light; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Video card hover like YouTube */
-.yt-card:hover .yt-thumb-img { transform: none; }
-
 /* Custom range input (volume slider) */
 input[type="range"].yt-vol {
   -webkit-appearance: none;
@@ -274,7 +287,6 @@ input[type="range"].yt-vol::-moz-range-thumb {
 
 /* Gradient scrims on player */
 .yt-scrim-bottom { background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.4) 60%, transparent); }
-.yt-scrim-top { background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent); }
 
 /* Progress red bar with glow */
 .yt-progress-played { background: #ff0000; }
@@ -283,8 +295,6 @@ input[type="range"].yt-vol::-moz-range-thumb {
 /* Line clamp helpers */
 .clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.clamp-4 { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* Skeleton shimmer (theme-aware) */
 @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
@@ -296,12 +306,9 @@ input[type="range"].yt-vol::-moz-range-thumb {
 }
 
 /* Ripple-ish subtle hover on dark buttons */
-.yt-btn { transition: background-color 0.15s ease; }
-.yt-btn:hover { background-color: var(--yt-hover); }
-
 /* Hide focus rings for mouse users but keep for keyboard */
 :focus:not(:focus-visible) { outline: none; }
-:focus-visible { outline: 2px solid #3ea6ff; outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--yt-blue); outline-offset: 2px; }
 
 /* Hide Next.js dev-tools overlay in dev screenshots (not present in prod builds) */
 nextjs-portal { display: none !important; }
@@ -406,16 +413,6 @@ html.yt-android [data-yt-mobile-nav] { display: flex; }
 .yt-seek-pop { animation: yt-seek-pop 0.7s ease-out forwards; }
 
 /* Active bottom-nav icons (Material-style filled states) */
-.yt-nav-fill { fill: currentColor; }
-
-/* Refined skeleton: slightly warmer shimmer cadence */
-.yt-skeleton-v2 {
-  background: var(--yt-skel);
-  background-image: linear-gradient(100deg, var(--yt-skel) 20%, var(--yt-skel2) 42%, var(--yt-skel) 62%);
-  background-size: 340px 100%;
-  animation: shimmer 1.5s infinite linear;
-}
-
 /* ==========================================================================
    Motion & materiality layer (phase 13)
    Goal: the app should feel as smooth as the real thing on a laptop and a
@@ -428,18 +425,25 @@ html.yt-android [data-yt-mobile-nav] { display: flex; }
   from { opacity: 0; transform: translateY(7px); }
   to   { opacity: 1; transform: none; }
 }
-.yt-page-enter { animation: yt-page-enter 0.28s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+/* fill-mode: DELIBERATELY none — a filled transform animation keeps the
+   element as a containing block for position:fixed descendants in Chromium,
+   which broke the fixed-position Shorts page. No fill = nothing applied
+   after the 280ms run. */
+.yt-page-enter { animation: yt-page-enter 0.28s cubic-bezier(0.2, 0.7, 0.3, 1) none; }
 
 /* Media tiles: slow-out zoom (the YouTube grid hover feel) + a hairline
    border that appears with the scale, which reads as materiality rather than
    a flat colour change. */
-.yt-media {
+/* phase 6: retargeted at the thumbnail itself (the old .yt-media wrapper
+   never shipped; the class is dead — this is the first time the hover-zoom
+   actually applies) */
+.yt-card-lift .yt-thumb-img {
   transition: transform 0.42s cubic-bezier(0.2, 0.7, 0.3, 1), filter 0.3s ease;
   will-change: transform;
 }
-.yt-card-lift .yt-media { transform: scale(1); }
+.yt-card-lift .yt-thumb-img { transform: scale(1); }
 @media (hover: hover) and (pointer: fine) {
-  .yt-card-lift:hover .yt-media { transform: scale(1.045); filter: saturate(1.06); }
+  .yt-card-lift:hover .yt-thumb-img { transform: scale(1.045); filter: saturate(1.06); }
 }
 
 /* Chips / pills: YouTube's springy press, and a real hover state. */
@@ -452,16 +456,19 @@ html.yt-android [data-yt-mobile-nav] { display: flex; }
 .yt-icon-btn { transition: background-color 0.18s ease, transform 0.14s cubic-bezier(0.2, 0.7, 0.3, 1); }
 .yt-icon-btn:active { transform: scale(0.92); }
 
-/* Bottom-nav / rail icons cross-fade instead of snapping. */
-.yt-nav-item { transition: color 0.2s ease, transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1); }
-.yt-nav-item:active { transform: scale(0.9); }
-
 /* Overlays (menus, sheets) fade + scale in from their anchor. */
 @keyframes yt-pop-in {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to   { opacity: 1; transform: none; }
 }
 .yt-pop { animation: yt-pop-in 0.16s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+/* phase 6: grid cross-fade on category swap (chips stay put, the grid fades) */
+@keyframes yt-grid-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.yt-grid-enter { animation: yt-grid-in 0.25s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
 
 /* Honor the OS setting: kill decorative motion outright. */
 @media (prefers-reduced-motion: reduce) {

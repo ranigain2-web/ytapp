@@ -163,7 +163,7 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
             autoComplete="off"
             autoCorrect="off"
             enterKeyHint="search"
-            className="flex-1 min-w-0 bg-transparent text-[16px] text-[var(--yt-text)] placeholder:text-[#888] outline-none px-4"
+            className="flex-1 min-w-0 bg-transparent text-[16px] text-[var(--yt-text)] placeholder:text-[var(--yt-text-2)] outline-none px-4"
           />
           {q && (
             <button
@@ -183,7 +183,7 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
         role="listbox"
         id="yt-suggestion-listbox">
         {!q.trim() && recents.length === 0 && (
-          <div className="pt-16 text-center text-[13px] text-[#717171] px-8">
+          <div className="pt-16 text-center text-[13px] text-[var(--yt-text-2)] px-8">
             No recent searches yet — start typing to see suggestions.
           </div>
         )}
@@ -215,7 +215,15 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
           </button>
         ))}
         {loadingSugg && q.trim() && (
-          <div className="px-4 py-3 text-[13px] text-[#717171]">Searching suggestions…</div>
+          /* phase 6: skeleton rows like the desktop dropdown */
+          <div data-testid="suggestion-skeleton" aria-label="Loading suggestions">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="flex items-center gap-4 px-4 py-2.5" aria-hidden>
+                <span className="w-5 h-5 rounded-full bg-[var(--yt-skel)] animate-pulse" />
+                <span className={`h-3.5 rounded bg-[var(--yt-skel)] animate-pulse ${i % 2 ? "w-[52%]" : "w-[68%]"}`} />
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

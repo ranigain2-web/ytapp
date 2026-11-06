@@ -186,8 +186,8 @@ export function VideoCard({ video, compact = false, responsive = false }: { vide
     // (64%). A fixed 168px left the text column far wider than YouTube's and
     // made every rail card ~20% shorter than the real one.
     const thumbCls = responsive
-      ? "relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[var(--yt-bg-elev)] sm:max-lg:w-full sm:max-lg:rounded-xl lg:w-[65%] xl:w-[64%]"
-      : "relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[var(--yt-bg-elev)]";
+      ? "yt-card-lift relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[var(--yt-bg-elev)] sm:max-lg:w-full sm:max-lg:rounded-xl lg:w-[65%] xl:w-[64%]"
+      : "yt-card-lift relative w-[168px] shrink-0 aspect-video rounded-lg overflow-hidden bg-[var(--yt-bg-elev)]";
     return (
       <div
         className={rootCls}
@@ -200,7 +200,7 @@ export function VideoCard({ video, compact = false, responsive = false }: { vide
         <div className={thumbCls}>
           {!imgFailed ? (
 
-            <img src={video.thumb} alt={video.title} loading="lazy" className="w-full h-full object-cover" onError={() => setImgFailed(true)} />
+            <img src={video.thumb} alt={video.title} loading="lazy" className="yt-thumb-img w-full h-full object-cover" onError={() => setImgFailed(true)} />
           ) : <div className="w-full h-full" />}
           {video.duration && !video.is_live && (
             <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[11px] font-medium px-[3px] rounded-[3px]">{video.duration}</span>
@@ -262,7 +262,7 @@ export function VideoCard({ video, compact = false, responsive = false }: { vide
               onError={() => setImgFailed(true)}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-[#717171] text-sm">no preview</div>
+            <div className="w-full h-full flex items-center justify-center text-[var(--yt-text-2)] text-sm">no preview</div>
           )}
           {video.duration && !video.is_live && (
             <span className="absolute bottom-[4px] right-[4px] bg-black/80 text-white text-[12px] font-medium px-1 rounded-[4px] tracking-[0.2px]">
@@ -270,7 +270,7 @@ export function VideoCard({ video, compact = false, responsive = false }: { vide
             </span>
           )}
           {video.is_live && (
-            <span className="absolute bottom-[4px] right-[4px] bg-[#ff0000] text-white text-[11px] font-semibold px-1.5 py-[1px] rounded-[3px] flex items-center gap-1">
+            <span className="absolute bottom-[4px] right-[4px] bg-[var(--yt-red)] text-white text-[11px] font-semibold px-1.5 py-[1px] rounded-[3px] flex items-center gap-1">
               <span className="w-1.5 h-1.5 bg-white rounded-full" />LIVE
             </span>
           )}
@@ -285,7 +285,7 @@ export function VideoCard({ video, compact = false, responsive = false }: { vide
             title="Save to Watch later"
             className="absolute top-2 right-12 w-8 h-8 rounded-lg bg-black/80 hover:bg-black flex items-center justify-center z-10"
           >
-            <BookmarkPlus className={`w-5 h-5 ${isLater ? "text-[var(--yt-blue)]" : "text-white"}`} fill={isLater ? "#3ea6ff" : "none"} />
+            <BookmarkPlus className={`w-5 h-5 ${isLater ? "text-[var(--yt-blue)]" : "text-white"}`} fill={isLater ? "var(--yt-blue)" : "none"} />
           </button>
           <button
             onClick={() => setMenuOpen(true)}
@@ -336,7 +336,7 @@ export function VideoGrid({ videos, loading = false, skeletonCount = 12 }: { vid
   }
   if (!videos.length) return null;
   return (
-    <div className="grid gap-x-4 gap-y-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+    <div className="grid gap-x-4 gap-y-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6">
       {videos.map((v) => <VideoCard key={v.id} video={v} />)}
     </div>
   );

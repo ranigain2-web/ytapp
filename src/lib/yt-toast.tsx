@@ -44,7 +44,7 @@ export function ToastHost() {
           key={t.id}
           onClick={() => dismiss(t.id)}
           data-testid="yt-toast"
-          className="pointer-events-auto max-w-[340px] text-left px-4 py-3 rounded-lg bg-[#f1f1f1] text-[#0f0f0f] text-[14px] leading-[20px] shadow-xl yt-pop"
+          className="pointer-events-auto max-w-[340px] text-left px-4 py-3 rounded-lg bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)] text-[14px] leading-[20px] shadow-xl yt-pop"
         >
           {t.text}
         </button>

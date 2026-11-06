@@ -90,8 +90,8 @@ export default function SettingsPage() {
         <div className="rounded-xl bg-[var(--yt-elev2-60)] p-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
-              {sourceLabel.startsWith("community") ? <Globe className="w-5 h-5 text-[#ffb13b] shrink-0" />
-                : sourceLabel.startsWith("on-device") ? <Smartphone className="w-5 h-5 text-[#2ba640] shrink-0" />
+              {sourceLabel.startsWith("community") ? <Globe className="w-5 h-5 text-[var(--yt-status-warn)] shrink-0" />
+                : sourceLabel.startsWith("on-device") ? <Smartphone className="w-5 h-5 text-[var(--yt-status-ok)] shrink-0" />
                 : <Server className="w-5 h-5 text-[var(--yt-blue)] shrink-0" />}
               <div className="min-w-0">
                 <p className="text-[14px] text-[var(--yt-text)] truncate">{sourceLabel}</p>
@@ -134,12 +134,12 @@ export default function SettingsPage() {
               {testing ? <RefreshCw className="w-4 h-4 animate-spin" /> : null} Test connection
             </button>
             {health && (
-              <span className="flex items-center gap-2 text-[13px] text-[#2ba640]">
+              <span className="flex items-center gap-2 text-[13px] text-[var(--yt-status-ok)]">
                 <Check className="w-4 h-4" /> Connected · PO token {health.po_token ? "active" : "inactive"}
               </span>
             )}
             {health === null && !testing && (
-              <span className="flex items-center gap-2 text-[13px] text-[#ff4e45]">
+              <span className="flex items-center gap-2 text-[13px] text-[var(--yt-status-err)]">
                 <X className="w-4 h-4" /> Unreachable
               </span>
             )}

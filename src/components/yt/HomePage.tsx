@@ -64,7 +64,7 @@ function SetupPanel({ onRetry }: { onRetry: () => void }) {
             {connecting ? "Connecting…" : "Connect"}
           </button>
         </div>
-        {hint && <p className="text-[13px] text-[#ff4e45] mb-2">{hint}</p>}
+        {hint && <p className="text-[13px] text-[var(--yt-status-err)] mb-2">{hint}</p>}
 
         <div className="flex items-center gap-3 mt-5">
           <button onClick={onRetry} className="flex items-center gap-2 h-10 px-4 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] text-[14px] font-medium">
@@ -111,6 +111,18 @@ export default function HomePage({ category = "all" }: { category?: string }) {
     seenRef.current = new Set();
     setRetry(r => r + 1);
   };
+
+  // phase 6: category swaps reset the grid in place (HomePage is no longer
+  // remounted per category — that reset the chips scroll position every time)
+  useEffect(() => {
+    setVideos(null);
+    setContinuation(null);
+    setErr(null);
+    setMoreErr(false);
+    seenRef.current = new Set();
+    window.scrollTo({ top: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
 
   useEffect(() => {
     let alive = true;
@@ -171,7 +183,7 @@ export default function HomePage({ category = "all" }: { category?: string }) {
       <div className="px-2 sm:px-6 pb-16">
         {sourceLabel && (
           <div className="flex items-center gap-2 mb-4 text-[12px] text-[var(--yt-text-2)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#ffb13b]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--yt-status-warn)]" />
             {sourceLabel} — playing via official embed.{" "}
             <button onClick={() => navigate({ name: "settings" })} className="text-[var(--yt-blue)] hover:underline">Use your own server</button>
           </div>
@@ -183,7 +195,7 @@ export default function HomePage({ category = "all" }: { category?: string }) {
         ) : err ? (
           <div className="py-20 text-center">
             <p className="text-[var(--yt-text-2)] mb-2">Couldn&apos;t load the feed</p>
-            <p className="text-sm text-[#717171] mb-6">{err}</p>
+            <p className="text-sm text-[var(--yt-text-2)] mb-6">{err}</p>
             <button onClick={load} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-sm">
               <RefreshCw className="w-4 h-4" /> Retry
             </button>
@@ -195,7 +207,10 @@ export default function HomePage({ category = "all" }: { category?: string }) {
           </div>
         ) : (
           <>
-            <VideoGrid videos={videos} />
+            {/* phase 6: keyed by category for a cross-fade swap (chips stay fixed) */}
+            <div key={category} className="yt-grid-enter">
+              <VideoGrid videos={videos} />
+            </div>
             {/* infinite scroll sentinel */}
             {showSentinel && (
               <div id="feed-sentinel" ref={sentinelRef} className="py-6">
@@ -209,9 +224,9 @@ export default function HomePage({ category = "all" }: { category?: string }) {
                     </button>
                   </div>
                 ) : continuation ? (
-                  <div className="text-center text-[12px] text-[#717171]">Loading more…</div>
+                  <div className="text-center text-[12px] text-[var(--yt-text-2)]">Loading more…</div>
                 ) : (
-                  <div className="text-center text-[12px] text-[#717171]">You&apos;ve reached the end of this feed</div>
+                  <div className="text-center text-[12px] text-[var(--yt-text-2)]">You&apos;ve reached the end of this feed</div>
                 )}
               </div>
             )}

@@ -80,7 +80,7 @@ export default function AppShell() {
   let content: React.ReactNode;
   switch (route.name) {
     case "home":
-      content = <HomePage key={route.category || "all"} category={route.category || "all"} />;
+      content = <HomePage category={route.category || "all"} />;
       break;
     case "search":
       content = <SearchPage key={route.q} query={route.q} />;
@@ -144,7 +144,10 @@ export default function AppShell() {
         <div data-yt-rail className={railClass}>
           <MiniSidebar />
         </div>
-        <main className="flex-1 min-w-0">{content}</main>
+        <main className="flex-1 min-w-0">
+          {/* phase 6: page entrance on ROUTE change (not category — chips stay). */}
+          <div key={route.name === "watch" ? `w:${route.v}` : route.name === "channel" ? `c:${route.id}` : route.name === "search" ? `s:${route.q}` : route.name === "playlist" ? `p:${route.id}` : route.name} className="yt-page-enter">{content}</div>
+        </main>
       </div>
 
       {/* mobile bottom nav */}

@@ -116,9 +116,9 @@ export default function SearchPage({ query }: { query: string }) {
         </div>
       ) : err ? (
         <div className="py-20 text-center">
-          <SearchX className="w-12 h-12 text-[#717171] mx-auto mb-4" />
+          <SearchX className="w-12 h-12 text-[var(--yt-text-2)] mx-auto mb-4" />
           <p className="text-[var(--yt-text-2)] mb-2">Search failed</p>
-          <p className="text-sm text-[#717171] mb-6">{err}</p>
+          <p className="text-sm text-[var(--yt-text-2)] mb-6">{err}</p>
           <button onClick={() => setRetry(r => r + 1)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-sm">
             <RefreshCw className="w-4 h-4" /> Retry
           </button>

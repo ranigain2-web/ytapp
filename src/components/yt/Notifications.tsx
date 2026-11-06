@@ -65,7 +65,7 @@ export function NotificationsBell() {
         <Bell className="w-6 h-6 text-[var(--yt-text)]" />
         {unseen.length > 0 && (
           <span
-            className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#cc0000] text-white text-[10px] font-medium flex items-center justify-center"
+            className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-[var(--yt-red)] text-white text-[10px] font-medium flex items-center justify-center"
             data-testid="notifications-badge"
           >
             {unseen.length > 9 ? "9+" : unseen.length}
