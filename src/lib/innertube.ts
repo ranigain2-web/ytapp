@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { formatViews, formatTime } from "./yt-format";
+import { getDecipher } from "./yt-decipher";
 import { rememberAvatar } from "./yt-avatar";
 import type { YtVideo, YtVideoFull, YtComment, YtChannel, YtChannelResult, YtCaption } from "./yt-api";
 
@@ -651,10 +652,37 @@ function parseNextMetadata(json: AnyObj): Partial<YtVideoFull> & { commentsToken
   } as Partial<YtVideoFull> & { commentsToken?: string | null };
 }
 
+// phase 5: standalone storyboard — the raw playerStoryboardSpecRenderer spec
+// (same board the server picks: a medium-detail level, M-sheets, 2s-ish
+// interval). Spec levels: width#height#?#cols#rows#interval_ms#name#sigh.
+function parseStoryboard(json: AnyObj): { width: number; height: number; columns: number; rows: number; interval: number; template_url: string; templateUrlPattern: string } | null {
+  try {
+    const spec = String(((json.storyboards as AnyObj)?.playerStoryboardSpecRenderer as AnyObj)?.spec || "");
+    if (!spec.includes("|")) return null;
+    const parts = spec.split("|");
+    const base = parts[0];
+    const levels = parts.slice(1).map(p => p.split("#"));
+    const lvlIdx = Math.min(2, levels.length - 1);
+    const lvl = levels[lvlIdx];
+    if (!lvl || lvl.length < 8) return null;
+    const [width, height, , columns, rows, interval, , sigh] = lvl;
+    const pattern = `${base.replace("$L", String(lvlIdx)).replace("$N", "M$M")}&sigh=${sigh}`;
+    return {
+      width: Number(width) || 0, height: Number(height) || 0,
+      columns: Number(columns) || 0, rows: Number(rows) || 0,
+      interval: Number(interval) || 0,
+      template_url: pattern.replace("$M", "0"),
+      templateUrlPattern: pattern,
+    };
+  } catch { return null; }
+}
+
 function parsePlayerStreams(json: AnyObj): {
   ok: boolean; playability: string; reason?: string;
   formats: YtVideoFull["formats"]; hls: string | null; captions: YtCaption[];
   duration: number; views: number; title: string;
+  ciphered: { itag: number; mime: string; codecs: string; quality_label: string; height: number; width: number; fps: number; bitrate: number; s: string; sp: string; url: string }[];
+  rawJson: AnyObj;
 } {
   const ps = (json.playabilityStatus as { status?: string; reason?: string }) || {};
   const sd = (json.streamingData as { formats?: unknown[]; adaptiveFormats?: unknown[]; hlsManifestUrl?: string }) || {};
@@ -665,13 +693,33 @@ function parsePlayerStreams(json: AnyObj): {
   // audio track must be sniffed from the codecs list, not the container type.
   const AUDIO_CODEC = /mp4a|opus|ac-3|ec-3|vorbis|flac/i;
   const VIDEO_CODEC = /avc1|avc3|vp9|vp09|vp8|av01|hev1|hvc1|mp4v|theora/i;
+  // phase 5: signatureCipher formats are collected for on-device deciphering
+  // (yt-decipher) instead of being dropped — they become candidates once
+  // deciphered; failures degrade to today's skip behavior
+  const ciphered: { itag: number; mime: string; codecs: string; quality_label: string; height: number; width: number; fps: number; bitrate: number; s: string; sp: string; url: string }[] = [];
   const toFmt = (f: AnyObj) => {
     const mime = (f.mimeType as string) || "";
     const itag = (f.itag as number) || 0;
     const url = (f.url as string) || "";
-    // signatureCipher URLs need deciphering we can't do on-device yet — skip
-    if (!url) return;
     const codecs = /codecs="?([^"]+)"?/.exec(mime)?.[1] || "";
+    if (!url) {
+      const sc = String(f.signatureCipher || f.cipher || "");
+      const s = /[?&]s=([^&]+)/.exec(sc)?.[1] || "";
+      const sp = /[?&]sp=([^&]+)/.exec(sc)?.[1] || "signature";
+      const curl = /[?&]url=([^&]+)/.exec(sc)?.[1] || "";
+      if (s && curl) {
+        try {
+          ciphered.push({
+            itag, mime, codecs,
+            quality_label: (f.qualityLabel as string) || "",
+            height: (f.height as number) || 0, width: (f.width as number) || 0,
+            fps: (f.fps as number) || 0, bitrate: (f.bitrate as number) || 0,
+            s, sp, url: decodeURIComponent(curl),
+          });
+        } catch { /* malformed cipher — skip */ }
+      }
+      return;
+    }
     formats.push({
       itag, mime, codecs,
       quality_label: (f.qualityLabel as string) || "",
@@ -702,6 +750,8 @@ function parsePlayerStreams(json: AnyObj): {
     duration: parseInt(vd.lengthSeconds || "0", 10) || 0,
     views: parseInt(vd.viewCount || "0", 10) || 0,
     title: vd.title || "",
+    ciphered,
+    rawJson: json,
   };
 }
 
@@ -711,6 +761,8 @@ export interface ItVideoResult extends YtVideoFull {
   unavailable?: boolean;
   relatedToken?: string | null;
   commentsToken?: string | null;
+  /** phase 5: LIVE_STREAM_OFFLINE — a scheduled premiere (reason carries the countdown text) */
+  is_premiere?: boolean;
 }
 
 export async function itVideo(id: string): Promise<ItVideoResult> {
@@ -743,13 +795,19 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
   let playability_reason: string | null = null;
   let embed_blocked = false;
   let unavailable = false;
+  let is_premiere = false;
   try {
     const playerJson = await ytPost("player", { context: VR_CTX, videoId: id, contentCheckOk: true, racyCheckOk: true }, ANDROID_KEY);
     streams = parsePlayerStreams(playerJson);
     playability_reason = streams.reason || null;
     if (streams.playability === "ERROR" && /blocked it from display on this website|embed/i.test(streams.reason || "")) embed_blocked = true;
     if (streams.playability === "ERROR" || streams.playability === "UNPLAYABLE") unavailable = true;
-    if (streams.playability === "LIVE_STREAM_OFFLINE") unavailable = true;
+    // LIVE_STREAM_OFFLINE = a scheduled premiere: keep it playable via the
+    // embed (YouTube shows its own countdown there) and surface the reason
+    if (streams.playability === "LIVE_STREAM_OFFLINE") {
+      is_premiere = true;
+      playability_reason = streams.reason || "This premiere has not started yet";
+    }
   } catch { /* try TV below */ }
 
   // --- player attempt 2 (recovery, only when gated / no streams):
@@ -760,17 +818,52 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
       const tvJson = await ytPost("player", { context: tvCtx(visitorData), videoId: id, contentCheckOk: true, racyCheckOk: true }, WEB_KEY);
       const tvStreams = parsePlayerStreams(tvJson);
       if (tvStreams.ok && (tvStreams.hls || tvStreams.formats.length > 0)) {
+        const rawJson = (tvStreams.rawJson?.storyboards ? tvStreams.rawJson : (streams?.rawJson?.storyboards ? streams.rawJson : tvStreams.rawJson));
         streams = {
           ...tvStreams,
-          // prefer whichever attempt produced captions/duration/views
+          // prefer whichever attempt produced captions/duration/views/storyboard
           captions: tvStreams.captions.length ? tvStreams.captions : (streams?.captions || []),
           duration: tvStreams.duration || streams?.duration || 0,
           views: tvStreams.views || streams?.views || 0,
+          rawJson,
         };
         playability_reason = null; // recovered: the video IS playable
         unavailable = false;
       }
     } catch { /* embed fallback */ }
+  }
+
+  // --- phase 5: on-device deciphering of signatureCipher formats.
+  // Collected during stream parsing (both player attempts); the decipher
+  // itself is prefetched at app start so this is usually instant. Any
+  // failure degrades to today's behavior (skip → embed).
+  let formats_deciphered = 0;
+  if (streams?.ciphered?.length) {
+    const dec = await getDecipher();
+    if (dec) {
+      const VIDEO_CODEC = /avc1|avc3|vp9|vp09|vp8|av01|hev1|hvc1|mp4v|theora/i;
+      const AUDIO_CODEC = /mp4a|opus|ac-3|ec-3|vorbis|flac/i;
+      for (const c of streams.ciphered) {
+        const u = dec.applySig(c.url, c.sp, c.s);
+        if (!u) continue;
+        streams.formats.push({
+          itag: c.itag, mime: c.mime, codecs: c.codecs,
+          quality_label: c.quality_label, height: c.height, width: c.width,
+          fps: c.fps, bitrate: c.bitrate,
+          has_video: VIDEO_CODEC.test(c.codecs) || /video/.test(c.mime),
+          has_audio: AUDIO_CODEC.test(c.codecs) || /audio/.test(c.mime),
+          url: u,
+        });
+        formats_deciphered++;
+      }
+    }
+  }
+  if (typeof window !== "undefined" && formats_deciphered) {
+    try {
+      const dbg = (window as unknown as { __ytDebug?: Record<string, unknown> }).__ytDebug || {};
+      dbg.formats_deciphered = formats_deciphered;
+      (window as unknown as { __ytDebug: Record<string, unknown> }).__ytDebug = dbg;
+    } catch { /* ignore */ }
   }
 
   const title = nextMeta.title || streams?.title || "";
@@ -800,6 +893,7 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
     formats: streams?.formats || [],
     hls: streams?.hls || null,
     captions: streams?.captions || [],
+    storyboard: streams ? parseStoryboard(streams.rawJson || {}) : null,
     related: nextMeta.related || [],
     chapters: (nextMeta.chapters as never[]) || [],
     relatedToken: nextMeta.relatedToken ?? null,
@@ -807,8 +901,9 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
     embed_fallback: !directPlayable, // no directly playable stream → embed plays it
     playability_reason,
     embed_blocked,
-    unavailable: unavailable && !title,
+    unavailable: unavailable && !title && !is_premiere,
     is_live: streams?.formats.some(f => /live/i.test(f.quality_label)) || undefined,
+    is_premiere: is_premiere || undefined,
   };
   // unavailable = hard error even with no metadata
   if (unavailable && !title && !streams?.title) {

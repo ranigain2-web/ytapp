@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { APP_VERSION } from "@/lib/version";
-import { Headphones, PlayCircle, SkipForward, X, CheckCircle2, Volume2, Gauge, MoreVertical, PictureInPicture2, Bell, Rss, LayoutPanelTop, ListVideo, MessageCircle, UserRound } from "lucide-react";
+import { Headphones, PlayCircle, SkipForward, X, CheckCircle2, Volume2, Gauge, MoreVertical, PictureInPicture2, Bell, Rss, LayoutPanelTop, ListVideo, MessageCircle, UserRound, ShieldCheck } from "lucide-react";
 
 const SEEN_KEY = "yt_whatsnew_seen";
 
@@ -32,14 +32,11 @@ export default function WhatsNew() {
   if (!open) return null;
 
   const features: { icon: React.ReactNode; title: string; where: string }[] = [
-    { icon: <Rss className="w-5 h-5" />, title: "Subscriptions feed", where: "Open Subscriptions and see the latest videos from every channel you follow — new uploads first, with All / Today / Continue watching / Unwatched filters. One dead channel never breaks the feed." },
-    { icon: <Bell className="w-5 h-5" />, title: "Notifications (local, honest)", where: "The bell is back. It counts new videos from your subscriptions since you last looked — nothing is pushed, nothing leaves your device, and it says so." },
-    { icon: <LayoutPanelTop className="w-5 h-5" />, title: "Channel pages with real tabs", where: "Home, Videos, Shorts, Playlists and About — each tab loads its own section, playlists open as watchable queues." },
-    { icon: <ListVideo className="w-5 h-5" />, title: "Playlists that play", where: "Open a playlist from a channel page and get a queue: Play from here, Prev / Next, and autoplay that walks the list when a video ends." },
-    { icon: <MessageCircle className="w-5 h-5" />, title: "Comment threads", where: "Tap the replies count under a comment and the conversation expands inline — plus pinned and creator-heart badges. Page-through for more comments now works in server mode too." },
-    { icon: <PlayCircle className="w-5 h-5" />, title: "Shorts, truthful", where: "Real channel names, avatars and working Subscribe on shorts, a comments sheet, double-tap-to-like with the heart pop, and a sound toggle that remembers your choice. Share copies the link." },
-    { icon: <UserRound className="w-5 h-5" />, title: "Account menu", where: "The header avatar opens a menu: Your channel, Appearance, and a plain-language page about what's stored and where (everything, locally)." },
-    { icon: <MoreVertical className="w-5 h-5" />, title: "Everything from 1.5", where: "Action toasts, card 3-dot menus with Not-interested memory, honest comments note, search keyboard navigation — all still there." },
+    { icon: <ShieldCheck className="w-5 h-5" />, title: "The ad-free guarantee, asserted", where: "A new test suite proves what only insiders could claim: every media request a video makes goes to googlevideo or our own proxy, HLS manifests carry no ad tags, and no ad network is ever contacted — and when a video falls back to the official embed, the player says so honestly." },
+    { icon: <PlayCircle className="w-5 h-5" />, title: "Deciphering, on your device", where: "When YouTube scrambles stream URLs, ytapp now untangles them locally — a tiny slice of YouTube's own player code runs in the app to restore direct, ad-free playback. Failures fall back to the embed quietly, never to a broken page." },
+    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Seek previews everywhere", where: "The storyboard thumbnails when you hover the seek bar now work in standalone mode too — and we fixed a bug that had silently killed them in both modes." },
+    { icon: <Gauge className="w-5 h-5" />, title: "Honest live and premiere states", where: "Live streams show a LIVE bar with a jump-to-live button instead of a fake scrubber; scheduled premieres say so with YouTube's own countdown instead of pretending to be unavailable." },
+    { icon: <SkipForward className="w-5 h-5" />, title: "Everything from 1.6", where: "Subscriptions feed, notifications, channel tabs, comment threads, truthful Shorts, playlist queues, the account menu — all still there." },
   ];
 
   return (

@@ -205,7 +205,7 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   gauntlet baseline (ours=2 ref=2 — baseline losses are the point of a
   bar; `--until-win` flips them in later phases).
 
-## 3. Current state (as of 2026-11-06, session 17 — phase 4 complete (missing surfaces); e2e 108/108)
+## 3. Current state (as of 2026-11-06, session 18 — phases 4+5 complete; e2e 108/108 + ads 11/0/1 + decipher 5/5)
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,
@@ -294,6 +294,23 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   headless Chrome): the ENDED-overlay E2E uses the `window.__ytEmbedEnded`
   debug hook to verify the render + routing path; the IFrame-API event
   wiring (state 0 → overlay) is code-verified and fires on real devices.
+
+### Phase 5 additions (session 18, v1.7.0)
+
+- `src/lib/yt-decipher.ts`: on-device signatureCipher decipher via
+  dependency-closure slicing of base.js around the URL-param assembler
+  (marker `a.set("alr","yes")`). Current players are control-flow-flattened
+  (Xn dispatcher + w string table) — static parsing is dead, slicing+eval
+  works. Fixture-tested in CI (`scripts/test-decipher.mjs`); refresh via
+  `scripts/refresh-decipher-fixture.mjs` on player rotation.
+- Datacenter reality: anonymous player calls get LOGIN_REQUIRED after the
+  day's first requests — deciphering's −10pp embed-fallback proof is a
+  DEVICE item (docs/evidence/adfree-summary.md records the honest baseline).
+- Standalone storyboards (spec parser) + fixed the dead `$M$` placeholder
+  bug that killed seek previews in BOTH modes. Player LIVE bar + premiere
+  banner. `scripts/fixtures/adfree-testset.json` (29 ids / 5 classes).
+- `scripts/e2e-ads.mjs` in CI: ad-absence assertions per playable video,
+  honest-notice assertion for embed fallbacks.
 
 ### Phase 4 additions (session 17, v1.6.0)
 

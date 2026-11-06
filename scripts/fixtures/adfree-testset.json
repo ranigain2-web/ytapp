@@ -1,0 +1,48 @@
+{
+  "note": "Phase 5 fixed test set — also the deciphering report set. Classes measured through the real standalone pipeline (probe-testset) from the dev sandbox on 2026-11-06. Datacenter IPs are bot-gated for anonymous player calls (LOGIN_REQUIRED after the first requests), so fresh standalone extraction mostly degrades to the honest embed fallback THERE; on residential IPs (device) the same ids extract directly. The e2e-ads suite asserts per-video: playable ones carry only googlevideo/byte-proxy media, embed-mode ones show the honest notice.",
+  "generated": "2026-11-06",
+  "classes": {
+    "direct-combined": "extracts with a combined format + adaptive ladder (the easy case)",
+    "adaptive-4k": "adaptive-only ladder incl. >=1440p entries (quality-ladder proof)",
+    "live-247": "24/7 live streams (live HLS, LIVE bar, jump-to-edge)",
+    "music-classic": "classic music videos — historically the embed-fallback class on gated networks",
+    "premiere": "scheduled premiere (LIVE_STREAM_OFFLINE) — opportunistic: ids expire when the premiere starts; assert the premiere banner if one is live, else skip",
+    "unavailable": "dead/private id — honest unavailable state"
+  },
+  "videos": [
+    { "id": "dQw4w9WgXcQ", "class": "direct-combined", "title": "Rick Astley - Never Gonna Give You Up", "role": "ad-absence + ladder (2160p formats present)" },
+    { "id": "LXb3EKWsInQ", "class": "adaptive-4k", "title": "COSTA RICA IN 4K 60fps HDR", "role": "ladder fixture (datacenter-gated: embed-notice there)" },
+    { "id": "aqz-KE-bpKQ", "class": "adaptive-4k", "title": "Big Buck Bunny 60fps 4K", "role": "ladder fixture" },
+    { "id": "1La4QzGeaaQ", "class": "adaptive-4k", "title": "Peru 8K HDR 60FPS", "role": "ladder fixture" },
+    { "id": "M7lc1UVf-VE", "class": "adaptive-4k", "title": "YouTube Developers Live: Embedded Web Player Customization", "role": "CC-BY dev video, embeddable" },
+    { "id": "jfKfPfyJRdk", "class": "live-247", "title": "lofi hip hop radio - beats to relax/study to", "role": "live HLS (when extractable); LIVE bar + jump-to-edge" },
+    { "id": "4xDzrJKXOOY", "class": "live-247", "title": "synwave radio - beats to chill/game to", "role": "live HLS" },
+    { "id": "S_MOd40zlYU", "class": "live-247", "title": "dark ambient radio", "role": "live HLS" },
+    { "id": "5qap5aO4i9A", "class": "live-247", "title": "lofi hip hop radio (original)", "role": "long-lived live stream" },
+    { "id": "9bZkp7q19f0", "class": "music-classic", "title": "PSY - GANGNAM STYLE", "role": "embed-fallback class on gated networks" },
+    { "id": "kJQP7kiw5Fk", "class": "music-classic", "title": "Luis Fonsi - Despacito", "role": "embed-fallback class" },
+    { "id": "JGwWNGJdvx8", "class": "music-classic", "title": "Ed Sheeran - Shape of You", "role": "embed-fallback class" },
+    { "id": "OPf0YbXqDm0", "class": "music-classic", "title": "Mark Ronson - Uptown Funk", "role": "embed-fallback class" },
+    { "id": "fJ9rUzIMcZQ", "class": "music-classic", "title": "Queen - Bohemian Rhapsody", "role": "embed-fallback class" },
+    { "id": "RgKAFK5djSk", "class": "music-classic", "title": "Wiz Khalifa - See You Again", "role": "embed-fallback class" },
+    { "id": "CevxZvSJLk8", "class": "music-classic", "title": "Katy Perry - Roar", "role": "embed-fallback class" },
+    { "id": "YQHsXMglC9A", "class": "music-classic", "title": "Adele - Hello", "role": "embed-fallback class" },
+    { "id": "lp-EO5I60KA", "class": "music-classic", "title": "Ed Sheeran - Thinking Out Loud", "role": "embed-fallback class" },
+    { "id": "60ItHLz5WEA", "class": "music-classic", "title": "Alan Walker - Faded", "role": "embed-fallback class" },
+    { "id": "hT_nvWreIhg", "class": "music-classic", "title": "OneRepublic - Counting Stars", "role": "embed-fallback class" },
+    { "id": "2Vv-BfVoq4g", "class": "music-classic", "title": "Ed Sheeran - Perfect", "role": "embed-fallback class" },
+    { "id": "e-ORhEE9VVg", "class": "music-classic", "title": "Taylor Swift - Blank Space", "role": "embed-fallback class" },
+    { "id": "ZbZSe6N_BXs", "class": "music-classic", "title": "Pharrell Williams - Happy", "role": "embed-fallback class" },
+    { "id": "3AtDnEC4zak", "class": "music-classic", "title": "Charlie Puth - We Don't Talk Anymore", "role": "embed-fallback class" },
+    { "id": "jNQXAC9IVRw", "class": "music-classic", "title": "Me at the zoo", "role": "the first YouTube video" },
+    { "id": "3JZ_D3ELwOQ", "class": "music-classic", "title": "Flexin' On Ya (2014)", "role": "archival" },
+    { "id": "_aM_nrijYCU", "class": "unavailable", "title": "(dead id)", "role": "honest unavailable state" },
+    { "id": "FLG2TxJMjOo", "class": "unavailable", "title": "(dead id)", "role": "honest unavailable state" },
+    { "id": "BxuY9mMFN5k", "class": "unavailable", "title": "(dead id)", "role": "honest unavailable state" }
+  ],
+  "baseline_2026_11_06": {
+    "standalone_from_datacenter": "28/29 embed-fallback (97%) — dominated by IP-level LOGIN_REQUIRED gating of anonymous player calls, NOT by signatureCipher; deciphering cannot move this number from a datacenter IP",
+    "server_mode_fresh_ids": "gated the same way once the IP's quota is spent (cached ids still extract: e.g. dQw4w9WgXcQ, 2160p ladder intact)",
+    "device_expectation": "on a residential IP the anonymous ANDROID_VR client returns direct URLs for most videos (probed earlier today: 27 direct formats for the first video incl. 2160p), and ciphered WEB/TV responses are exactly what yt-decipher exists for — the -10pp embed-fallback reduction is therefore a DEVICE checklist proof, recorded as such per plan risk #6"
+  }
+}

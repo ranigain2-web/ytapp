@@ -994,3 +994,52 @@ commit.
   cache misses + slow fresh executes. All three server token paths now
   normalize via `rawToken()` (decode-on-extract); contract = raw token.
 - v1.6.0 suite: **108/108** (sections 1–19).
+
+## Session 18 (2026-11-06) — Phase 4 closed (v1.6.0) + Phase 5 complete (v1.7.0)
+
+- **v1.6.0 tagged** after CI went green on 754a8a1 (the replies-flake fix:
+  the e2e check waited for the thread DIV, which renders instantly in its
+  loading state, then a blind second click toggled the LOADED thread closed —
+  false failure on working code; now waits for loaded reply divs, re-clicks
+  only on a numeric button label; plus a documented SKIP when YouTube gates
+  the continuation from CI networks entirely, per plan risk #6).
+- **Phase 5 — on-device deciphering (the hard one):**
+  - Evidence-first: the current player is control-flow-flattened (Xn
+    dispatcher + w string-table; classic split/join sig functions GONE; the
+    classic n-call-site patterns GONE). Full-file eval dies early in node:vm
+    AND browser Workers (no DOM). The workable design: **automatic
+    dependency-closure slicing** — marker-walk to the URL-param assembler
+    (`a.set("alr","yes")` → `Bs(url, sp, s)`), iterative identifier
+    resolution incl. `var`-prefixed defs + ES6 classes (g.zs is a class!),
+    per-def syntax filtering (minified name collisions produce local-statement
+    fragments), guarded-assignment eval, structural result serialization
+    (original URL + overridden params found by shape, not by field name).
+    27.5 KB DOM-free slice; **validated against the live player**: the real
+    transform runs deterministically (fixture vector).
+  - `src/lib/yt-decipher.ts` + fixture/refresh/test scripts (5/5) wired into
+    CI; `itVideo` collects signatureCipher formats (both player attempts)
+    and deciphers them; prefetch at app start; `formats_deciphered` on
+    `__ytDebug`.
+- **Measured reality (documented in docs/evidence/adfree-summary.md):** the
+  dev datacenter IP is LOGIN_REQUIRED-gated for anonymous player calls
+  (first calls of the day extract fine incl. 2160p, then everything gates) —
+  the standalone embed-fallback "baseline" here is gating-driven, NOT
+  cipher-driven. The −10pp deciphering proof is therefore a DEVICE checklist
+  item (plan risk #6), honestly recorded.
+- **Standalone storyboards**: raw `playerStoryboardSpecRenderer.spec` parsed
+  (same medium board as the server; field map verified against youtubei.js:
+  width#height#?#cols#rows#interval_ms#name#sigh). Fixed a REAL pre-existing
+  bug: the seek-preview UI required `$M$` but actual templates use `M$M.jpg`
+  — previews were dead in BOTH modes; now accepts both placeholder styles.
+- **Live/premiere honesty**: player LIVE bar (DVR-scrub disabled, LIVE pill,
+  jump-to-live-edge button); `LIVE_STREAM_OFFLINE` no longer mislabeled
+  "unavailable" — premiere banner + YouTube's own countdown in the embed.
+- **Fixed test set** (`scripts/fixtures/adfree-testset.json`): 29 ids across
+  5 classes (direct-combined, adaptive-4k, live-247, music-classic,
+  unavailable) + baseline measurements; premiere class documented as
+  opportunistic (ids expire when premieres start).
+- **e2e-ads.mjs** (CI, result-guarded): media ⊆ googlevideo/byte-proxy,
+  HLS manifests clean of VMAP/pagead, zero ad-network requests, embed
+  fallback asserts the honest notice, 2160p ladder proof. **11/0/1.**
+- Full regression green: playback 108/108, parity 9/9, decipher 5/5, ads
+  11/0/1, electron bundle test passed. v1.7.0.

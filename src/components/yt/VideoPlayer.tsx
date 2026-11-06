@@ -90,6 +90,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer({
 
   // seek-drag scrubbing (phase 1): live position while dragging, fat thumb
   const [scrubbing, setScrubbing] = useState(false);
+  // phase 5 live mode: no DVR scrubbing; a LIVE pill + jump-to-edge instead
+  const isLive = !!video.is_live && !video.duration;
   const [scrubTime, setScrubTime] = useState(0);
   // long-press 2× speed (phase 1, YouTube mobile behavior)
   const [longPress2x, setLongPress2x] = useState(false);
@@ -776,8 +778,9 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer({
     const col = inSheet % sb.columns;
     const row = Math.floor(inSheet / sb.columns);
     const pattern = sb.templateUrlPattern || sb.template_url || "";
-    if (!pattern.includes("$M$")) return null;
-    return { url: pattern.replace("$M$", String(sheet)), col, row, cols: sb.columns, rows: sb.rows };
+    // real specs use "M$M.jpg" (and some "$M$.jpg") — accept both placeholder styles
+    if (!/\$M\$?/.test(pattern)) return null;
+    return { url: pattern.replace(/\$M\$?/, String(sheet)), col, row, cols: sb.columns, rows: sb.rows };
   }, [video.storyboard, hoverTime, duration]);
 
   // current chapter (title + start) for the chapters row above the seek bar
@@ -1086,7 +1089,29 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer({
           </div>
         )}
 
-        {/* seek bar — pointer-drag scrubbing (phase 1) */}
+        {/* seek bar — pointer-drag scrubbing (phase 1); live streams replace it
+            (DVR-scrub disabled) with a LIVE pill + jump-to-edge button */}
+        {isLive ? (
+          <div className="flex items-center justify-between py-[6px]" data-testid="live-bar">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#ff0000] text-white text-[12px] font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
+            </span>
+            <button
+              onClick={() => {
+                const el = videoRef.current;
+                try {
+                  if (el && el.seekable.length) el.currentTime = el.seekable.end(el.seekable.length - 1) - 0.5;
+                } catch { /* not seekable */ }
+                poke();
+              }}
+              className="px-3 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white text-[12px] font-medium"
+              aria-label="Jump to live edge"
+              data-testid="live-edge"
+            >
+              Jump to live
+            </button>
+          </div>
+        ) : (
         <div
           ref={seekHoverRef}
           className="relative flex items-center cursor-pointer group/seek py-[13px] -my-[6px]"
@@ -1139,6 +1164,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer({
             />
           </div>
         </div>
+        )}
 
         {/* buttons row — hidden entirely in Shorts (minimal) mode */}
         {!minimal && (

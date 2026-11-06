@@ -184,6 +184,17 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[var(--yt-bg-elev2)] flex items-center justify-center">
           <AlertTriangle className="w-8 h-8 text-[var(--yt-text-2)]" />
         </div>
+
+      {(v as { is_premiere?: boolean }).is_premiere && (
+        <div className="mb-3 rounded-xl bg-[var(--yt-bg-elev)] border border-[var(--yt-border)] px-4 py-3 flex items-center gap-3" data-testid="premiere-banner">
+          <span className="w-2 h-2 rounded-full bg-[#ff0000] animate-pulse shrink-0" aria-hidden />
+          <p className="text-[14px] text-[var(--yt-text)]">
+            <span className="font-medium">Premiere</span>
+            <span className="text-[var(--yt-text-2)]"> — {(v as { playability_reason?: string }).playability_reason || "starts soon"}. The player below shows YouTube&apos;s own countdown.</span>
+          </p>
+        </div>
+      )}
+
         <h1 className="text-[20px] font-bold text-[var(--yt-text)] mb-3">Video unavailable</h1>
         <p className="text-[14px] leading-[20px] text-[var(--yt-text-2)] mb-8">{reason}</p>
         <div className="flex items-center justify-center gap-3">
