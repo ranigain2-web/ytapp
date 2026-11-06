@@ -56,6 +56,15 @@ jobs:
       # with N > 0. A crashed suite prints no RESULT line; a failing suite
       # prints "M failed" — both fail the step. A silent no-op cannot go green.
 
+      # Phase 8: background playback for every playable source — 4 named
+      # scenarios (DIRECT / AUDIO-ONLY / EMBED-RESCUE / EMBED-STUCK) against
+      # a stubbed API + local media + the Capacitor bridge mock. Same result
+      # guard. ffmpeg (preinstalled on ubuntu runners) generates the media.
+      - name: E2E background suite (phase 8 — background continuity)
+        run: |
+          node scripts/e2e-background.mjs 2>&1 | tee /tmp/bg.log
+          grep -E "RESULT: ([1-9][0-9]*) passed, 0 failed" /tmp/bg.log
+
       - name: UI audit (quick — 2 surfaces × 2 profiles)
         run: |
           bash scripts/with-server.sh 'node scripts/audit-ui.mjs --quick 2>&1 | tee /tmp/audit.log'

@@ -873,7 +873,14 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
   // there is an HLS manifest or at least one combined (A+V) format. Anything
   // else (adaptive-only, ciphered-only) degrades to the official embed player,
   // which always plays — same mechanism the Shorts feed uses.
-  const directPlayable = !!streams?.ok && (!!streams.hls || streams.formats.some(f => f.has_video && f.has_audio));
+  // phase 8: audio-only streams count as playable — the direct player
+  // renders poster+audio (isAudioOnly derives audio_only downstream), which
+  // backgrounds; the embed never can.
+  const directPlayable = !!streams?.ok && (
+    !!streams.hls
+    || streams.formats.some(f => f.has_video && f.has_audio)
+    || streams.formats.some(f => f.has_audio && !f.has_video)
+  );
 
   const result: ItVideoResult = {
     ...base,
@@ -898,6 +905,9 @@ export async function itVideo(id: string): Promise<ItVideoResult> {
     chapters: (nextMeta.chapters as never[]) || [],
     relatedToken: nextMeta.relatedToken ?? null,
     commentsToken: nextMeta.commentsToken ?? null,
+    audio_only: directPlayable && !!streams && !streams.hls
+      && streams.formats.length > 0
+      && streams.formats.every(f => f.has_audio && !f.has_video),
     embed_fallback: !directPlayable, // no directly playable stream → embed plays it
     playability_reason,
     embed_blocked,

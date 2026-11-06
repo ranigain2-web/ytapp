@@ -1158,3 +1158,61 @@ button minimizing the app instead of navigating back.
   format extraction returns 0 formats HERE regardless of tokens — the
   dQw4w9WgXcQ run earlier today (24 formats + HLS with token) proves the
   chain; the user's residential server is the real test.
+
+## Session 21 (2026-11-06) — v2.2.0: background play for every playable source
+
+User requirement (verbatim intent): background play of ANY video/audio played
+in the app, end to end, verified — no assumed fixes. Process: REA methodology
+(runtime evidence, fix at owner, before/after), EGM (design doc + 6-lens
+fresh-context goldfish review, artifact at docs/designs/background-play-everything.md),
+gauntlet (named bar + harsh fresh-context critic, "OURS WINS" after fixes).
+
+- **Design**: embed-fallback videos were the gap (iframe = no background, no
+  notification, mobile WebViews pause it). Direct streams already had the
+  full Premium-grade stack (foreground service, MediaSession, audio focus,
+  noisy receiver, wakelock, WebView resumeTimers, PiP).
+- **Server (index.mjs)**: extraction chain now IOS → ANDROID → WEB → MWEB
+  (MWEB attempts:1 — measured on this gated IP as the only client that broke
+  through for a popular video); audio-only formats count as success
+  (`audio_only` flag; 10min TTL vs 60min for video); 30s chain deadline;
+  `?fresh=1` cooldown (per-video 90s, bypassed when the PO-token state
+  changes — kills the v2.1.0 API-amplification hole where 3 retry paths
+  stacked); LOGIN_REQUIRED removed from rotation triggers (IP-reputation ≠
+  session fault); responses carry extracted_by/extract_ms; health exposes
+  per-client counters; every embed_fallback logs per-client playability.
+  Verified live: IOS rescue (24 formats + HLS), cooldown refusal logged.
+- **Client**: audio-only rescue plays poster+audio directly with an HONEST
+  badge ("Audio only — video stream unavailable from your server") instead
+  of the embed; store gains EmbedController (registered by WatchPage's real
+  IFrame-API wiring, replacing window globals) + handoffEmbedToDirect with
+  goldfish-demanded invariants (once per video per 15min, all checks before
+  any mutation, ad-duration mismatch → restart at 0, ENDED abort, iframe
+  paused + forceEmbed cleared + load in one transaction); embedActive now
+  derives from store mode (UI tree ≡ mode — the double-audio invariant);
+  visibilitychange in embed mode triggers one handoff attempt; a transient
+  controller-miss (iframe API still attaching) does not burn the attempt.
+- **Standalone mode (innertube.ts)**: audio-only counts as playable +
+  audio_only derived — the no-server Android story gets the rescue too.
+- **Old/new skew**: client derives audio_only from formats when the field is
+  absent (new APK + old server); extra fields ignored by old clients.
+- **Verification**: NEW scripts/e2e-background.mjs — 35 checks, 5 scenarios
+  (DIRECT / AUDIO-ONLY / EMBED-RESCUE / EMBED-STUCK / PRODUCTION-API), real
+  VP8/Opus media (ffmpeg, auto-generated), stub API recorded from a real
+  server response + anti-drift key check + audio_only invariant, the same
+  Capacitor bridge mock as e2e-playback, background emulated via
+  visibilityState override; the PRODUCTION-API scenario drives the REAL
+  yt-embed-api loader against a fake IFrame API (dev-safe __YT_API_BASE
+  override) so the registration path is tested, not stubbed. Failure dumps
+  include scenario/step/bridge-calls/video/store. Wired into CI with the
+  same result guard.
+- **Gauntlet critic verdict**: "OURS WINS" — every gap it named was then
+  fixed (test ordering bug, untested registration path, worklog entry).
+- **Regression**: background 35/35 · playback 108/108 · parity 16/16 · ads
+  11/0/1(skip) · decipher 5/5 · colors 0 · deadcss 0 · electron bundle
+  PASSED · tsc at the 15-error baseline · lint clean.
+- **Known limits (documented in the design)**: videos whose extraction fails
+  on the user's own server too (region/age-locked) still play via the embed,
+  foreground-only — no web app can background YouTube's iframe; real-device
+  Android uses the same plugin/bridge paths CI compiles and the mock
+  exercises; extraction success on residential IPs is the operating
+  assumption (this datacenter IP is hard-gated for all clients).

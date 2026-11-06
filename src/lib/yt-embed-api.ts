@@ -36,7 +36,12 @@ export function loadYouTubeIframeAPI(): Promise<NonNullable<Window["YT"]>> {
         else reject(new Error("iframe api missing"));
       };
       const s = document.createElement("script");
-      s.src = "https://www.youtube.com/iframe_api";
+      // Overridable for e2e: the suite serves a fake IFrame API from the
+      // stub server so the PRODUCTION registration path (YT.Player →
+      // registerEmbedController) is testable without loading youtube.com.
+      // Dev/prod never set the override; default is the real API.
+      const base = (window as unknown as { __YT_API_BASE?: string }).__YT_API_BASE;
+      s.src = base ? `${base}/iframe_api` : "https://www.youtube.com/iframe_api";
       s.async = true;
       s.onerror = () => {
         clearTimeout(timeout);

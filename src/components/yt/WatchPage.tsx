@@ -95,9 +95,17 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   // from the store during instant resume, before the fetch lands) ----
   const v = data || (instantPlayer && storeVideo ? storeVideo : null);
   const blockedMessage = v ? blocked(v) : null;
+  // store mode wins once the surface owns this video (phase-8 handoff:
+  // after embed→direct the local `data` still says embed_fallback — the
+  // iframe MUST unmount or both players would be live at once)
+  const surfaceMode = usePlayback(s => s.mode);
+  const surfaceVideoId = usePlayback(s => s.videoId);
+  const storeOwnsEmbed = surfaceMode === "embed" && surfaceVideoId === v?.id;
   const embedActive = !!(v
     && (v.embed_fallback || forcedEmbed)
-    && !(v.embed_fallback && v.playability_reason && (v.embed_blocked || v.unavailable)));
+    && !(v.embed_fallback && v.playability_reason && (v.embed_blocked || v.unavailable)))
+    ? (surfaceMode === "none" ? true : storeOwnsEmbed)
+    : false;
   const directPlayer = !!v && !err && !blockedMessage && !embedActive;
   const loading = data === null && err === null && !instantPlayer;
 
@@ -111,10 +119,18 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   useEffect(() => { autoplayRef.current = autoplay; }, [autoplay]);
   const [embedEnded, setEmbedEnded] = useState(false);
   const countdown = usePlayback(s => s.countdown);
-  const embedPlayerRef = useRef<{ seekTo?: (s: number, allowSeekAhead: boolean) => void; playVideo?: () => void; destroy: () => void } | null>(null);
+  const embedPlayerRef = useRef<{
+    seekTo?: (s: number, allowSeekAhead: boolean) => void;
+    playVideo?: () => void;
+    pauseVideo?: () => void;
+    getCurrentTime?: () => number;
+    getDuration?: () => number;
+    getPlayerState?: () => number;
+    destroy: () => void;
+  } | null>(null);
   useEffect(() => {
     if (!embedActive || !embedIframeRef.current) return;
-    let player: { destroy: () => void; seekTo?: (s: number, allowSeekAhead: boolean) => void; playVideo?: () => void } | null = null;
+    let player: NonNullable<typeof embedPlayerRef.current> | null = null;
     let dead = false;
     loadYouTubeIframeAPI()
       .then(YT => {
@@ -133,16 +149,22 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             },
           });
           embedPlayerRef.current = player;
-          if (typeof window !== "undefined") {
-            (window as unknown as { __ytEmbedPlayer?: unknown }).__ytEmbedPlayer = player;
-            (window as unknown as { __ytEmbedEnded?: (v: boolean) => void }).__ytEmbedEnded = (v: boolean) => setEmbedEnded(v);
-          }
+          // phase 8: the store owns mode, so it must own the only handle that
+          // can stop the iframe's audio (embed→direct handoff). Replaces the
+          // window.__ytEmbedPlayer global (stale across remounts).
+          usePlayback.getState().registerEmbedController({
+            getPosition: () => { try { return player?.getCurrentTime?.() ?? 0; } catch { return 0; } },
+            getDuration: () => { try { return player?.getDuration?.() ?? 0; } catch { return 0; } },
+            getPlayerState: () => { try { return player?.getPlayerState?.() ?? -1; } catch { return -1; } },
+            pause: () => { try { player?.pauseVideo?.(); } catch { /* iframe gone */ } },
+          });
         } catch { /* API attach failed — embed still plays */ }
       })
       .catch(() => { /* script blocked — embed still plays */ });
     return () => {
       dead = true;
       embedPlayerRef.current = null;
+      usePlayback.getState().registerEmbedController(null);
       try { player?.destroy(); } catch { /* iframe already gone */ }
     };
   }, [embedActive, data?.id]);

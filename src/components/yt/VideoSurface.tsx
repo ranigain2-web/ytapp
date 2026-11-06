@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import Hls from "hls.js";
-import { fetchVideo } from "@/lib/yt-api";
+import { fetchVideo, isAudioOnly } from "@/lib/yt-api";
 import type { YtVideoFull, YtFormat, SbSegment } from "@/lib/yt-api";
 import { absStream, fetchSponsorBlock } from "@/lib/yt-api";
 import { formatTime } from "@/lib/yt-format";
@@ -193,7 +193,11 @@ export default function VideoSurface() {
     const rank = (f: YtFormat) => (/mp4|m4a/.test(f.mime) ? 0 : /webm/.test(f.mime) ? 1 : 2);
     return audio.sort((a, b) => rank(a) - rank(b) || (b.bitrate || 0) - (a.bitrate || 0))[0] || null;
   }, [video?.formats]);
-  const noSource = !!video && mode === "direct" && !video.hls && !fallbackFormat?.url && !(audioOnly && audioFormat?.url);
+  // audio-only rescue: when only audio formats exist, play them (poster +
+  // audio) even when the audioOnly PREF is off — an un-backgroundable embed
+  // is strictly worse. effectiveAudio = user pref OR derived audio_only.
+  const audioRescue = !!(video && !audioOnly && isAudioOnly(video) && audioFormat?.url);
+  const noSource = !!video && mode === "direct" && !video.hls && !fallbackFormat?.url && !( (audioOnly || audioRescue) && audioFormat?.url);
 
   // no directly-playable stream → ONE cache-busted retry, then the embed ([A2]).
   // Covers direct-mode loads whose formats went stale between fetch and play,
@@ -243,7 +247,9 @@ export default function VideoSurface() {
     // — by the time this body runs, the cleanup's hls.destroy() has already
     // reset the element (readyState 0, paused), which used to zero keepPos
     // and kill wasPlaying on every audio-mode swap.
-    const isToggle = loadedVideoRef.current === video.id;
+    const sw = usePlayback.getState().modeSwitch;
+    const isModeSwitch = !!sw && sw.id === video.id && sw.from === "embed";
+    const isToggle = !isModeSwitch && loadedVideoRef.current === video.id;
     loadedVideoRef.current = video.id;
     const keepPos = isToggle ? positionRef.current : 0;
     const wasPlaying = isToggle ? playing : true;
@@ -266,12 +272,16 @@ export default function VideoSurface() {
       if (fallbackFormat?.url) {
         el.src = absStream(fallbackFormat.url);
         el.play().catch(() => {});
+      } else if (audioFormat?.url) {
+        // no combined format left, but audio exists — audio beats the embed
+        el.src = absStream(audioFormat.url);
+        el.play().catch(() => {});
       } else {
         usePlayback.getState().setEmbed(video.id);
       }
     };
 
-    const useAudio = audioOnly && audioFormat?.url;
+    const useAudio = (audioOnly || audioRescue) && audioFormat?.url;
     if (useAudio) {
       const src = absStream(audioFormat!.url!);
       el.src = `${src}${src.includes("?") ? "&" : "?"}_=${Date.now()}`;
@@ -356,7 +366,7 @@ export default function VideoSurface() {
     // formats arrays (new memo identities) but identical URLs — reloading the
     // stream then would reset position on every return visit, which is the
     // exact continuity this phase exists to protect.
-  }, [videoId, video?.hls, mode, fallbackFormat?.url, audioOnly, audioFormat?.url, dataSaver, defaultQuality]);
+  }, [videoId, video?.hls, mode, fallbackFormat?.url, audioOnly, audioRescue, audioFormat?.url, dataSaver, defaultQuality]);
 
   // ---- startAt: applied once the NEW source has metadata ----
   useEffect(() => {
@@ -549,7 +559,36 @@ export default function VideoSurface() {
     if (!isNativeApp()) return;
     const onVisibility = () => {
       if (document.visibilityState !== "hidden" || !backgroundPlay) return;
-      if (routeRef.current === "shorts" || usePlayback.getState().mode !== "direct") return;
+      if (routeRef.current === "shorts") return;
+      const st = usePlayback.getState();
+      // embed mode: one handoff attempt to move the video onto the direct
+      // player (the iframe cannot background). Capped by handoffAttempts
+      // (once per id per TTL) + the server's fresh=1 cooldown.
+      if (st.mode === "embed") {
+        const id = st.videoId;
+        const att = st.handoffAttempts[id];
+        if (!id || (att && att.outcome !== "pending")) return;
+        if (st.embedController && st.embedController.getPlayerState() === 0) return; // ENDED
+        void (async () => {
+          try {
+            const v = await fetchVideo(id, { fresh: true });
+            usePlayback.getState().handoffEmbedToDirect(v, {
+              onStarted: () => {
+                const el = videoRef.current;
+                if (!el) return;
+                // the user was watching the embed AUDIBLY — continue unmuted
+                el.muted = false;
+                setMuted(false);
+                setStarted(true);
+                el.play().catch(() => { /* autoplay policy: notification Play starts it */ });
+                ensureBgEnabled();
+              },
+            });
+          } catch { /* fetch failed — embed stays, nothing to do */ }
+        })();
+        return;
+      }
+      if (st.mode !== "direct") return;
       const el = videoRef.current;
       if (!el) return;
       if (el.paused && !userPausedRef.current && !el.ended) {
@@ -1015,7 +1054,7 @@ export default function VideoSurface() {
       if (q.get("debug") !== "1") return;
       (window as unknown as { __ytDebug?: Record<string, unknown> }).__ytDebug = {
         videoId,
-        mode: audioOnly && audioFormat ? "audio" : (video?.hls ? "hls" : (fallbackFormat ? "progressive" : "none")),
+        mode: (audioOnly || audioRescue) && audioFormat ? "audio" : (video?.hls ? "hls" : (fallbackFormat ? "progressive" : "none")),
         formatCount: video?.formats?.length || 0,
         hasStoryboard: !!video?.storyboard,
         chapters: video?.chapters?.length || 0,
@@ -1091,7 +1130,7 @@ export default function VideoSurface() {
       )}
 
       {/* AUDIO MODE ARTWORK */}
-      {audioOnly && audioFormat && !error && (
+      {(audioOnly || audioRescue) && audioFormat && !error && (
         <div className="absolute inset-0 z-[5] overflow-hidden bg-black" data-player-surface="1" data-testid="audio-mode-art">
           {(video.thumb_lg || video.thumb) && (
             <img src={video.thumb_lg || video.thumb} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-40" />
@@ -1104,7 +1143,8 @@ export default function VideoSurface() {
               <p className="text-white text-[15px] sm:text-[17px] font-medium leading-[22px] clamp-2">{video.title}</p>
               {video.channel && <p className="text-white/75 text-[13px] mt-1.5 truncate">{video.channel}</p>}
               <p className="mt-3 inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full bg-white/10 text-white text-[12px] font-medium">
-                <Headphones className="w-3.5 h-3.5" /> Audio mode — data saver
+                <Headphones className="w-3.5 h-3.5" />{" "}
+                {audioOnly ? "Audio mode — data saver" : "Audio only — video stream unavailable from your server"}
               </p>
             </div>
           </div>
@@ -1129,7 +1169,7 @@ export default function VideoSurface() {
       )}
 
       {/* audio-mode indicator */}
-      {audioOnly && audioFormat && !error && (
+      {(audioOnly || audioRescue) && audioFormat && !error && (
         <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-black/80 text-white text-[12px] font-medium pointer-events-none">
           <Headphones className="w-4 h-4" /> Audio mode
         </div>

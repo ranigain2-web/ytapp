@@ -207,6 +207,25 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 
 ## 3. Current state (as of 2026-11-06, session 19 — THE PLAN IS COMPLETE: v1.6.0, v1.7.0, v2.0.0 shipped
 
+### v2.2.0 (background play for every playable source)
+- Audio-only streams play directly (poster+audio, honest badge) instead of
+  the embed — in server AND standalone mode. Server marks audio_only
+  (10min TTL); client derives it when absent (old-server compatible).
+- Embed videos: backgrounding triggers ONE handoff attempt to the direct
+  player at the embed's position (store: EmbedController + handoffEmbedToDirect
+  with once-per-video caps, ad-duration guard, ENDED abort, iframe paused in
+  the same transaction). embedActive derives from store mode — the UI tree
+  ≡ mode invariant; window.__ytEmbedPlayer globals are gone.
+- Server chain: IOS → ANDROID → WEB → MWEB(attempts:1) with a 30s deadline;
+  ?fresh=1 has a 90s per-video cooldown (bypassed on PO-token change);
+  LOGIN_REQUIRED no longer rotates sessions; extracted_by/extract_ms on
+  responses; per-client stats in /api/health; per-client playability in the
+  embed_fallback warn line.
+- scripts/e2e-background.mjs (CI-wired): 35 checks / 5 scenarios with real
+  local media, the bridge mock, and the PRODUCTION IFrame-API registration
+  path via a fake API (yt-embed-api __YT_API_BASE override).
+- Design + goldfish review resolution: docs/designs/background-play-everything.md
+
 ### v2.1.0 (playback reliability + Android back)
 - Embed-fallback root cause FIXED (session-pool token race + 60min failure
   cache): pool re-tokens and drops token-less sessions, failures cache 90s,

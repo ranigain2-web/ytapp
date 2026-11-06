@@ -138,7 +138,11 @@ class SessionPool {
       } catch (e) {
         lastErr = e;
         const msg = String(e.message || e);
-        const retryable = /403|429|Sign in to confirm|LOGIN_REQUIRED|detected odd traffic|Too many requests|fetch failed|ECONNRESET|ETIMEDOUT|502|503|no content/i.test(msg);
+        // LOGIN_REQUIRED / "Sign in to confirm" are IP-reputation signals,
+        // not session faults: rotating on them mints fresh identities that
+        // look like evasion and amplifies traffic. Rotate only on transport
+        // / quota / server faults.
+        const retryable = /403|429|detected odd traffic|Too many requests|fetch failed|ECONNRESET|ETIMEDOUT|502|503|no content/i.test(msg);
         warn(`${label}: attempt ${i + 1} failed: ${msg.slice(0, 140)}${retryable ? ' (retrying with rotated session)' : ' (not retryable)'}`);
         if (!retryable) throw e;
         await this.rotate();
@@ -367,13 +371,40 @@ function normalizeStoryboard(info) {
   } catch { return null; }
 }
 
+// per-client extraction counters (surfaced in /api/health for support)
+const extractStats = {
+  IOS: { ok: 0 }, ANDROID: { ok: 0 }, WEB: { ok: 0 }, MWEB: { ok: 0 },
+};
+// fresh=1 re-extraction cooldown: { videoId: { at, tokenKey } }. A fresh
+// request within 90s of the last attempt is refused (cached result returned,
+// zero API calls) unless the PO-token state changed since — that is exactly
+// the case where a retry can succeed. Caps the API amplification a client
+// retry loop (or a user backgrounding/foregrounding) can cause.
+const freshAttempts = new Map();
+const tokenKey = () => `${tokenState.poToken ? 'tok' : 'none'}:${tokenState.expiresAt}`;
+
 async function getVideoFull(id, { fresh = false } = {}) {
-  // success: 1h. failure (embed_fallback): 90s — a transient extraction
-  // failure must not pin a video to the embed for an hour.
-  return cache.wrap(`video:${id}`, v => (v.ok ? 60 * 60 * 1000 : 90 * 1000), async () => {
+  // TTL tiers: video success 1h; audio-only 10min (a later attempt may find
+  // video streams from another client); failure (embed_fallback) 90s.
+  const ttl = v => (v.ok ? (v.audio_only ? 10 * 60 * 1000 : 60 * 60 * 1000) : 90 * 1000);
+
+  if (fresh) {
+    const last = freshAttempts.get(id);
+    if (last && Date.now() - last.at < 90_000 && last.tokenKey === tokenKey()) {
+      const cached = cache.get(`video:${id}`);
+      if (cached) {
+        log(`fresh=1 for ${id} refused: within cooldown, token unchanged (0 API calls)`);
+        return cached;
+      }
+    }
+  }
+  return cache.wrap(`video:${id}`, ttl, async () => {
+    const chainStartedAt = Date.now();
+    freshAttempts.set(id, { at: chainStartedAt, tokenKey: tokenKey() });
     const result = {
       id,
       ok: false, embed_fallback: false,
+      extracted_by: '', audio_only: false, extract_ms: 0,
       title: '', channel: '', channel_id: '', channel_thumb: '',
       views: 0, likes: 0, duration: 0, published: '', description: '',
       formats: [], hls: null, captions: [], storyboard: null, related: [],
@@ -444,46 +475,77 @@ async function getVideoFull(id, { fresh = false } = {}) {
       } catch { /* keep empty */ }
     }
 
-    // --- streams: IOS client (direct URLs + HLS) ---
-    let iosInfo = null;
-    try {
-      iosInfo = await pool.withRetry(async yt => await yt.getInfo(id, { client: 'IOS' }), { label: `getInfo IOS ${id}`, attempts: 2 });
-    } catch (e) { warn(`IOS getInfo failed for ${id}:`, String(e.message).slice(0, 120)); }
-
-    const iosPlayable = iosInfo && iosInfo.playability_status?.status === 'OK' && iosInfo.streaming_data;
-    if (iosPlayable) {
-      result.formats = normalizeFormats(iosInfo.streaming_data);
-      const hlsUrl = iosInfo.streaming_data.hls_manifest_url;
-      if (hlsUrl) result.hls = `${PUBLIC_URL}/api/hls/${id}`;
-      result.ok = true;
-      if (!result.title) result.title = String(iosInfo.basic_info?.title || '').trim();
-      if (!result.duration) result.duration = iosInfo.basic_info?.duration || 0;
-    } else {
-      // ANDROID combined fallback (360p)
+    // --- streams: client chain IOS → ANDROID → WEB → MWEB -------------------
+    // A shared deadline caps the whole chain (the client aborts at 60s; the
+    // chain must never outlive it). Each client's playability is recorded so
+    // the embed_fallback warn tells support exactly who said what.
+    const chainDeadline = Date.now() + 30_000;
+    const budgetLeft = () => chainDeadline - Date.now();
+    const playability = {};
+    const tryClient = async (client, attempts) => {
+      playability[client] = 'not-tried';
+      if (budgetLeft() <= 0) { playability[client] = 'no-budget'; return null; }
       try {
-        const andInfo = await pool.withRetry(async yt => await yt.getInfo(id, { client: 'ANDROID' }), { label: `getInfo ANDROID ${id}`, attempts: 2 });
-        if (andInfo?.playability_status?.status === 'OK' && andInfo.streaming_data) {
-          result.formats = normalizeFormats(andInfo.streaming_data);
-          result.ok = result.formats.length > 0;
+        const info = await pool.withRetry(async yt => await yt.getInfo(id, { client }), { label: `getInfo ${client} ${id}`, attempts });
+        const sd = info?.streaming_data;
+        playability[client] = info?.playability_status?.status || 'UNKNOWN';
+        if (info?.playability_status?.status === 'OK' && sd) {
+          const formats = normalizeFormats(sd);
+          if (formats.length > 0) return { formats, info };
         }
-      } catch { /* noop */ }
-    }
+      } catch (e) {
+        playability[client] = `ERROR ${String(e.message || e).slice(0, 60)}`;
+      }
+      return null;
+    };
 
-    // WEB streams as the 3rd chance: webInfo was already fetched for
-    // metadata — zero extra API calls, and its URLs are deciphered because
-    // the session was created with retrieve_player: true.
+    const accept = (label, { formats, info }) => {
+      result.formats = formats;
+      result.ok = true;
+      result.extracted_by = label;
+      result.audio_only = formats.length > 0 && formats.every(f => !f.has_video);
+      if (!result.title) result.title = String(info.basic_info?.title || '').trim();
+      if (!result.duration) result.duration = info.basic_info?.duration || 0;
+      extractStats[label].ok++;
+    };
+
+    // IOS first (direct URLs up to 4K + HLS manifest)
+    const ios = await tryClient('IOS', 2);
+    if (ios) {
+      accept('IOS', ios);
+      const hlsUrl = ios.info.streaming_data.hls_manifest_url;
+      if (hlsUrl) result.hls = `${PUBLIC_URL}/api/hls/${id}`;
+    }
+    // ANDROID combined fallback (360p) — audio-only results count too
+    if (!result.ok) {
+      const android = await tryClient('ANDROID', 2);
+      if (android) accept('ANDROID', android);
+    }
+    // WEB streams: webInfo was already fetched for metadata — zero extra API
+    // calls, URLs deciphered via retrieve_player.
     if (!result.ok && playable && webInfo.streaming_data) {
       try {
         const webFormats = normalizeFormats(webInfo.streaming_data);
         if (webFormats.some(f => f.url)) {
-          result.formats = webFormats;
-          result.ok = true;
-          log(`WEB streams rescued ${id} (${webFormats.length} formats)`);
+          accept('WEB', { formats: webFormats, info: webInfo });
+          playability.WEB = 'OK';
         }
       } catch { /* noop */ }
     }
+    // MWEB last (attempts: 1 — a fourth chance does not earn session
+    // rotation). Measured 2026-11-06: on a bot-gated datacenter IP MWEB was
+    // the only client that returned OK streams for a popular video.
+    if (!result.ok) {
+      const mweb = await tryClient('MWEB', 1);
+      if (mweb) accept('MWEB', mweb);
+    }
 
-    if (!result.ok) result.embed_fallback = true; // frontend will use IFrame embed
+    if (!result.ok) {
+      result.embed_fallback = true; // frontend will use IFrame embed
+      const parts = Object.entries(playability).map(([c, p]) => `${c}=${p}`).join(' ');
+      warn(`embed_fallback ${id}: ${parts || 'no client produced streams'}`);
+    }
+    result.extract_ms = Date.now() - chainStartedAt;
     return result;
   });
 }
@@ -926,6 +988,7 @@ app.get('/api/health', wrap(async (req, res) => {
     pot_reachable: await potReachable(),
     token_expires: tokenState.expiresAt ? new Date(tokenState.expiresAt).toISOString() : null,
     sessions: pool.sessions.length,
+    extract_stats: Object.fromEntries(Object.entries(extractStats).map(([k, v]) => [k.toLowerCase(), v.ok])),
     cache_size: cache.size,
     hls_cache: hlsManifestCache.size,
     uptime: process.uptime(),

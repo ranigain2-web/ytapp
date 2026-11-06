@@ -25,6 +25,20 @@ export type DockTarget = "watch" | "mini" | "parked";
 /** What the surface can drive on the <video> element. Registered by
  * VideoSurface on mount; every UI (mini, watch chrome, notification) goes
  * through store actions so nothing needs the element itself ([A1]). */
+/** The IFrame-API player contract WatchPage registers while the embed is
+ *  the active player. Kept structural (duck-typed) so the e2e suite can
+ *  register a fake without loading YouTube's iframe script. */
+export interface EmbedController {
+  getPosition(): number;
+  /** the embed's reported duration — a big mismatch vs the video metadata
+   *  means an ad is playing (ad duration ≠ video duration). */
+  getDuration(): number;
+  /** IFrame API values: -1 unstarted, 0 ENDED, 1 playing, 2 paused,
+   *  3 buffering, 5 cued. */
+  getPlayerState(): number;
+  pause(): void;
+}
+
 export interface PlaybackEngine {
   togglePlay(): void;
   pause(): void;
@@ -52,6 +66,8 @@ const COUNTDOWN_MS = 5000;
 /** [A2] forceEmbed TTL — how long a video that proved unplayable directly
  * stays on the embed path when revisited. */
 const FORCE_EMBED_TTL = 15 * 60 * 1000;
+// a handoff result (done|failed) stands for this long — no re-attempts within
+const HANDOFF_RETRY_TTL = 15 * 60 * 1000;
 
 interface PlaybackState {
   /** The video the surface holds (full metadata; null before first load). */
@@ -129,6 +145,26 @@ interface PlaybackState {
   /** [A1] store-action seek — the replacement for the old imperative
    * VideoPlayerHandle; chapter chips / description links call this. */
   seekTo: (seconds: number) => void;
+
+  // ---- embed↔direct bridge (background handoff, phase 8) ----
+  /** WatchPage registers the IFrame-API player here while the embed is the
+   *  active player. The store owns mode, so it must also own the ONLY
+   *  handle that can stop the iframe's audio — replaces the window globals
+   *  and makes the reverse [A2] transition (embed → direct) enforceable. */
+  registerEmbedController: (c: EmbedController | null) => void;
+  /** Attempt to move an embed-fallback video onto the direct player
+   *  (background handoff). Enforces: same video, embed mode, once per id,
+   *  controller exists, embed not ENDED at commit time, then swaps sources
+   *  in one transaction (iframe paused, forceEmbed flag dropped, surface
+   *  loaded at the clamped embed position). */
+  handoffEmbedToDirect: (video: YtVideoFull, opts?: { startAt?: number; onStarted?: () => void; onFailed?: (reason: string) => void }) => void;
+  handoffAttempts: Record<string, { at: number; outcome: "pending" | "done" | "failed" }>;
+  /** the registered IFrame-API controller (null while direct is the player) */
+  embedController: EmbedController | null;
+  /** set by handoffEmbedToDirect; the surface reads it to skip its stale
+   *  keepPos (a video that loaded directly before the embed would otherwise
+   *  resume its OLD direct position). */
+  modeSwitch: { id: string; at: number; from: SurfaceMode } | null;
 }
 
 export const usePlayback = create<PlaybackState>()((set, get) => ({
@@ -149,6 +185,9 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
   playedIds: [],
   countdown: null,
   forceEmbedIds: {},
+  handoffAttempts: {},
+  embedController: null,
+  modeSwitch: null,
   watchSlot: null,
   miniFrame: null,
   engine: null,
@@ -188,6 +227,65 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
       set({ mode: "embed", miniOpen: false, countdown: null });
     }
     set(s => ({ forceEmbedIds: { ...s.forceEmbedIds, [id]: Date.now() } }));
+  },
+
+  registerEmbedController: (c) => set({ embedController: c }),
+
+  handoffEmbedToDirect: (video, opts) => {
+    const st = get();
+    const fail = (reason: string, { record = true } = {}) => {
+      // transient states (controller not yet attached — the IFrame API can
+      // take seconds to load) must NOT burn the video's one attempt
+      if (record) {
+        set(s => ({ handoffAttempts: { ...s.handoffAttempts, [video.id]: { at: Date.now(), outcome: "failed" } } }));
+      }
+      // observable failure (goldfish: handoffs must not vanish): visible via
+      // adb logcat / devtools console when support triages "no background"
+      console.warn(`[playback] embed→direct handoff failed for ${video.id}: ${reason}`);
+      opts?.onFailed?.(reason);
+    };
+
+    // invariants (goldfish tech-debt review): all checked before ANY state
+    // changes, so a rejected handoff leaves the embed exactly as it was.
+    if (!video || !video.id || video.id !== st.videoId) return fail("different video");
+    if (st.mode !== "embed") return fail(`mode is ${st.mode}`);
+    const att = st.handoffAttempts[video.id];
+    if (att && att.outcome !== "pending" && Date.now() - att.at < HANDOFF_RETRY_TTL) {
+      return fail(`already ${att.outcome} (TTL)`);
+    }
+    const playableNow = !!(video.hls || (video.formats || []).some(f => f.url));
+    if (!playableNow) return fail("no direct streams in the payload");
+    const ctl = st.embedController;
+    if (!ctl) return fail("no embed controller registered (iframe API still attaching)", { record: false });
+
+    // position continuity: clamp; an ad playing shows a duration that
+    // differs from the video's real one → restart at 0 rather than seek
+    // into a meaningless offset (goldfish UX review)
+    const embedPos = ctl.getPosition();
+    const embedDur = ctl.getDuration();
+    const realDur = video.duration || 0;
+    const adPlaying = embedDur > 0 && realDur > 0 && Math.abs(embedDur - realDur) > Math.max(5, realDur * 0.08);
+    let startAt = opts?.startAt ?? embedPos;
+    if (adPlaying || !isFinite(startAt) || startAt < 0) startAt = 0;
+    if (realDur > 0) startAt = Math.min(startAt, Math.max(0, realDur - 2));
+
+    // the embed may have ENDED while the fetch was in flight — committing
+    // would fire onEnd → advance() = surprise navigation (goldfish #5)
+    const ENDED = 0;
+    if (ctl.getPlayerState() === ENDED) return fail("embed ended while fetching");
+
+    // transaction: stop the iframe's audio, clear embed-ness, load direct
+    ctl.pause();
+    set(s => {
+      const forceEmbedIds = { ...s.forceEmbedIds };
+      delete forceEmbedIds[video.id];
+      return { forceEmbedIds, handoffAttempts: { ...s.handoffAttempts, [video.id]: { at: Date.now(), outcome: "done" } } };
+    });
+    // mark the mode switch so the surface's keepPos logic does not reuse a
+    // stale direct position from a previous load of this id
+    set({ modeSwitch: { id: video.id, at: Date.now(), from: "embed" } });
+    get().load(video, { startAt, mode: "direct" });
+    opts?.onStarted?.();
   },
 
   isForcedEmbed: (id) => {

@@ -211,6 +211,14 @@ export interface YtVideoFull extends Partial<YtVideo> {
   id: string;
   ok: boolean;
   embed_fallback: boolean;
+  /** which server client produced the streams (IOS/ANDROID/WEB/MWEB) */
+  extracted_by?: string;
+  /** true when only audio formats exist — the direct player plays poster+audio.
+   *  Derived from the format list when absent so a new client works against
+   *  an old server that predates the field. */
+  audio_only?: boolean;
+  /** server-side extraction duration (ms) — diagnostics */
+  extract_ms?: number;
   title: string;
   channel: string;
   channel_id: string;
@@ -366,6 +374,15 @@ export async function fetchSuggestions(q: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+/** audio_only with old-server fallback: derive it from the format list
+ *  when the server did not send the field (new APK + old backend). */
+export function isAudioOnly(v: YtVideoFull | null | undefined): boolean {
+  if (!v) return false;
+  if (typeof v.audio_only === "boolean") return v.audio_only;
+  const fs = v.formats || [];
+  return fs.length > 0 && fs.every(f => f.has_audio && !f.has_video);
 }
 
 export async function fetchVideo(id: string, opts?: { fresh?: boolean }): Promise<YtVideoFull> {

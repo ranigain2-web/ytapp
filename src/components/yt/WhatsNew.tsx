@@ -32,10 +32,9 @@ export default function WhatsNew() {
   if (!open) return null;
 
   const features: { icon: React.ReactNode; title: string; where: string }[] = [
-    { icon: <ShieldCheck className="w-5 h-5" />, title: "Far fewer fallbacks to the official player", where: "When the backend's token provider wasn't ready at startup, every video quietly fell back to YouTube's own player — with ads and no background play. The server now recovers automatically within about a minute, failed lookups are retried once before giving up, and bad results are no longer cached for an hour. Most videos that used to show the 'ads may appear' notice now play directly — which is what makes background play work." },
-    { icon: <Gauge className="w-5 h-5" />, title: "The Android back button navigates", where: "Pressing the system back button used to minimize the whole app. Now it behaves like YouTube: it closes whatever is open — search, comments, menus — then goes to the previous screen, and only exits when you're already home." },
-    { icon: <PlayCircle className="w-5 h-5" />, title: "Background play, more reliable", where: "Background playback (with lock-screen controls and the media notification) works whenever a video streams directly — and with the playback fixes above, that's now almost always." },
-    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Sharper touch targets", where: "The YouTube logo in the header was only 28×20 pixels — hard to hit. Its tap area is now double height with no visual change." },
+    { icon: <PlayCircle className="w-5 h-5" />, title: "Background play for (almost) everything", where: "Videos that only have an audio stream now play directly — poster plus audio — instead of falling back to YouTube's embed, so they keep playing in the background with the media notification. And when a video is stuck on the embed, backgrounding the app now tries once to move it onto the direct player at the exact spot you were watching." },
+    { icon: <ShieldCheck className="w-5 h-5" />, title: "Smarter extraction, less API hammering", where: "The backend adds two more extraction chances (MWEB client + audio-only results) and logs exactly which client said what when a video falls back to the embed. Retries are capped with a cooldown so a flaky moment can't spam YouTube or get an IP flagged." },
+    { icon: <Gauge className="w-5 h-5" />, title: "Transparent playback diagnostics", where: "Every video response now says which client extracted it and how long it took, and Settings → Test connection shows per-client stats. If something can't play in the background, you can see why." },
   ];
 
   return (
