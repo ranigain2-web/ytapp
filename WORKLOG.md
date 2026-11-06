@@ -1227,3 +1227,40 @@ playable in bundled Chromium), and the suite uses the fixture first, with the
 ffmpeg /tmp regeneration only as a local-sandbox fallback. A pure-Node WebM
 muxer was attempted and abandoned (Chromium rejected the hand-muxed files —
 not worth the rabbit hole when committed fixtures have zero dependencies).
+
+### Session 22 — Deep research phase (NO code changes to the app)
+
+User directive: research only, test everything end-to-end, clone the active
+repos, judge what is worth copying, produce one combined report + plan.
+Nothing was built; nothing below changes app behavior.
+
+Hands-on evidence (all raw output under `research/results/`):
+- `ytapi-battery.json` — our chain extracts 1/6 battery videos from this
+  sandbox (worst-case datacenter IP); 5/6 fall to embed_fallback = the exact
+  background-play failure the user reported.
+- `ytdlp-battery.json` — yt-dlp 2026.10.26: all 7 forced clients bot-gated
+  ("Sign in to confirm you're not a bot"); android_vr extracts but its format
+  URLs 403; guest cookies via curl useless; real headless Chromium gets
+  google.com/sorry on watch pages BUT youtube.com/embed loads fine.
+- `instance-probes.json` — public Invidious 0/6 usable, Piped 0/6 (one 200
+  with empty streams), RYD API works (521k dislikes / 36ms), SponsorBlock
+  alive, cobalt public API requires JWT.
+- `mandated-test.log` — electron-bundle suite honestly re-run after
+  rebuilding out/: 14/14 PASS, but it only ever tests dQw4w9WgXcQ (the single
+  video that extracts here) — a blind spot now documented in the report.
+- 9 repos shallow-cloned to `research/repos/` (NouTube, FreeTube,
+  Materialious, Flow, NewPipe, LibreTube, Seal, Metrolist, cobalt) and
+  code-read by 4 parallel agents with file evidence (techniques for P0/P1/P2
+  come from these; all GPL/AGPL = re-implement, never paste — only yt-dlp
+  (Unlicense) and YouTube.js (MIT) are copy-safe for our MIT repo).
+
+Deliverable: `download/ytapp-deep-research-report.docx` (+ rendered PDF) —
+11 sections, 4 data tables, phased plan P0 Extraction Engine v2 / P1 Compat
+Mode (NouTube visibility-spoof + background-guard technique) / P2 Downloads
+(server-side yt-dlp sidecar) / P3 optional Media3 native player / P4 UX
+parity. Generator persisted in `scripts/docx-gen/`. Awaiting user approval
+per phase before any implementation.
+
+Test scripts kept for re-verification: `scripts/ytapi-battery.mjs`,
+`scripts/ytdlp_battery.py`, `scripts/instance_probes.py`,
+`scripts/repo-activity-audit.mjs`, `scripts/research-search.sh`.
