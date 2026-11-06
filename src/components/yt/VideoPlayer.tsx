@@ -149,19 +149,21 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer({
     // audio-mode toggle for the SAME video: keep position + playing state
     const isToggle = loadedVideoRef.current === video.id;
     loadedVideoRef.current = video.id;
-    const keepPos = isToggle && el.readyState >= 1 ? el.currentTime : 0;
-    const wasPlaying = isToggle ? !el.paused : true;
+    // captured from positionRef/`playing`, not the element: the cleanup's
+    // hls.destroy() already reset it (readyState 0, paused) — same race the
+    // surface had (audio-mode swap lost position + play)
+    const keepPos = isToggle ? positionRef.current : 0;
+    const wasPlaying = isToggle ? playing : true;
     const resumeAfterLoad = () => {
-      if (keepPos > 0.5) {
-        const apply = () => {
+      const apply = () => {
+        if (keepPos > 0.5) {
           try { el.currentTime = keepPos; } catch { /* not seekable yet */ }
-          if (wasPlaying) el.play().catch(() => {});
-        };
-        if (el.readyState >= 1) apply();
-        else el.addEventListener("loadedmetadata", apply, { once: true });
-      } else if (wasPlaying) {
-        el.play().catch(() => {});
-      }
+        }
+        if (wasPlaying) el.play().catch(() => {});
+      };
+      // always defer past the load algorithm (it pauses + rejects pending
+      // play promises while the new src settles)
+      el.addEventListener("loadedmetadata", apply, { once: true });
     };
 
     // progressive fallback switcher: used when HLS dies before levels load

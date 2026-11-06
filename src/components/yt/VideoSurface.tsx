@@ -212,22 +212,26 @@ export default function VideoSurface() {
     let hls: Hls | null = null;
     manifestOkRef.current = false;
 
-    // same-video toggle (audio mode) keeps position + playing state
+    // same-video toggle (audio mode) keeps position + playing state.
+    // NOTE: positionRef/`playing` are captured instead of reading the element
+    // — by the time this body runs, the cleanup's hls.destroy() has already
+    // reset the element (readyState 0, paused), which used to zero keepPos
+    // and kill wasPlaying on every audio-mode swap.
     const isToggle = loadedVideoRef.current === video.id;
     loadedVideoRef.current = video.id;
-    const keepPos = isToggle && el.readyState >= 1 ? el.currentTime : 0;
-    const wasPlaying = isToggle ? !el.paused : true;
+    const keepPos = isToggle ? positionRef.current : 0;
+    const wasPlaying = isToggle ? playing : true;
     const resumeAfterLoad = () => {
-      if (keepPos > 0.5) {
-        const apply = () => {
+      const apply = () => {
+        if (keepPos > 0.5) {
           try { el.currentTime = keepPos; } catch { /* not seekable yet */ }
-          if (wasPlaying) el.play().catch(() => {});
-        };
-        if (el.readyState >= 1) apply();
-        else el.addEventListener("loadedmetadata", apply, { once: true });
-      } else if (wasPlaying) {
-        el.play().catch(() => {});
-      }
+        }
+        if (wasPlaying) el.play().catch(() => {});
+      };
+      // ALWAYS defer: a fresh load is in flight (we just set src), and an
+      // immediate apply races the load algorithm — which pauses the element
+      // and rejects pending play promises, losing both seek and play.
+      el.addEventListener("loadedmetadata", apply, { once: true });
     };
 
     const switchToProgressive = () => {
