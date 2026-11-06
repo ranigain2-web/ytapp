@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { APP_VERSION } from "@/lib/version";
-import { Headphones, MoonStar, PlayCircle, RotateCcw, SkipForward, X, CheckCircle2, Volume2, Gauge, Subtitles, Smartphone, Image } from "lucide-react";
+import { Headphones, MoonStar, PlayCircle, RotateCcw, SkipForward, X, CheckCircle2, Volume2, Gauge, Subtitles, Smartphone, Image, PictureInPicture2 } from "lucide-react";
 
 const SEEN_KEY = "yt_whatsnew_seen";
 
@@ -32,14 +32,14 @@ export default function WhatsNew() {
   if (!open) return null;
 
   const features: { icon: React.ReactNode; title: string; where: string }[] = [
-    { icon: <Volume2 className="w-5 h-5" />, title: "Smarter interruptions", where: "Incoming call or notification? Playback ducks or pauses and comes back exactly where it was. Unplug your headphones and it pauses instantly — just like YouTube Premium." },
-    { icon: <Smartphone className="w-5 h-5" />, title: "Lock-screen controls that work", where: "Play/pause from the notification or your headset now actually controls the video (this path was silently broken before — fixed). Rotate to landscape for fullscreen." },
-    { icon: <RotateCcw className="w-5 h-5" />, title: "Drag the seek bar", where: "Grab the red dot and scrub — the thumbnail preview appears under your finger with the time, and the dot grows while you drag. Chapters show their titles above the bar." },
-    { icon: <Subtitles className="w-5 h-5" />, title: "Captions & speed shortcuts", where: "Press “c” to toggle subtitles. On touch, press-and-hold the video for 2× speed while held." },
-    { icon: <Gauge className="w-5 h-5" />, title: "Video quality + Data saver", where: "Settings → Playback: pick a max quality (Auto…360p) or turn on Data saver to cap at 360p and skip 60fps." },
+    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Miniplayer everywhere", where: "Scroll past the video — or tap anywhere away from the watch page — and playback continues in a corner miniplayer: same position, same stream, nothing reloads. Drag it down to dismiss, tap it to come back." },
+    { icon: <Smartphone className="w-5 h-5" />, title: "Picture-in-picture (Android)", where: "Press Home while a video plays and it shrinks into a floating window. The player's new PiP button does it on demand. Settings → Playback can turn the Home behavior off." },
+    { icon: <SkipForward className="w-5 h-5" />, title: "Autoplay countdown", where: "When a video ends, an Up-next card counts down 5 seconds — Cancel stops it, exactly like YouTube. Works for embed videos too." },
+    { icon: <RotateCcw className="w-5 h-5" />, title: "Prev button on the lock screen", where: "The notification is now Prev / Pause / Next (+ Close expanded): Prev goes back through what you played, or restarts the current video." },
+    { icon: <Volume2 className="w-5 h-5" />, title: "Smarter interruptions", where: "Incoming call or notification? Playback ducks or pauses and comes back exactly where it was. Unplug your headphones and it pauses instantly." },
+    { icon: <Gauge className="w-5 h-5" />, title: "Video quality + Data saver (fixed)", where: "Pinned quality and Data saver now actually cap the stream — a silent bug had killed both. Settings → Playback." },
     { icon: <PlayCircle className="w-5 h-5" />, title: "Background play", where: "Minimize or screen-off keeps playing with lock-screen controls. On by default: Settings → Playback." },
     { icon: <Headphones className="w-5 h-5" />, title: "Audio mode (data saver)", where: "Sound-only streaming with the thumbnail on screen — the Audio button under any playing video." },
-    { icon: <MoonStar className="w-5 h-5" />, title: "Dark & light themes", where: "Tap the moon / sun in the top bar, or Settings → Appearance." },
   ];
 
   return (

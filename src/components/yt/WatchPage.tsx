@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchVideo, fetchComments, getActiveSource, type YtVideoFull, type YtComment } from "@/lib/yt-api";
 import { useRouter } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
+import { usePlayback } from "@/lib/yt-playback";
 import { formatViews, formatCount, timeAgo, fullDate } from "@/lib/yt-format";
 import { loadYouTubeIframeAPI } from "@/lib/yt-embed-api";
-import VideoPlayer from "./VideoPlayer";
-import type { VideoPlayerHandle } from "./VideoPlayer";
 import { VideoCard } from "./VideoCard";
 import Comments from "./Comments";
+import { CountdownCard } from "./CountdownCard";
+import { parkSurfaceVideoIfInside } from "./VideoSurface";
 import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Scissors, Bell, AlertTriangle, SkipForward, Headphones, Play, RotateCcw } from "lucide-react";
 
 export default function WatchPage({ videoId, startAt }: { videoId: string; startAt?: number }) {
@@ -17,12 +18,23 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const [data, setData] = useState<YtVideoFull | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [descOpen, setDescOpen] = useState(false);
-  // set when the direct-stream player proves unplayable (bot-gated HLS, dead
-  // CDN URLs, …): swaps in the official embed player, which always plays —
-  // the same mechanism the Shorts feed uses. Stable identity on purpose.
-  const [forceEmbed, setForceEmbed] = useState(false);
-  const handlePlayerFallback = useCallback(() => setForceEmbed(true), []);
-  const loading = data === null && err === null;
+
+  // ---- phase-2 playback store ----
+  // The persistent VideoSurface owns the player; this page only registers the
+  // watch-slot mount point and pushes metadata + the related queue into the
+  // store ([A1]/[A7]). forceEmbed moved into the store ([A2]).
+  const load = usePlayback(s => s.load);
+  const setQueue = usePlayback(s => s.setQueue);
+  const setEmbed = usePlayback(s => s.setEmbed);
+  const nextTrack = usePlayback(s => s.nextTrack);
+  const seekTo = usePlayback(s => s.seekTo);
+  const autoplay = useYt(s => s.prefs.autoplay);
+  const forcedEmbed = usePlayback(s => !!s.forceEmbedIds[videoId]);
+  // true when the surface already holds THIS video: render the slot
+  // immediately — returning to a video resumes with zero skeleton flash
+  const instantPlayer = usePlayback(s =>
+    s.videoId === videoId && s.mode === "direct" && !(videoId in s.forceEmbedIds));
+  const storeVideo = usePlayback(s => (s.videoId === videoId ? s.video : null));
 
   // local store
   const subs = useYt(s => s.subs);
@@ -34,10 +46,8 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const later = useYt(s => s.later);
   const toggleLater = useYt(s => s.toggleLater);
   const addHistory = useYt(s => s.addHistory);
-  const setProgress = useYt(s => s.setProgress);
-  const autoplay = useYt(s => s.prefs.autoplay);
-  const setPrefs = useYt(s => s.setPrefs);
   const audioOnly = useYt(s => s.prefs.audioOnly);
+  const setPrefs = useYt(s => s.setPrefs);
 
   const isSubbed = subs.some(s => s.id === (data?.channel_id || ""));
   const isLiked = liked.some(l => l.id === videoId);
@@ -51,7 +61,6 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         const v = await fetchVideo(videoId);
         if (!alive) return;
         setData(v);
-        // add to history
         if (v.title) {
           addHistory({
             id: v.id, title: v.title, channel: v.channel, channel_id: v.channel_id,
@@ -59,44 +68,45 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             published: v.published || "", length: v.duration || 0,
           });
         }
+        // [A2]/[A7]: hand the video + its related queue to the persistent
+        // surface; embed-fallback videos park it (the iframe is the player)
+        const mode = (v.embed_fallback || usePlayback.getState().isForcedEmbed(v.id)) ? "embed" : "direct";
+        load(v, { startAt, mode });
+        setQueue(v.related || []);
       } catch (e) {
         if (alive) setErr(String(e instanceof Error ? e.message : e));
       }
     })();
     return () => { alive = false; };
-  }, [videoId, addHistory]);
+  }, [videoId, addHistory, load, setQueue, startAt]);
 
-  const onProgress = useCallback((cur: number, dur: number) => {
-    if (dur > 0 && Math.floor(cur) % 5 === 0) setProgress(videoId, cur, dur);
-  }, [videoId, setProgress]);
+  const goNext = useCallback(() => nextTrack(), [nextTrack]);
 
-  const goNext = useCallback(() => {
-    if (data?.related?.[0]) navigate({ name: "watch", v: data.related[0].id });
-  }, [data, navigate]);
+  // ---- derived player state (before all effects that need it; `v` may come
+  // from the store during instant resume, before the fetch lands) ----
+  const v = data || (instantPlayer && storeVideo ? storeVideo : null);
+  const blockedMessage = v ? blocked(v) : null;
+  const embedActive = !!(v
+    && (v.embed_fallback || forcedEmbed)
+    && !(v.embed_fallback && v.playability_reason && (v.embed_blocked || v.unavailable)));
+  const directPlayer = !!v && !err && !blockedMessage && !embedActive;
+  const loading = data === null && err === null && !instantPlayer;
 
   // ---- Embed player: YouTube IFrame API wiring ----
   // Embed-fallback videos play inside YouTube's own iframe; the IFrame API
-  // lets us observe its state so "Autoplay next video" also works there, AND
+  // lets us observe its state so the autoplay countdown also works there, AND
   // when a video ends without autoplay we drop our own overlay on top of the
-  // iframe — YouTube's end screen ("More videos") deep-links into the YouTube
-  // app, which would kick the user out of ytapp.
-  const embedActive = !!(data
-    && (data.embed_fallback || forceEmbed)
-    && !(data.embed_fallback && data.playability_reason && (data.embed_blocked || data.unavailable)));
+  // iframe — YouTube's end screen deep-links into the YouTube app.
   const embedIframeRef = useRef<HTMLIFrameElement | null>(null);
-  // Phase 1: imperative seek handle into the direct-mode player (chapter chips)
-  const playerRef = useRef<VideoPlayerHandle | null>(null);
   const autoplayRef = useRef(autoplay);
-  const goNextRef = useRef(goNext);
+  useEffect(() => { autoplayRef.current = autoplay; }, [autoplay]);
   const [embedEnded, setEmbedEnded] = useState(false);
+  const countdown = usePlayback(s => s.countdown);
   const embedPlayerRef = useRef<{ seekTo?: (s: number, allowSeekAhead: boolean) => void; playVideo?: () => void; destroy: () => void } | null>(null);
-  useEffect(() => { autoplayRef.current = autoplay; goNextRef.current = goNext; }, [autoplay, goNext]);
   useEffect(() => {
     if (!embedActive || !embedIframeRef.current) return;
     let player: { destroy: () => void; seekTo?: (s: number, allowSeekAhead: boolean) => void; playVideo?: () => void } | null = null;
     let dead = false;
-    // note: embedEnded needs no manual reset — WatchPage remounts per video id
-    // (AppShell keys it on route.v), so a fresh video starts with a fresh state.
     loadYouTubeIframeAPI()
       .then(YT => {
         if (dead || !embedIframeRef.current) return;
@@ -104,9 +114,9 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           player = new YT.Player(embedIframeRef.current, {
             events: {
               onStateChange: (e: { data: number }) => {
-                if (e.data === 0) { // ENDED
-                  if (autoplayRef.current) goNextRef.current();
-                  else setEmbedEnded(true); // cover YouTube's escape-trap end screen
+                if (e.data === 0) { // ENDED → [A7] countdown (autoplay) or overlay
+                  if (autoplayRef.current) usePlayback.getState().advance();
+                  setEmbedEnded(true);
                 } else {
                   setEmbedEnded(false);
                 }
@@ -116,8 +126,6 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           embedPlayerRef.current = player;
           if (typeof window !== "undefined") {
             (window as unknown as { __ytEmbedPlayer?: unknown }).__ytEmbedPlayer = player;
-            // E2E hook: sandboxed headless browsers can't drive the real embed
-            // (bot-gated), so tests force the ended state to verify the overlay.
             (window as unknown as { __ytEmbedEnded?: (v: boolean) => void }).__ytEmbedEnded = (v: boolean) => setEmbedEnded(v);
           }
         } catch { /* API attach failed — embed still plays */ }
@@ -134,6 +142,22 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     embedPlayerRef.current?.seekTo?.(0, true);
     embedPlayerRef.current?.playVideo?.();
     setEmbedEnded(false);
+  }, []);
+
+  // register the watch-slot mount point for the persistent surface ([A1]).
+  // REF CALLBACK, not an effect: React nulls refs before running unmount
+  // cleanups, so an effect could never unregister (a stale watchSlot kept the
+  // portal rendering into a detached node — and the video inside it got
+  // browser-paused). The callback also parks the video into the holder
+  // BEFORE this slot leaves the document.
+  const slotRefCb = useCallback((el: HTMLDivElement | null) => {
+    const pb = usePlayback.getState();
+    if (el) {
+      pb.registerWatchSlot(el);
+    } else {
+      parkSurfaceVideoIfInside(pb.watchSlot);
+      pb.registerWatchSlot(null);
+    }
   }, []);
 
   if (loading) {
@@ -173,32 +197,32 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     );
   }
 
-  const v = data!;
+  // returning to a video the surface already holds: resume without the fetch
+  if (!v) {
+    return (
+      <div className="max-w-[560px] mx-auto px-6 pt-20 pb-10 text-center">
+        <h1 className="text-[20px] font-bold text-[var(--yt-text)] mb-3">Video unavailable</h1>
+        <button onClick={() => navigate({ name: "home" })} className="px-5 py-2.5 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[14px]">Go to home</button>
+      </div>
+    );
+  }
+
   const likeCount = v.likes ? formatCount(v.likes) : "";
   const source = getActiveSource();
   const communityMode = source === "community";
   const standaloneMode = source === "standalone";
-  // Hard-blocked video (copyright/geo/embed-blocked with no playable stream)
-  // → OUR clean state, because the embed player can't play it either.
-  // Bot-gated videos (LOGIN_REQUIRED "confirm you're not a bot") are NOT here:
-  // the official embed still plays them (the Shorts feed proves it), so they
-  // fall through to the embed player below.
-  const blockedMessage = v.embed_fallback && v.playability_reason && (v.embed_blocked || v.unavailable)
-    ? v.playability_reason
-    : null;
+  const hasAudioStream = !embedActive && (v.formats || []).some(f => f.has_audio && !f.has_video);
 
   return (
     // Two measured layout facts drive these breakpoints:
     //  • below lg the player is edge-to-edge (YouTube's tablet player is the
     //    full 834px; ours was inset to 802px by a sm:px-6 override),
-    //  • YouTube goes TWO-COLUMN on watch from 1000px, not 1280px — at 1024 it
-    //    renders a 656px player beside a 320px related rail. Ours stayed
-    //    stacked, so a 1024px Mac/iPad window got a full-width player and the
-    //    related list pushed below the fold.
+    //  • YouTube goes TWO-COLUMN on watch from 1000px, not 1280px.
     <div className="yt-watch-outer max-w-[1754px] mx-auto px-0 lg:px-4 xl:px-6 pt-0 lg:pt-4 xl:pt-6 pb-16 flex flex-col lg:flex-row gap-0 lg:gap-4 xl:gap-6">
       {/* main column */}
       <div className="yt-player-col flex-1 min-w-0 max-w-[1280px] mx-auto w-full">
-        {/* PLAYER */}
+        {/* PLAYER — phase 2: the persistent VideoSurface adopts its <video>
+            into this slot; the poster shows through while the mini has it */}
         {blockedMessage ? (
           <div
             className="w-full aspect-video bg-black rounded-none lg:rounded-xl flex flex-col items-center justify-center px-6 text-center bg-cover bg-center"
@@ -217,7 +241,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               Watch on YouTube
             </a>
           </div>
-        ) : v.embed_fallback || forceEmbed ? (
+        ) : embedActive ? (
           <div
             className="yt-player-shell relative w-full aspect-video bg-black rounded-none lg:rounded-xl overflow-hidden"
             style={{ backgroundImage: v.thumb_lg || v.thumb ? `url(${v.thumb_lg || v.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
@@ -233,47 +257,60 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             />
             {/* ENDED overlay — sits ON TOP of YouTube's end screen so its
                 "More videos" grid (which deep-links into the YouTube app)
-                never kicks the user out of ytapp. */}
+                never kicks the user out of ytapp. Phase 2: gains the same
+                autoplay countdown card as the direct player ([A7]). */}
             {embedEnded && (
               <div className="absolute inset-0 z-20 bg-black/95 flex flex-col items-center justify-center gap-5 px-4" data-testid="embed-ended-overlay">
-                <p className="text-white/60 text-[12px] font-medium uppercase tracking-[0.12em]">Up next</p>
-                {v.related?.[0] && (
-                  <button
-                    onClick={goNext}
-                    className="w-full max-w-[420px] flex items-center gap-3 text-left rounded-xl hover:bg-white/10 p-2 transition-colors"
-                    data-testid="embed-ended-next"
-                  >
-                    {v.related[0].thumb && <img src={v.related[0].thumb} alt="" className="w-[120px] aspect-video rounded-lg object-cover shrink-0" />}
-                    <span className="min-w-0">
-                      <span className="block text-white text-[14px] font-medium leading-[18px] line-clamp-2">{v.related[0].title}</span>
-                      <span className="block text-white/60 text-[12px] mt-1">{v.related[0].channel} · {v.related[0].views}</span>
-                    </span>
-                  </button>
+                <CountdownCard />
+                {/* no countdown (autoplay off, or nothing up next) → the
+                    static up-next + replay, exactly the phase-1 overlay */}
+                {!countdown && (
+                  <>
+                    <p className="text-white/60 text-[12px] font-medium uppercase tracking-[0.12em]">Up next</p>
+                    {v.related?.[0] && (
+                      <button
+                        onClick={goNext}
+                        className="w-full max-w-[420px] flex items-center gap-3 text-left rounded-xl hover:bg-white/10 p-2 transition-colors"
+                        data-testid="embed-ended-next"
+                      >
+                        {v.related[0].thumb && <img src={v.related[0].thumb} alt="" className="w-[120px] aspect-video rounded-lg object-cover shrink-0" />}
+                        <span className="min-w-0">
+                          <span className="block text-white text-[14px] font-medium leading-[18px] line-clamp-2">{v.related[0].title}</span>
+                          <span className="block text-white/60 text-[12px] mt-1">{v.related[0].channel} · {v.related[0].views}</span>
+                        </span>
+                      </button>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={replayEmbed}
+                        className="flex items-center gap-2 h-10 px-5 rounded-full bg-[var(--yt-bg-elev2)] text-white text-[14px] font-medium hover:bg-[#3f3f3f]"
+                      >
+                        <RotateCcw className="w-5 h-5" /> Replay
+                      </button>
+                      {v.related?.[0] && (
+                        <button
+                          onClick={goNext}
+                          className="flex items-center gap-2 h-10 px-5 rounded-full bg-white text-black text-[14px] font-medium hover:bg-white/90"
+                        >
+                          <Play className="w-5 h-5" fill="black" /> Next video
+                        </button>
+                      )}
+                    </div>
+                  </>
                 )}
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={replayEmbed}
-                    className="flex items-center gap-2 h-10 px-5 rounded-full bg-[var(--yt-bg-elev2)] text-white text-[14px] font-medium hover:bg-[#3f3f3f]"
-                  >
-                    <RotateCcw className="w-5 h-5" /> Replay
-                  </button>
-                  {v.related?.[0] && (
-                    <button
-                      onClick={goNext}
-                      className="flex items-center gap-2 h-10 px-5 rounded-full bg-white text-black text-[14px] font-medium hover:bg-white/90"
-                    >
-                      <Play className="w-5 h-5" fill="black" /> Next video
-                    </button>
-                  )}
-                </div>
               </div>
             )}
             <div className="sm:hidden absolute bottom-0 inset-x-0 h-1 bg-transparent" />
           </div>
         ) : (
-          <VideoPlayer ref={playerRef} video={v} startAt={startAt} onEnded={autoplay ? goNext : undefined} onNext={goNext} onProgress={onProgress} onFallback={handlePlayerFallback} />
+          <div
+            ref={slotRefCb}
+            className="yt-player-shell relative w-full aspect-video bg-black rounded-none lg:rounded-xl overflow-hidden bg-cover bg-center"
+            style={v.thumb_lg || v.thumb ? { backgroundImage: `url(${v.thumb_lg || v.thumb})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
+            data-testid="player-slot"
+          />
         )}
-        {(v.embed_fallback || forceEmbed) && !blockedMessage && (
+        {embedActive && !blockedMessage && (
           <p className="px-4 sm:px-0 py-2 text-[12px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev)] sm:rounded-lg sm:mt-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#ffb13b] shrink-0" />
             {standaloneMode
@@ -287,10 +324,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
         {/* PLAYER BAR — always visible in BOTH player modes so playback
             controls (autoplay + audio mode + skip-entire-video) are always
             discoverable, even inside YouTube's own embed iframe. */}
-        {!blockedMessage && (() => {
-          const hasAudioStream = !(v.embed_fallback || forceEmbed)
-            && (v.formats || []).some(f => f.has_audio && !f.has_video);
-          return (
+        {!blockedMessage && (
           <div className="flex items-center justify-between gap-3 px-3 lg:px-0 py-2 mt-1 border-b border-[var(--yt-border)] overflow-x-auto no-scrollbar">
             <button
               onClick={() => setPrefs({ autoplay: !autoplay })}
@@ -328,8 +362,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               </button>
             </div>
           </div>
-          );
-        })()}
+        )}
 
         {/* title */}
         <h1 className="px-3 lg:px-0 mt-2 text-[18px] sm:text-[20px] font-medium leading-[26px] text-[var(--yt-text)]">{v.title || "Untitled"}</h1>
@@ -343,7 +376,6 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               aria-label={v.channel}
             >
               {v.channel_thumb ? (
-
                 <img src={v.channel_thumb} alt="" className="w-10 h-10 rounded-full object-cover" />
               ) : (
                 <span className="w-10 h-10 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] font-bold text-lg flex items-center justify-center">
@@ -417,7 +449,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           <p className="text-[14px] font-medium">
             {typeof v.views === "number" ? `${v.views.toLocaleString()} views` : formatViews(v.views) + (formatViews(v.views) ? " views" : "")}
             {v.published ? ` · ${fullDate(v.published)}` : ""}
-            {v.embed_fallback ? "" : " · streaming ad-free"}
+            {embedActive ? "" : " · streaming ad-free"}
           </p>
           {v.description && (
             <p className={`mt-2 text-[14px] leading-[22px] whitespace-pre-wrap text-[var(--yt-text-2)] ${descOpen ? "" : "clamp-2"}`}>
@@ -433,8 +465,8 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
                   data-testid="desc-chapter"
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Phase 1: description chapter chips actually seek the player
-                    playerRef.current?.seekTo(c.start);
+                    // [A1] chapter chips seek through the store action
+                    seekTo(c.start);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
                 >
@@ -459,16 +491,18 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             <span key={chip} className={`shrink-0 h-8 px-3 rounded-lg text-[13px] font-medium flex items-center ${i === 0 ? "bg-[var(--yt-invert-bg)] text-[var(--yt-invert-text)]" : "bg-[var(--yt-bg-elev2)] text-[var(--yt-text)]"}`}>{chip}</span>
           ))}
         </div>
-        {/* In the rail (lg+) the related list is a compact stack, and the phone
-            keeps compact rows. In the TABLET band only (sm…lg, i.e. once the
-            secondary column has dropped below the player but the viewport is
-            still wide) YouTube switches to a 2-up grid of stacked cards —
-            measured at 834px: two 393×229 thumbnails per row, not one 810px
-            row. `sm:max-lg:` encodes exactly that band. */}
         <div className="space-y-2 sm:max-lg:grid sm:max-lg:grid-cols-2 sm:max-lg:gap-x-4 sm:max-lg:gap-y-6 sm:max-lg:space-y-0">
           {(v.related || []).map(r => <VideoCard key={r.id} video={r} compact responsive />)}
         </div>
       </aside>
     </div>
   );
+}
+
+// Hard-blocked = embed_fallback AND a playability reason AND embed-blocked or
+// unavailable — the iframe can't play it either, so show OUR clean state.
+function blocked(v: YtVideoFull): string | null {
+  return v.embed_fallback && v.playability_reason && (v.embed_blocked || v.unavailable)
+    ? v.playability_reason
+    : null;
 }

@@ -77,6 +77,9 @@ interface YtStore {
     /** Phase 1 ("Playback and performance"): cap quality at 360p and skip
      *  60fps variants — YouTube's Data saver. */
     dataSaver: boolean;
+    /** Phase 2 (PiP): pressing Home while a video plays shrinks it into a
+     *  floating window (Android). */
+    pipOnHome: boolean;
   };
   setPrefs: (p: Partial<YtStore["prefs"]>) => void;
 }
@@ -158,6 +161,7 @@ export const useYt = create<YtStore>()(
         backgroundPlay: true,
         audioOnly: false,
         dataSaver: false,
+        pipOnHome: true,
       },
       setPrefs: (p) => set({ prefs: { ...get().prefs, ...p } }),
     }),

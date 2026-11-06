@@ -26,8 +26,13 @@ export interface YtBackgroundKeepAwakeOptions {
   enable?: boolean;
 }
 
+export interface YtBackgroundPipOnHomeOptions {
+  /** true = pressing Home while a video plays shrinks into PiP. */
+  enable?: boolean;
+}
+
 export interface YtBackgroundControlEvent {
-  action: "play" | "pause" | "next" | "stop" | "seek" | "duck" | "unduck";
+  action: "play" | "pause" | "next" | "prev" | "stop" | "seek" | "duck" | "unduck";
   /** Target position in seconds (only for action === "seek"). */
   seekTo?: number;
 }
@@ -38,6 +43,14 @@ export interface YtBackgroundPlugin {
   disable(): Promise<void>;
   /** Android: setKeepScreenOn on the WebView — no-op on web. */
   keepAwake(options: YtBackgroundKeepAwakeOptions): Promise<void>;
+  /** Phase 2 (PiP): shrink the activity into a floating ~16:9 window.
+   *  Android 8+; silently resolves elsewhere. Leaving PiP is user-driven —
+   *  dismissing the window arrives as the existing "stop" control event. */
+  enterPip(): Promise<void>;
+  /** Phase 2 (PiP): whether a Home-press while playing enters PiP (the
+   *  MainActivity's onUserLeaveHint sets a flag the plugin polls on
+   *  activity-pause; this is the JS-side toggle for it). Default: enabled. */
+  setPipOnHome(options: YtBackgroundPipOnHomeOptions): Promise<void>;
   addListener(
     eventName: "control",
     listenerFunc: (event: YtBackgroundControlEvent) => void,

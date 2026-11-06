@@ -196,30 +196,35 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer({
       const src = absStream(video.hls);
       hls.loadSource(`${src}${src.includes("?") ? "&" : "?"}_=${Date.now()}`);
       hls.attachMedia(el);
+      // position restore applies to the hls path too (phase-2 fix — this was
+      // audio/progressive-only before, so same-video hls reloads reset to 0)
+      resumeAfterLoad();
+      // Phase-1 quality prefs, applied where the level list actually exists.
+      // (Fixed a latent phase-1 bug here: this used to reference the manifest
+      // callback's `data` from OUTSIDE the callback — a ReferenceError that
+      // killed quality capping AND every hls error listener below it.)
+      const applyQualityPrefs = (h: Hls, levels: { height?: number; frameRate?: number; name?: string }[]) => {
+        const target = dataSaver ? 360 : (typeof defaultQuality === "number" ? defaultQuality : 0);
+        if (!target) { h.autoLevelCapping = -1; return; }
+        let cap = -1;
+        levels.forEach((l, i) => {
+          const h60 = (l.frameRate || 0) > 50 || /60/.test(l.name || "");
+          if (l.height && l.height <= target && !(dataSaver && h60)) cap = i;
+        });
+        h.autoLevelCapping = cap;
+      };
       hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
         manifestOkRef.current = true;
         const lv = data.levels
           .map((l, i) => ({ index: i, label: l.height ? `${l.height}p` : `${Math.round((l.bitrate || 0) / 1000)}kbps`, height: l.height || 0 }))
           .sort((a, b) => b.height - a.height);
         setLevels(lv);
-        hlsRef.current?.startLoad(-1);
+        const h2 = hlsRef.current;
+        if (h2) {
+          h2.startLoad(-1);
+          applyQualityPrefs(h2, data.levels);
+        }
       });
-      // Phase 1: apply the pinned-quality / data-saver prefs every time a new
-      // source loads (level list may differ per video).
-      const applyQualityPrefs = (h: Hls) => {
-        const target = dataSaver ? 360 : (defaultQuality !== "auto" ? parseInt(defaultQuality, 10) : 0);
-        if (!target) { h.autoLevelCapping = -1; return; }
-        // autoLevelCapping works on level INDEX (ascending quality): pick the
-        // highest index whose height stays within target, and skip 60fps
-        // variants when data saver is on (they cost ~2× bitrate at same height).
-        let cap = -1;
-        data.levels.forEach((l, i) => {
-          const h60 = (l.frameRate || 0) > 50 || /60/.test(l.name || "");
-          if (l.height && l.height <= target && !(dataSaver && h60)) cap = i;
-        });
-        h.autoLevelCapping = cap;
-      };
-      applyQualityPrefs(hls);
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => setCurrentLevel(hlsRef.current?.autoLevelEnabled ? -1 : data.level));
       let netErrors = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
@@ -260,7 +265,9 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer({
       hls?.destroy();
       if (hlsRef.current === hls) hlsRef.current = null;
     };
-  }, [video.id, video.hls, fallbackFormat, audioOnly, audioFormat, dataSaver, defaultQuality]);
+    // primitive deps (see VideoSurface): memo identity churn on refetch must
+    // not reload an identical stream and reset position
+  }, [video.id, video.hls, fallbackFormat?.url, audioOnly, audioFormat?.url, dataSaver, defaultQuality]);
 
   // --- Captions tracks (native <track>) ---
   useEffect(() => {

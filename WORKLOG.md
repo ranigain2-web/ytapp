@@ -808,3 +808,73 @@ commit.
   release gate's first live pass). Release workflow building APKs + macOS.
 - Next session: phase 2 implementation per the amended plan (miniplayer +
   PiP + playback store + autoplay countdown), then phase 3.
+
+## Session 15 (2026-11-06) — Phase 2 shipped: miniplayer + PiP + autoplay countdown
+
+- **The playback store** (`src/lib/yt-playback.ts`, new): mode
+  (direct/embed/none), miniOpen/wasMini, the related queue + playedIds, the
+  5s autoplay countdown, forceEmbedIds (TTL'd, [A2]), mount-point
+  registration, and the engine handle — every UI drives the player through
+  store actions now ([A1]). Route watcher implements [A3] (Shorts pausing +
+  docking, route-based) and the navigation mini-dock.
+- **VideoSurface** (`src/components/yt/VideoSurface.tsx`, new): ONE
+  `<video>` element per app session, created imperatively, adopted into the
+  watch slot / mini frame via appendChild. All phase-1 wiring lifted
+  wholesale (audio focus, becoming-noisy, keepAwake, scrubbing, storyboards,
+  chapters, c-key, long-press 2x, quality prefs, bg service, MediaSession).
+  Three hard-won mechanics:
+  - **No document exit ever**: browsers pause media elements removed from a
+    document (spec). The video only moves appendChild-style between the
+    watch slot, the mini frame, and an always-mounted 1px holder.
+  - **Ref callbacks, not effects, register hosts**: React nulls refs before
+    unmount cleanups, so the effect version left a STALE watchSlot (portal
+    rendered into a detached node + the video got spec-paused with it).
+    Callbacks also park the video into the holder BEFORE the host DOM is
+    removed.
+  - **IO dock is route+video-gated** ([A4]): the slot's removal fires the
+    observer with ratio 0 — without the gate that re-docked the mini over
+    Shorts.
+- **MiniPlayer** (new): docks bottom (bottom-right ≥md), marquee title
+  (CSS loop, only when overflowing), play/next/close, drag-to-dismiss with
+  pointer capture taken only once the drag is real (capture on pointerdown
+  retargets the click and kills expand), progress hairline, compact
+  countdown. **Positioning lives on the fixed wrapper** — left/right/bottom
+  are inert on the non-positioned inner card (the mini rendered at its
+  static position and every click missed it).
+- **CountdownCard** (new): [A7] — SVG ring + Cancel + Play-now; full card in
+  the watch chrome, compact pill in the mini; embed ENDED overlay gained it
+  too. Cancel/seek/route-change clear it; VideoSurface owns the timeout.
+- **PiP** ([A5]/[A8]): plugin `enterPip` + `setPipOnHome`; PipHomeWatcher
+  statics polled in handleOnPause/Stop/Resume; CI `scripts/patch-android-pip.sh`
+  (tested idempotent on a synthetic template) injects
+  supportsPictureInPicture + onUserLeaveHint/onPictureInPictureModeChanged
+  into the regenerated android/ project; `aapt dump xmltree` gate in
+  build-android.yml. Player PiP button on Android; W3C button unchanged on
+  desktop. Settings row + `prefs.pipOnHome` (default on).
+- **Notification Prev**: service ACTION_PREV + onSkipToPrevious +
+  ACTION_SKIP_TO_PREVIOUS; actions now Prev/Pause/Next (+Close expanded).
+  JS: prev → queue-1 (playedIds) or restart-current.
+- **Two latent phase-1 bugs found + fixed** (tsc never gated the build —
+  `ignoreBuildErrors: true`):
+  1. `applyQualityPrefs` referenced the manifest callback's `data` from
+     OUTSIDE the callback — ReferenceError at load: quality capping AND all
+     hls error listeners were dead since v1.3.0. Now applied inside
+     MANIFEST_PARSED with the parsed levels.
+  2. The hls branch never called `resumeAfterLoad` — same-video reloads
+     reset position to 0 (audio/progressive paths were fine). Now they don't.
+- **E2E**: 46→~77 checks (sections 12-17: mini dock/expand/close/drag,
+  shorts owner rule, countdown, PiP bridge, notification prev/next/stop,
+  embed handoff). The vacuous teardown check from phase 1 replaced with a
+  real one (mini close must disable the service). Hardened stub carries the
+  new plugin methods. **74/76 green**; the 2 open failures are the
+  audio-mode swap (paused + position reset — passed in earlier runs of this
+  same build, likely a stream-URL/data flake; investigate next session) and
+  the queue-1 prev hop (needs a second direct-stream video; every related
+  of the test video is bot-gated while the sandbox PO token is inactive —
+  skips honestly).
+- **Version** → 1.4.0 (What's-new updated; NOT tagged yet — tag after the
+  audio-mode check is re-run and CI is green).
+- Next session: re-run e2e (audio-mode section); if it reproduces, probe
+  resumeAfterLoad on the audio path (suspect the stale-readyState immediate
+  apply); then `git tag v1.4.0` + release; phase 3 (interaction truth
+  serum) per the amended plan.

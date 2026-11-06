@@ -54,6 +54,7 @@ public class MediaPlaybackService extends Service {
     public static final String ACTION_PLAY = "com.robonuggets.ytbackground.action.PLAY";
     public static final String ACTION_PAUSE = "com.robonuggets.ytbackground.action.PAUSE";
     public static final String ACTION_NEXT = "com.robonuggets.ytbackground.action.NEXT";
+    public static final String ACTION_PREV = "com.robonuggets.ytbackground.action.PREV";
     public static final String ACTION_STOP = "com.robonuggets.ytbackground.action.STOP";
     public static final String ACTION_SEEK = "com.robonuggets.ytbackground.action.SEEK";
 
@@ -267,6 +268,11 @@ public class MediaPlaybackService extends Service {
             }
 
             @Override
+            public void onSkipToPrevious() {
+                emitControl("prev");
+            }
+
+            @Override
             public void onStop() {
                 emitControl("stop");
             }
@@ -318,6 +324,11 @@ public class MediaPlaybackService extends Service {
             }
             case ACTION_NEXT: {
                 emitControl("next");
+                break;
+            }
+            case ACTION_PREV: {
+                // phase 2: notification Prev — queue-1 / restart current
+                emitControl("prev");
                 break;
             }
             case ACTION_STOP: {
@@ -581,6 +592,8 @@ public class MediaPlaybackService extends Service {
                 ? new NotificationCompat.Action(android.R.drawable.ic_media_pause, "Pause", servicePi(ACTION_PAUSE, 1))
                 : new NotificationCompat.Action(android.R.drawable.ic_media_play, "Play", servicePi(ACTION_PLAY, 1));
 
+        // phase 2: Prev / Play-Pause / Next in the compact view; Close is the
+        // 4th action, visible only in the expanded notification.
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(appIcon())
                 .setContentTitle(title)
@@ -592,6 +605,7 @@ public class MediaPlaybackService extends Service {
                 .setShowWhen(false)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
+                .addAction(new NotificationCompat.Action(android.R.drawable.ic_media_previous, "Prev", servicePi(ACTION_PREV, 4)))
                 .addAction(playPause)
                 .addAction(new NotificationCompat.Action(android.R.drawable.ic_media_next, "Next", servicePi(ACTION_NEXT, 2)))
                 .addAction(new NotificationCompat.Action(android.R.drawable.ic_menu_close_clear_cancel, "Close", servicePi(ACTION_STOP, 3)));
@@ -635,6 +649,7 @@ public class MediaPlaybackService extends Service {
                             | PlaybackStateCompat.ACTION_PAUSE
                             | PlaybackStateCompat.ACTION_PLAY_PAUSE
                             | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+                            | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
                             | PlaybackStateCompat.ACTION_STOP
                             | PlaybackStateCompat.ACTION_SEEK_TO);
             pb.setState(playing ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED,

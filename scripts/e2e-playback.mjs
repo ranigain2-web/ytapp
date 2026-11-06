@@ -78,6 +78,8 @@ const initScript = (nativeStub) => `
           { name: "update", rtype: "promise" },
           { name: "disable", rtype: "promise" },
           { name: "keepAwake", rtype: "promise" },
+          { name: "enterPip", rtype: "promise" },
+          { name: "setPipOnHome", rtype: "promise" },
         ] },
       ],
       nativePromise: function (plugin, method, options) {
@@ -118,12 +120,25 @@ const initScript = (nativeStub) => `
   ` : ""}
 `;
 
-async function newPage(browser, { native = false, viewport = { width: 390, height: 844 } } = {}) {
+async function newPage(browser, { native = false, viewport = { width: 390, height: 844 }, autoplayOn = false } = {}) {
   const ctx = await browser.newContext({
     viewport, deviceScaleFactor: 2, isMobile: viewport.width < 700, hasTouch: viewport.width < 700,
     userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
   });
   await ctx.addInitScript(initScript(native));
+  // phase-2 countdown tests need autoplay ON; the base seed sets it off, so
+  // this second script re-writes the store AFTER the first one seeded it
+  // (addInitScript order = execution order, and both run before app code).
+  if (autoplayOn) {
+    await ctx.addInitScript(() => {
+      try {
+        const s = JSON.parse(localStorage.getItem("yt-app-store") || "{}");
+        s.state = s.state || {};
+        s.state.prefs = { ...(s.state.prefs || {}), autoplay: true };
+        localStorage.setItem("yt-app-store", JSON.stringify(s));
+      } catch (e) {}
+    });
+  }
   const page = await ctx.newPage();
   const errors = [];
   // Tag every console error with the route that was on screen when it fired,
@@ -348,11 +363,34 @@ const hydrationErrors = (errors) =>
     }, { timeout: 60000 }).catch(() => {});
     await sleep(2000);
     await page.evaluate(() => { window.__bgCalls.length = 0; });
-    await page.click("[data-testid=mobile-search-button]").catch(() => {});
-    await page.evaluate(() => window.history.pushState({}, "", "/?page=settings"));
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await sleep(2500);
-    ok("unmount path exercised (service released on player teardown)");
+
+    // ---- Phase-2 HARDENED teardown check ----
+    // The old check here was vacuous (printed ok unconditionally after a
+    // reload that reset the bridge anyway). The phase-2 truth has two halves:
+    // navigating away KEEPS the service (the miniplayer owns playback now),
+    // and closing the mini is the real teardown — pause + disable.
+    await page.click("button:has-text('Tap to unmute')").catch(() => {});
+    await sleep(800);
+    await page.evaluate(() => { window.__bgCalls.length = 0; });
+    await page.click("nav[data-yt-mobile-nav] button >> nth=0"); // Home, in-app
+    await sleep(1500);
+    const mid = await calls();
+    const miniThere = await page.$("[data-testid=miniplayer]");
+    if (miniThere) ok("navigating away while playing docks the miniplayer");
+    else bad("no miniplayer after navigating away while playing");
+    if (!mid.some((c) => c[0] === "disable")) ok("service survives navigation (miniplayer continuity)");
+    else bad("service disabled on navigation — miniplayer continuity broken");
+    await page.click("[data-testid=mini-close]").catch(() => {});
+    await sleep(1000);
+    const closed = await calls();
+    if (closed.some((c) => c[0] === "disable")) ok("mini close tears the service down (real teardown)");
+    else bad("mini close did not disable the background service — HARDENED CHECK FAILED");
+    const stopped = await page.evaluate(() => {
+      const pb = window.__ytPlayback;
+      return !pb || pb.getState().playing === false;
+    });
+    if (stopped) ok("playback stopped after mini close");
+    else bad("audio kept running after mini close");
     await ctx.close();
   }
 
@@ -632,6 +670,388 @@ const hydrationErrors = (errors) =>
     if (enableIdx >= 0) ok(`service enable fires at the user gesture (call #${enableIdx + 1}: ${seq.join(",")})`);
     else if (seq.filter(c => c === "update").length) bad(`only updates, no enable at gesture (${seq.join(",")})`);
     else bad(`no service calls at the user gesture (${seq.join(",")})`);
+    await ctx.close();
+  }
+
+  // ---- 12. Phase 2: miniplayer dock / expand / continuity -------------------
+  console.log("== 12. Miniplayer (scroll-past dock, expand, continuity) ==");
+  {
+    const { ctx, page } = await newPage(browser, { native: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(1500);
+    const pos1 = await page.evaluate(() => document.querySelector("video")?.currentTime || 0);
+
+    // [A4] scroll past the player → mini docks, playback uninterrupted
+    await page.evaluate(() => window.scrollTo(0, 1400));
+    await page.waitForSelector("[data-testid=miniplayer]", { timeout: 6000 }).catch(() => {});
+    const mini = await page.$("[data-testid=miniplayer]");
+    if (mini) ok("scroll-past docks the miniplayer");
+    else bad("miniplayer did not dock on scroll-past ([A4] IO trigger)");
+
+    const dockState = await page.evaluate(() => {
+      const v = document.querySelector("video");
+      const pb = window.__ytPlayback?.getState?.() || {};
+      return {
+        rs: v ? v.readyState : -1,
+        t: v ? v.currentTime : -1,
+        inMini: !!(v && v.closest("[data-testid=miniplayer]")),
+        docked: pb.docked, playing: pb.playing,
+      };
+    });
+    if (dockState.rs >= 2) ok(`playback uninterrupted in the mini (readyState ${dockState.rs})`);
+    else bad(`mini docked but stream reset (readyState ${dockState.rs})`);
+    if (dockState.t >= pos1) ok(`position monotonic across the dock (${pos1.toFixed(1)} → ${dockState.t.toFixed(1)}s)`);
+    else bad(`position went backwards across the dock (${pos1.toFixed(1)} → ${dockState.t.toFixed(1)}s)`);
+    if (dockState.inMini && dockState.docked === "mini") ok("the <video> element itself lives in the mini frame (adoption, not a copy)");
+    else bad(`video not adopted into the mini (inMini=${dockState.inMini} docked=${dockState.docked})`);
+
+    // scroll back → mini undocks, video returns to the watch slot
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForSelector("[data-testid=miniplayer]", { state: "detached", timeout: 6000 }).catch(() => {});
+    const backState = await page.evaluate(() => {
+      const v = document.querySelector("video");
+      return { mini: !!document.querySelector("[data-testid=miniplayer]"), inSlot: !!(v && v.closest("[data-testid=player-slot]")) };
+    });
+    if (!backState.mini && backState.inSlot) ok("scrolling back undocks the mini and returns the video to the slot");
+    else bad(`scroll-back restore failed (mini=${backState.mini} inSlot=${backState.inSlot})`);
+
+    // navigation continuity: scroll past again, go Home in-app → mini survives
+    await page.evaluate(() => window.scrollTo(0, 1400));
+    await page.waitForSelector("[data-testid=miniplayer]", { timeout: 6000 }).catch(() => {});
+    await page.click("nav[data-yt-mobile-nav] button >> nth=0");
+    await sleep(1500);
+    const homeMini = await page.evaluate(() => {
+      const v = document.querySelector("video");
+      return { mini: !!document.querySelector("[data-testid=miniplayer]"), t: v ? v.currentTime : -1, rs: v ? v.readyState : -1 };
+    });
+    if (homeMini.mini) ok("mini persists across watch → home navigation");
+    else bad("mini lost on navigation (continuity broken)");
+    if (homeMini.rs >= 2 && homeMini.t >= dockState.t) ok(`still streaming on home (${homeMini.t.toFixed(1)}s)`);
+    else bad(`stream reset on navigation (rs=${homeMini.rs} t=${homeMini.t})`);
+
+    // expand: tap the mini → watch route restored, position preserved.
+    // (tap the FRAME — the title span marquees when long, and Playwright
+    // refuses to click continuously-animating elements.)
+    const beforeExpand = homeMini.t;
+    await page.click("[data-testid=mini-frame]").catch(() => {});
+    await page.waitForFunction(() => new URLSearchParams(location.search).has("v"), { timeout: 6000 }).catch(() => {});
+    await sleep(1200);
+    const expandState = await page.evaluate(() => {
+      const v = document.querySelector("video");
+      return {
+        url: location.search,
+        mini: !!document.querySelector("[data-testid=miniplayer]"),
+        t: v ? v.currentTime : -1,
+        inSlot: !!(v && v.closest("[data-testid=player-slot]")),
+      };
+    });
+    if (expandState.url.includes(`v=${VIDEO}`) && !expandState.mini && expandState.inSlot)
+      ok("expand returns to the watch page with the mini closed");
+    else bad(`expand failed (url=${expandState.url} mini=${expandState.mini} inSlot=${expandState.inSlot})`);
+    if (expandState.t >= beforeExpand) ok(`position preserved through expand (${beforeExpand.toFixed(1)} → ${expandState.t.toFixed(1)}s)`);
+    else bad(`position lost on expand (${beforeExpand.toFixed(1)} → ${expandState.t.toFixed(1)}s)`);
+
+    // drag-to-dismiss: navigate home (mini docks), drag the mini down.
+    // Start near the mini's TOP edge and keep the whole gesture INSIDE the
+    // viewport — out-of-viewport pointer coordinates never reach the page.
+    await page.click("nav[data-yt-mobile-nav] button >> nth=0");
+    await sleep(1200);
+    const dragMini = await page.$("[data-testid=miniplayer]");
+    if (dragMini) {
+      const box = await dragMini.boundingBox();
+      const startX = box.x + 20, startY = box.y + 12;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX, startY + 100, { steps: 8 });
+      await page.mouse.up();
+      await sleep(800);
+      const afterDrag = await page.evaluate(() => {
+        const pb = window.__ytPlayback?.getState?.() || {};
+        return { mini: !!document.querySelector("[data-testid=miniplayer]"), playing: pb.playing };
+      });
+      if (!afterDrag.mini && afterDrag.playing === false) ok("drag-to-dismiss closes the mini and stops playback");
+      else bad(`drag-to-dismiss failed (mini=${afterDrag.mini} playing=${afterDrag.playing})`);
+    } else {
+      bad("no mini to drag-dismiss (did not dock on second navigation)");
+    }
+    await ctx.close();
+  }
+
+  // ---- 13. Phase 2: Shorts owner rule ([A3]) -------------------------------
+  console.log("== 13. Shorts owner rule (route-based) ==");
+  {
+    const { ctx, page } = await newPage(browser, { native: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(1200);
+    const posBefore = await page.evaluate(() => document.querySelector("video")?.currentTime || 0);
+
+    // enter Shorts while the watch video plays → pause + dock, no second audio
+    await page.click("nav[data-yt-mobile-nav] button >> nth=1"); // Shorts
+    await sleep(2500);
+    const inShorts = await page.evaluate(() => {
+      const pb = window.__ytPlayback?.getState?.() || {};
+      return { playing: pb.playing, docked: pb.docked, mini: !!document.querySelector("[data-testid=miniplayer]") };
+    });
+    if (inShorts.playing === false && inShorts.docked === "parked") ok("entering Shorts pauses and parks the surface (owner rule)");
+    else bad(`owner rule broken (playing=${inShorts.playing} docked=${inShorts.docked})`);
+    if (!inShorts.mini) ok("no miniplayer over Shorts");
+    else bad("miniplayer visible on the Shorts route");
+
+    // leave Shorts → no mini (wasMini was false — we came from inline watch)
+    await page.evaluate(() => window.history.back());
+    await sleep(1500);
+    const afterShorts = await page.evaluate(() => {
+      const pb = window.__ytPlayback?.getState?.() || {};
+      return { mini: !!document.querySelector("[data-testid=miniplayer]"), playing: pb.playing };
+    });
+    if (!afterShorts.mini) ok("leaving Shorts reopens no mini (wasMini=false)");
+    else bad("mini reopened after Shorts although it was never open");
+
+    // back to the same watch video → instant resume at position (parked state kept)
+    await page.evaluate(id => window.__ytPlayback.getState().navigateWatch(id), VIDEO);
+    await sleep(2000);
+    const resumed = await page.evaluate(() => {
+      const v = document.querySelector("video");
+      return { t: v ? v.currentTime : -1, inSlot: !!(v && v.closest("[data-testid=player-slot]")) };
+    });
+    if (resumed.inSlot && resumed.t >= posBefore - 0.5) ok(`parked video resumes in place (${posBefore.toFixed(1)} → ${resumed.t.toFixed(1)}s)`);
+    else bad(`resume after Shorts lost state (inSlot=${resumed.inSlot} t=${resumed.t} vs ${posBefore.toFixed(1)})`);
+    await ctx.close();
+  }
+
+  // ---- 14. Phase 2: autoplay countdown ([A7]) -------------------------------
+  console.log("== 14. Autoplay countdown ==");
+  {
+    const { ctx, page } = await newPage(browser, { native: true, autoplayOn: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3 && v.duration > 1;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(1000);
+
+    // force a natural END: seek (directly on the element — bypasses the
+    // engine's countdown-cancel) to just before the end and let it finish
+    await page.evaluate(() => {
+      const v = document.querySelector("video");
+      v.currentTime = Math.max(0, v.duration - 0.35);
+    });
+    await page.waitForSelector("[data-testid=countdown-card]", { timeout: 8000 }).catch(() => {});
+    const card = await page.$("[data-testid=countdown-card]");
+    if (card) ok("ENDED + autoplay → countdown card appears");
+    else bad("no countdown card after ENDED with autoplay on");
+
+    // Cancel stops the navigation
+    await page.click("[data-testid=countdown-cancel]").catch(() => {});
+    await sleep(600);
+    const cancelled = await page.evaluate(() => ({
+      card: !!document.querySelector("[data-testid=countdown-card]"),
+      url: location.search,
+    }));
+    if (!cancelled.card) ok("Cancel clears the countdown card");
+    else bad("countdown card survived Cancel");
+    await sleep(5200);
+    const stayed = await page.evaluate(() => location.search);
+    if (stayed.includes(`v=${VIDEO}`)) ok("cancelled countdown does not navigate");
+    else bad(`navigated despite cancel (${stayed})`);
+
+    // let it fire this time: end again, wait out the 5s → related[0].
+    // (the first END left the element paused — seek alone doesn't resume an
+    // ended video, so play() explicitly, exactly like a user replay would)
+    await page.evaluate(() => {
+      const v = document.querySelector("video");
+      v.currentTime = Math.max(0, v.duration - 0.35);
+      v.play();
+    });
+    await page.waitForSelector("[data-testid=countdown-card]", { timeout: 8000 }).catch(() => {});
+    await sleep(5600);
+    const navigated = await page.evaluate(() => location.search);
+    if (navigated.includes("v=") && !navigated.includes(`v=${VIDEO}`)) ok(`countdown timeout navigates to the up-next (${navigated})`);
+    else bad(`countdown did not navigate (${navigated})`);
+    // the up-next may be an embed-fallback video (bot-gating is runtime
+    // data) — the surface legitimately parks for those; success = the store
+    // actually moved to the up-next id and plays (direct) or embeds (iframe)
+    const nextLoaded = await page.evaluate(() => {
+      const pb = window.__ytPlayback?.getState?.() || {};
+      return { videoId: pb.videoId, mode: pb.mode, playing: pb.playing, iframe: !!document.querySelector("iframe[src*='youtube-nocookie.com']") };
+    });
+    if (nextLoaded.videoId && nextLoaded.videoId !== VIDEO && (nextLoaded.mode === "embed" || nextLoaded.playing))
+      ok(`up-next took over (${nextLoaded.mode} mode)`);
+    else bad(`up-next did not take over (videoId=${nextLoaded.videoId} mode=${nextLoaded.mode} playing=${nextLoaded.playing})`);
+    await ctx.close();
+  }
+
+  // ---- 15. Phase 2: PiP button + pref push ([A5], web-observable half) ------
+  console.log("== 15. PiP (plugin bridge) ==");
+  {
+    const { ctx, page } = await newPage(browser, { native: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(1200);
+    // the pref is pushed to the plugin on surface mount
+    const pipPref = await page.evaluate(() =>
+      (window.__bgCalls || []).filter(c => c[0] === "setPipOnHome").map(c => c[1]));
+    if (pipPref.some(o => o && o.enable === true)) ok("pipOnHome pref pushed to the plugin at mount");
+    else bad(`setPipOnHome not pushed (calls: ${JSON.stringify(pipPref)})`);
+    // the player's PiP button records enterPip on the bridge
+    await page.evaluate(() => { window.__bgCalls.length = 0; });
+    await page.click("[data-testid=pip-button]").catch(() => {});
+    await sleep(600);
+    const pipCalls = await page.evaluate(() => (window.__bgCalls || []).map(c => c[0]));
+    if (pipCalls.includes("enterPip")) ok("PiP button calls the plugin's enterPip");
+    else bad(`PiP button did not reach the bridge (${pipCalls.join(",")})`);
+    await ctx.close();
+  }
+
+  // ---- 16. Phase 2: notification Prev / Next via the store queue -----------
+  console.log("== 16. Notification prev / next (store queue) ==");
+  {
+    const { ctx, page } = await newPage(browser, { native: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3;
+    }, { timeout: 60000 }).catch(() => {});
+    await page.click("button:has-text('Tap to unmute')").catch(() => {});
+    await sleep(2500);
+
+    // empty history → prev restarts the CURRENT video (seek 0 + play)
+    await page.evaluate(() => { window.__bgCalls.length = 0; });
+    const tBefore = await page.evaluate(() => document.querySelector("video")?.currentTime || 0);
+    await page.evaluate(() => window.__emitControl({ action: "prev" }));
+    await sleep(1200);
+    const afterPrev = await page.evaluate(() => {
+      const v = document.querySelector("video");
+      return { t: v ? v.currentTime : -1, playing: !v || !v.paused, url: location.search };
+    });
+    if (afterPrev.url.includes(`v=${VIDEO}`) && afterPrev.t < tBefore && afterPrev.playing)
+      ok(`prev with empty queue restarts current (${tBefore.toFixed(1)} → ${afterPrev.t.toFixed(1)}s)`);
+    else bad(`prev-with-empty-queue wrong (t=${afterPrev.t} playing=${afterPrev.playing})`);
+
+    // next → related[0] through the REAL control event (V is direct, so the
+    // handler is live). The related itself may be embed-fallback — that's
+    // fine for the navigation check; prev/stop below need a direct video.
+    await page.evaluate(() => window.__emitControl({ action: "next" }));
+    await sleep(3000);
+    const nextUrl = await page.evaluate(() => location.search);
+    if (nextUrl.includes("v=") && !nextUrl.includes(`v=${VIDEO}`)) ok(`notification next plays related[0] (${nextUrl})`);
+    else bad(`notification next did not navigate (${nextUrl})`);
+
+    // find a DIRECT-stream video for the prev/stop checks. dQw4w9WgXcQ's
+    // related list can be ALL embed-fallback in a bot-gated environment, so
+    // fall back to the HOME FEED (trending items usually stream direct).
+    const tryIds = async (ids) => {
+      for (const id of ids) {
+        if (!id || id === VIDEO) continue;
+        await page.evaluate(i => window.__ytPlayback.getState().navigateWatch(i), id);
+        // wait for THIS video's load before judging its mode — otherwise the
+        // store still shows the previous (embed) video's state
+        await page.waitForFunction(
+          i => window.__ytPlayback.getState().videoId === i,
+          id, { timeout: 15000 }).catch(() => {});
+        await sleep(600);
+        if (await page.evaluate(() => window.__ytPlayback.getState().mode) === "direct") return true;
+      }
+      return false;
+    };
+    const queueIds = await page.evaluate(() => window.__ytPlayback.getState().queue.map(q => q.id));
+    let directOk = await tryIds(queueIds.slice(0, 6));
+    if (!directOk) {
+      await page.click("nav[data-yt-mobile-nav] button >> nth=0");
+      await sleep(2500);
+      const feedIds = await page.evaluate(() =>
+        Array.from(document.querySelectorAll("a[href*='?v=']"))
+          .map(a => new URLSearchParams(a.search).get("v"))
+          .filter(Boolean).slice(0, 6));
+      directOk = await tryIds(feedIds);
+    }
+    if (!directOk) {
+      console.log("  - queue-1 prev skipped: no second direct-stream video available (bot-gating)");
+    } else {
+      ok("reached a direct-stream video (queue-1 state valid)");
+
+      // fresh gesture so the service is live on THIS video
+      await page.click("button:has-text('Tap to unmute')").catch(() => {});
+      await sleep(800);
+
+      // prev → back through the play history (queue-1)
+      await page.evaluate(() => window.__emitControl({ action: "prev" }));
+      await sleep(2500);
+      const backUrl = await page.evaluate(() => location.search);
+      if (backUrl.includes(`v=${VIDEO}`)) ok("notification prev walks the queue back (queue-1)");
+      else bad(`prev did not return to the previous video (${backUrl})`);
+    }
+
+    // stop event (notification Close / PiP dismiss) — testable on the
+    // ORIGINAL direct video regardless of bot-gating: pause→play through the
+    // real control events re-enables the service (the resume path carries
+    // ensureBgEnabled), then stop must pause + tear it down.
+    await page.evaluate(i => window.__ytPlayback.getState().navigateWatch(i), VIDEO);
+    await page.waitForFunction(
+      i => window.__ytPlayback.getState().videoId === i,
+      VIDEO, { timeout: 15000 }).catch(() => {});
+    await sleep(1000);
+    await page.evaluate(() => window.__emitControl({ action: "pause" }));
+    await sleep(400);
+    await page.evaluate(() => window.__emitControl({ action: "play" }));
+    await sleep(800);
+    await page.evaluate(() => { window.__bgCalls.length = 0; });
+    await page.evaluate(() => window.__emitControl({ action: "stop" }));
+    await sleep(1000);
+    const stopState = await page.evaluate(() => {
+      const calls = window.__bgCalls || [];
+      return { playing: window.__ytPlayback?.getState?.().playing, disabled: calls.some(c => c[0] === "disable") };
+    });
+    if (stopState.playing === false && stopState.disabled) ok("stop control event pauses + disables the service");
+    else bad(`stop event wrong (playing=${stopState.playing} disabled=${stopState.disabled})`);
+    await ctx.close();
+  }
+
+  // ---- 17. Phase 2: embed handoff never docks a mini ([A2]) -----------------
+  console.log("== 17. Embed handoff (no mini for embeds) ==");
+  {
+    const { ctx, page, errors } = await newPage(browser, { native: true });
+    await page.goto(`${BASE}/?src=server&v=${VIDEO}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const v = document.querySelector("video");
+      return v && v.readyState >= 2 && v.currentTime > 0.3;
+    }, { timeout: 60000 }).catch(() => {});
+    await sleep(1000);
+
+    // force the embed path the way the player does on fallback ([A2])
+    await page.evaluate(id => window.__ytPlayback.getState().setEmbed(id), VIDEO);
+    await sleep(1500);
+    const embedState = await page.evaluate(() => ({
+      iframe: !!document.querySelector("iframe[src*='youtube-nocookie.com']"),
+      slot: !!document.querySelector("[data-testid=player-slot]"),
+      mode: window.__ytPlayback?.getState?.().mode,
+    }));
+    if (embedState.iframe && embedState.mode === "embed") ok("setEmbed swaps the watch page to the iframe player");
+    else bad(`embed handoff failed (iframe=${embedState.iframe} mode=${embedState.mode})`);
+
+    // navigate away → NO mini, no errors
+    await page.click("nav[data-yt-mobile-nav] button >> nth=0");
+    await sleep(1500);
+    const away = await page.evaluate(() => ({
+      mini: !!document.querySelector("[data-testid=miniplayer]"),
+      mode: window.__ytPlayback?.getState?.().mode,
+    }));
+    if (!away.mini && away.mode === "embed") ok("navigating away from an embed video docks no mini");
+    else bad(`embed leaked a mini (mini=${away.mini})`);
+    const realErrors = errors.filter(e => !/net::|Failed to load resource|ERR_/i.test(e));
+    if (realErrors.length === 0) ok("no console errors through the embed handoff");
+    else { bad(`${realErrors.length} console error(s) through the embed handoff`); for (const e of realErrors.slice(0, 3)) console.log(`      ${e.slice(0, 190)}`); }
     await ctx.close();
   }
 

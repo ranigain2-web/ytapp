@@ -205,7 +205,7 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   gauntlet baseline (ours=2 ref=2 — baseline losses are the point of a
   bar; `--until-win` flips them in later phases).
 
-## 3. Current state (as of 2026-11-06, end of phase 16 — plan phases 0+1 executed, 46/46 e2e)
+## 3. Current state (as of 2026-11-06, session 15 — plan phase 2 executed: miniplayer + PiP + countdown; e2e 74/76)
 
 - ✅ **v1.2.0 shipped**: every Premium feature is now impossible to miss:
   center skip controls on the player, What's-new tour on each version bump,
@@ -294,6 +294,33 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
   headless Chrome): the ENDED-overlay E2E uses the `window.__ytEmbedEnded`
   debug hook to verify the render + routing path; the IFrame-API event
   wiring (state 0 → overlay) is code-verified and fires on real devices.
+
+### Phase 2 additions (session 15)
+
+- `src/lib/yt-playback.ts` — the persistent playback slice: mode/mini/queue/
+  countdown/forceEmbed + the engine handle. All UI drives the player through
+  store actions. Route watcher = Shorts owner rule + navigation mini-dock.
+- `src/components/yt/VideoSurface.tsx` — the ONE direct-mode player, mounted
+  at AppShell level (BEFORE page content — effect order lets Shorts' own
+  media bindings win while Shorts owns the audio). Owns the `<video>`
+  imperatively; moves it appendChild-only between watch slot / mini frame /
+  a 1px in-document holder (a media element removed from a document is
+  browser-PAUSED — never detach it). Host registration uses ref callbacks
+  (React nulls refs before unmount cleanups — an effect leaves a stale slot).
+- `src/components/yt/MiniPlayer.tsx` — positioning on the FIXED wrapper
+  (inert on the static inner card!); drag-to-dismiss captures the pointer
+  only after the drag starts (capture on pointerdown eats the expand click);
+  the `yt-mini-in` animation must NOT use fill-mode `both` (it overrides the
+  drag transform forever).
+- PiP: plugin enterPip/setPipOnHome + PipHomeWatcher statics;
+  `scripts/patch-android-pip.sh` runs in CI after cap sync (tested
+  idempotent) + an `aapt dump xmltree` gate on the built APK.
+- Two latent v1.3.0 bugs fixed: applyQualityPrefs referenced `data` out of
+  scope (quality capping + hls error recovery were DEAD), and the hls branch
+  never restored position on same-video reloads. The repo never ran `tsc` —
+  `ignoreBuildErrors: true` hid both.
+- OPEN: e2e audio-mode swap check (74/76) flaked on the last run — re-run
+  first thing next session; v1.4.0 tag pending that + green CI.
 
 ## 4. The decisions that matter most
 

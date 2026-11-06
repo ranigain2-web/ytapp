@@ -5,6 +5,7 @@ import { useRouter } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
 import { applyTheme, watchSystemTheme } from "@/lib/yt-theme";
 import { applyPlatformClass, isAndroidApp } from "@/lib/yt-native";
+import { initPlaybackRouting } from "@/lib/yt-playback";
 import Header from "./Header";
 import { SidebarDrawer, MiniSidebar } from "./Sidebar";
 import HomePage from "./HomePage";
@@ -15,12 +16,22 @@ import SettingsPage from "./SettingsPage";
 import { HistoryPage, SubscriptionsPage, LikedPage, LaterPage, PlaylistsPage } from "./LibraryPages";
 import ShortsPage from "./ShortsPage";
 import WhatsNew from "./WhatsNew";
+// Phase 2: the persistent player mounts BEFORE the page content — effect
+// order then guarantees Shorts' own (ungated) media bindings overwrite the
+// surface's gated ones while the Shorts route owns the audio.
+import VideoSurface from "./VideoSurface";
+import MiniPlayer from "./MiniPlayer";
 
 export default function AppShell() {
   const { route, navigate } = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [persistentSidebar, setPersistentSidebar] = useState(true);
   const theme = useYt(s => s.prefs.theme);
+
+  // Phase 2 route watcher: Shorts owner rule + navigation mini-dock.
+  useEffect(() => {
+    initPlaybackRouting();
+  }, []);
 
   // Theme engine: apply on every change and follow the OS while "system".
   // Lives here so it is active on every page, not just Settings.
@@ -105,6 +116,9 @@ export default function AppShell() {
 
   return (
     <div className="min-h-screen bg-[var(--yt-bg)]">
+      {/* the persistent direct-mode player — owns the one <video> element and
+          adopts it into the watch slot / mini frame ([A1]) */}
+      <VideoSurface />
       {/* Shorts is immersive full-screen: no header, no bottom nav (YouTube behavior) */}
       {route.name !== "shorts" && (
         <Header onToggleSidebar={onToggleSidebar} onSearch={onSearch} />
@@ -130,6 +144,9 @@ export default function AppShell() {
 
       {/* mobile bottom nav */}
       {route.name !== "shorts" && <MobileNav />}
+
+      {/* phase-2 miniplayer — the surface's second mount point */}
+      <MiniPlayer />
 
       {/* once-per-version feature tour */}
       <WhatsNew />

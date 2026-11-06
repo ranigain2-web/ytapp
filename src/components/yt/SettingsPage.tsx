@@ -181,9 +181,18 @@ export default function SettingsPage() {
           <Toggle
             label="Background play"
             labelIcon={<PlayCircle className="w-4 h-4" />}
-            desc="Minimize the app or turn the screen off and playback keeps going, with a lock-screen notification (pause / next / close). Works while a video streams directly; videos inside YouTube's own player follow YouTube's rules"
+            desc="Minimize the app or turn the screen off and playback keeps going, with a lock-screen notification (prev / pause / next / close). Works while a video streams directly; videos inside YouTube's own player follow YouTube's rules"
             value={prefs.backgroundPlay}
             onChange={v => setPrefs({ backgroundPlay: v })}
+          />
+        )}
+        {isNativeApp() && (
+          <Toggle
+            label="Picture-in-picture on Home"
+            labelIcon={<Smartphone className="w-4 h-4" />}
+            desc="Press Home while a video plays and it shrinks into a floating window you can move around. Turning the screen off with the power button keeps playing audio instead"
+            value={prefs.pipOnHome !== false}
+            onChange={v => setPrefs({ pipOnHome: v })}
           />
         )}
         <Toggle

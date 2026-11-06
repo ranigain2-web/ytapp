@@ -19,6 +19,7 @@ import type {
   YtBackgroundControlEvent,
   YtBackgroundEnableOptions,
   YtBackgroundUpdateOptions,
+  YtBackgroundPipOnHomeOptions,
 } from "yt-background";
 
 let nativePlugin: YtBackgroundPlugin | null = null;
@@ -92,6 +93,26 @@ export function nativeBackgroundDisable() {
  */
 export function nativeKeepAwake(enable: boolean) {
   getNative()?.keepAwake({ enable }).catch(() => {});
+}
+
+/**
+ * Phase 2 (PiP): shrink the app into a floating ~16:9 window ([A5]). The
+ * player's PiP button calls this on Android; web/desktop keeps the W3C
+ * button. Leaving PiP is user-driven — dismissing the window arrives as the
+ * existing "stop" control event.
+ */
+export function nativeEnterPip() {
+  getNative()?.enterPip().catch(() => {});
+}
+
+/**
+ * Phase 2 (PiP): toggle "Home shrinks into PiP". Pushed to the plugin
+ * whenever the pref changes; the plugin consults it when the
+ * MainActivity-injected onUserLeaveHint flag fires on activity-pause.
+ */
+export function nativeSetPipOnHome(enable: boolean) {
+  const opts: YtBackgroundPipOnHomeOptions = { enable };
+  getNative()?.setPipOnHome(opts).catch(() => {});
 }
 
 export function addControlListener(

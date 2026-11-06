@@ -54,7 +54,7 @@ interface RouterStore {
   setRoute: (r: Route) => void;
 }
 
-const useRouterStore = create<RouterStore>(set => ({
+export const useRouterStore = create<RouterStore>(set => ({
   route: { name: "home" },
   setRoute: r => set({ route: r }),
 }));

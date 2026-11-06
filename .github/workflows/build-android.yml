@@ -60,6 +60,13 @@ jobs:
           [ -d android ] || bunx cap add android
           bunx cap sync android
 
+      # Phase 2 (PiP, plan [A5]/[A8]): android/ is regenerated per run and a
+      # library manifest cannot set activity attributes — patch
+      # supportsPictureInPicture + the onUserLeaveHint home-press watcher
+      # into the freshly generated project, deterministically + idempotently.
+      - name: Enable PiP (manifest + MainActivity home-press watcher)
+        run: bash scripts/patch-android-pip.sh
+
       - name: Apply app icons
         run: cp -r icons/android/res/* android/app/src/main/res/
 
@@ -68,6 +75,18 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
+
+      # Phase 2 ([A8]): the PiP gate — the built APK's merged manifest MUST
+      # carry supportsPictureInPicture on the launcher activity, or the
+      # Home-press PiP path is silently dead on device.
+      - name: Assert PiP in built APK (aapt)
+        run: |
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          [ -x "$AAPT" ] || AAPT="$(ls "$ANDROID_HOME"/build-tools/*/aapt | sort -V | tail -1)"
+          "$AAPT" dump xmltree android/app/build/outputs/apk/debug/app-debug.apk AndroidManifest.xml > /tmp/manifest-tree.txt
+          grep -n "MainActivity" -A 20 /tmp/manifest-tree.txt | grep -q "supportsPictureInPicture" \
+            || { echo "supportsPictureInPicture missing from the merged manifest:"; cat /tmp/manifest-tree.txt; exit 1; }
+          echo "PiP manifest attribute verified in APK"
 
       - name: Build release APK (unsigned)
         working-directory: android

@@ -30,6 +30,9 @@ public class YtBackgroundPlugin extends Plugin {
     /** True while a background-play session is live (enable() … disable()). */
     private volatile boolean mediaActive = false;
 
+    /** Phase 2 (PiP): JS-side toggle for Home-press → PiP ([A5]). */
+    private volatile boolean pipOnHome = true;
+
     @Override
     public void load() {
         instance = this;
@@ -45,7 +48,55 @@ public class YtBackgroundPlugin extends Plugin {
      */
     @Override
     protected void handleOnPause() {
+        // Phase 2 (PiP, [A5]): the CI-injected MainActivity.onUserLeaveHint
+        // sets the flag just before this pause when the USER chose to leave
+        // (Home/Recents — not the power button, which never fires the hint).
+        // Entering PiP from the pause path is the documented-safe moment.
+        if (PipHomeWatcher.HOME_REQUESTED) {
+            PipHomeWatcher.HOME_REQUESTED = false;
+            if (pipOnHome && mediaActive) tryEnterPip();
+        }
         if (mediaActive) resumeWebViewTimers();
+    }
+
+    @Override
+    protected void handleOnResume() {
+        // back in the app (incl. expanding PiP back to fullscreen): forget any
+        // pending dismiss signal so it can't later fire as a false stop
+        PipHomeWatcher.DISMISSED = false;
+    }
+
+    @Override
+    protected void handleOnStop() {
+        // PiP window DISMISSED: the injected MainActivity's
+        // onPictureInPictureModeChanged(false) set the flag, and onStop only
+        // runs when the activity truly leaves the screen — expanding back
+        // goes through onResume instead. Route it as the existing "stop".
+        if (PipHomeWatcher.DISMISSED) {
+            PipHomeWatcher.DISMISSED = false;
+            emitControl("stop");
+        }
+    }
+
+    /** Phase 2 (PiP): shrink into a floating ~16:9 window (API 26+). */
+    private void tryEnterPip() {
+        try {
+            if (Build.VERSION.SDK_INT < 26) return;
+            final android.app.Activity act = getActivity();
+            if (act == null) return;
+            act.runOnUiThread(() -> {
+                try {
+                    android.app.PictureInPictureParams params =
+                            new android.app.PictureInPictureParams.Builder()
+                                    .setAspectRatio(new android.util.Rational(16, 9))
+                                    .build();
+                    act.enterPictureInPictureMode(params);
+                } catch (Throwable ignored) {
+                    // unsupported / not eligible right now: silent no-op
+                }
+            });
+        } catch (Throwable ignored) {
+        }
     }
 
     private void resumeWebViewTimers() {
@@ -186,5 +237,28 @@ public class YtBackgroundPlugin extends Plugin {
         data.put("action", "seek");
         data.put("seekTo", seconds);
         notifyListeners("control", data);
+    }
+
+    /**
+     * Phase 2 (PiP, [A5]): the player's PiP button on Android. Leaving PiP is
+     * user-driven; dismissing the window arrives as the existing "stop"
+     * control event (see handleOnStop above).
+     */
+    @PluginMethod
+    public void enterPip(PluginCall call) {
+        tryEnterPip();
+        call.resolve();
+    }
+
+    /**
+     * Phase 2 (PiP, [A5]): whether a Home-press while playing enters PiP.
+     * The JS layer pushes the Settings toggle through here; the plugin
+     * consults it when the onUserLeaveHint flag fires.
+     */
+    @PluginMethod
+    public void setPipOnHome(PluginCall call) {
+        Boolean enable = call.getBoolean("enable", Boolean.TRUE);
+        pipOnHome = enable == null || enable.booleanValue();
+        call.resolve();
     }
 }

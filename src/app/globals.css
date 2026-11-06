@@ -486,3 +486,30 @@ html.yt-android [data-yt-mobile-nav] { display: flex; }
    to live here. It fought the component's own padding and inset the tablet
    player by 32px (measured 802px wide vs YouTube's 834px). Below xl the player
    is now deliberately edge-to-edge, and the watch page owns its own padding. */
+
+/* ===== Phase 2: miniplayer ===== */
+/* Title marquee — YouTube's miniplayer scrolls a long title instead of
+   truncating it. The inner span duplicates the text and translates by -50%,
+   so the loop is seamless. Only applied when the text overflows (JS adds
+   .yt-marquee-run after measuring). */
+@keyframes yt-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.yt-marquee-box { overflow: hidden; white-space: nowrap; }
+/* the duplicate copy only exists to make the -50% loop seamless — hidden
+   unless the marquee is actually running (short titles must not double) */
+.yt-marquee-box > span + span { display: none; }
+.yt-marquee-run > span {
+  display: inline-block;
+  padding-right: 24px;
+  animation: yt-marquee 9s linear infinite;
+}
+/* Miniplayer slide-up when it docks. NO fill-mode on purpose: `both` would
+   keep the animation's final `transform: none` applied forever, overriding
+   the inline translateY of the drag-to-dismiss gesture. */
+@keyframes yt-mini-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+.yt-mini-in { animation: yt-mini-in 0.18s cubic-bezier(0.2, 0.7, 0.3, 1); }
