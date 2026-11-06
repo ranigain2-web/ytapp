@@ -1306,16 +1306,20 @@ const hydrationErrors = (errors) =>
     // gates cold comment-continuation fetches; retry the warmup until the
     // token's answer is cached (cache is per-token, 30 min, successes only)
     {
+      // warm both the comments and the replies cache server-side; in a cold
+      // CI env YouTube gates these — the warmup itself retries hard so the
+      // browser click is always a deterministic cache hit
       let warmed = false;
-      for (let i = 0; i < 4 && !warmed; i++) {
+      for (let i = 0; i < 6 && !warmed; i++) {
         try {
           const cdata = await (await fetch(`${API}/api/video/${VIDEO}/comments`)).json();
           const tok = (cdata.comments || []).find(c => c.replies_token)?.replies_token;
-          if (!tok) break;
-          const r = await (await fetch(`${API}/api/video/${VIDEO}/comments/replies?token=${encodeURIComponent(tok)}`)).json();
-          warmed = (r.replies || []).length > 0;
+          if (tok) {
+            const r = await (await fetch(`${API}/api/video/${VIDEO}/comments/replies?token=${encodeURIComponent(tok)}`)).json();
+            warmed = (r.replies || []).length > 0;
+          }
         } catch (e) { /* retry */ }
-        if (!warmed) await sleep(2500);
+        if (!warmed) await sleep(4000);
       }
       if (!warmed) console.log("   (replies warmup did not succeed — YouTube gating this run; the browser click may be slow)");
     }

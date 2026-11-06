@@ -117,7 +117,7 @@ class SessionPool {
       } catch (e) {
         lastErr = e;
         const msg = String(e.message || e);
-        const retryable = /403|429|Sign in to confirm|LOGIN_REQUIRED|detected odd traffic|Too many requests|fetch failed|ECONNRESET|ETIMEDOUT|502|503/i.test(msg);
+        const retryable = /403|429|Sign in to confirm|LOGIN_REQUIRED|detected odd traffic|Too many requests|fetch failed|ECONNRESET|ETIMEDOUT|502|503|no content/i.test(msg);
         warn(`${label}: attempt ${i + 1} failed: ${msg.slice(0, 140)}${retryable ? ' (retrying with rotated session)' : ' (not retryable)'}`);
         if (!retryable) throw e;
         await this.rotate();
@@ -595,7 +595,7 @@ async function continueComments(token, { label } = {}) {
         throw new Error('Comments continuation returned no content (likely bot-gating)');
       }
       return { comments, replies, continuation };
-    }, { label: label || `commentsCont ${token.slice(0, 12)}` });
+    }, { label: label || `commentsCont ${token.slice(0, 12)}`, attempts: 4 });
   });
 }
 
