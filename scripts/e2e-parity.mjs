@@ -176,6 +176,49 @@ async function newPage(browser, viewport = { width: 390, height: 844 }) {
     await ctx.close();
   }
 
+  // ---- 7. Android back-button layer (phase 7; non-native primitives) ------
+  console.log("== 7. Back-button layer ==");
+  {
+    const { ctx, page } = await newPage(browser);
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await sleep(1200);
+    const bootMark = await page.evaluate(() => !!window.history.state?.ytRoot);
+    if (bootMark) ok("boot history entry carries the ytRoot mark (exit point)");
+    else bad("boot entry missing ytRoot mark");
+
+    // context is destroyed by the navigation itself — the catch is expected
+    // in-app navigation via a real card tap (the user path): pushState entries
+    // must carry the yt mark so hardware back treats them as in-app history
+    const card = await page.$("a[href*='v='], [data-testid=video-card], [role=button][aria-label]");
+    let tapped = false;
+    if (card) {
+      await card.click({ timeout: 8000 }).then(() => { tapped = true; }).catch(() => {});
+      await sleep(2000);
+    }
+    if (tapped) {
+      const navMark = await page.evaluate(() => !!window.history.state?.yt && !window.history.state?.ytRoot);
+      if (navMark) ok("card tap → entry carries the yt mark (in-app back point)");
+      else bad("in-app navigation entry missing yt mark");
+      await page.goBack();
+      await sleep(1200);
+      const backHome = await page.evaluate(() => !window.location.search);
+      if (backHome) ok("history.back() lands on home (popstate routing intact)");
+      else bad("history.back() did not land on home");
+    } else {
+      console.log("  ⊘ no card to tap on the phone home (feed gated) — mark flow skipped, covered by the deep cold-open check below");
+    }
+
+    // deep cold-open: a home entry is seeded UNDER the deep route
+    const { ctx: c2, page: p2 } = await newPage(browser);
+    await p2.goto(`${BASE}/?v=deep`, { waitUntil: "domcontentloaded" });
+    await sleep(1200);
+    const deepMark = await p2.evaluate(() => !!window.history.state?.yt && !window.history.state?.ytRoot);
+    if (deepMark) ok("deep cold-open seeds home underneath (back → home → exit)");
+    else bad("deep cold-open entry not marked");
+    await c2.close();
+    await ctx.close();
+  }
+
   // phase 6: PWA installability surface (manifest + icons resolve)
   {
     try {

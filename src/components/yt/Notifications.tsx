@@ -10,9 +10,11 @@ import { Bell, X } from "lucide-react";
 import { useRouter } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
 import { useSubsFeed, readSeenSet, markAllSeen, type SubsFeedItem } from "@/lib/yt-subs-feed";
+import { useBackGuard } from "@/lib/yt-backbutton";
 
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
+  useBackGuard("notifications", open, () => setOpen(false));
   const subs = useYt(s => s.subs);
   const items = useSubsFeed(s => s.items);
   const loading = useSubsFeed(s => s.loading);

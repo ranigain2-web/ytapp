@@ -368,11 +368,13 @@ export async function fetchSuggestions(q: string): Promise<string[]> {
   }
 }
 
-export async function fetchVideo(id: string): Promise<YtVideoFull> {
+export async function fetchVideo(id: string, opts?: { fresh?: boolean }): Promise<YtVideoFull> {
   const mode = await resolveDataSource();
   if (mode === "standalone") return itVideo(id);
   if (mode === "community") return communityVideo(id);
-  return api<YtVideoFull>(`/api/video/${id}`, { timeoutMs: 60000 });
+  // ?fresh=1 bypasses the server's cache READ — the one-shot retry before a
+  // video is handed to the embed fallback (phase 7)
+  return api<YtVideoFull>(`/api/video/${id}${opts?.fresh ? "?fresh=1" : ""}`, { timeoutMs: 60000 });
 }
 
 export async function fetchComments(id: string, sort: "top" | "new" = "top"): Promise<{ comments: YtComment[]; count: number | null; error?: string; continuation?: string | null }> {
@@ -459,8 +461,8 @@ export async function fetchSponsorBlock(id: string): Promise<{ segments: SbSegme
   }
 }
 
-export async function fetchHealth(): Promise<{ ok: boolean; po_token: boolean; uptime: number }> {
-  return api<{ ok: boolean; po_token: boolean; uptime: number }>(`/api/health`, { timeoutMs: 8000 });
+export async function fetchHealth(): Promise<{ ok: boolean; po_token: boolean; pot_reachable?: boolean; uptime: number }> {
+  return api<{ ok: boolean; po_token: boolean; pot_reachable?: boolean; uptime: number }>(`/api/health`, { timeoutMs: 8000 });
 }
 
 // Absolute URL resolver for streams (HLS/captions/storyboard paths are relative)

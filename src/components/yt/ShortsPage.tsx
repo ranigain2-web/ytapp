@@ -18,6 +18,7 @@ import { ytToast } from "@/lib/yt-toast";
 import SearchOverlay from "./SearchOverlay";
 import VideoPlayer from "./VideoPlayer";
 import Comments from "./Comments";
+import { useBackGuard } from "@/lib/yt-backbutton";
 
 const MUTE_KEY = "yt_shorts_muted";
 
@@ -26,6 +27,7 @@ function readMuted(): boolean {
 }
 
 function CommentsSheet({ videoId, onClose }: { videoId: string; onClose: () => void }) {
+  useBackGuard("shorts-comments", true, onClose);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);

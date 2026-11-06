@@ -121,7 +121,6 @@ export default function HomePage({ category = "all" }: { category?: string }) {
     setMoreErr(false);
     seenRef.current = new Set();
     window.scrollTo({ top: 0 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
   useEffect(() => {

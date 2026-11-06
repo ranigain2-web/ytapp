@@ -6,6 +6,7 @@ import { useYt } from "@/lib/yt-store";
 import { applyTheme, watchSystemTheme } from "@/lib/yt-theme";
 import { applyPlatformClass, isAndroidApp } from "@/lib/yt-native";
 import { initPlaybackRouting } from "@/lib/yt-playback";
+import { mountBackButton } from "@/lib/yt-backbutton";
 import Header from "./Header";
 import { SidebarDrawer, MiniSidebar } from "./Sidebar";
 import HomePage from "./HomePage";
@@ -34,6 +35,11 @@ export default function AppShell() {
   useEffect(() => {
     initPlaybackRouting();
   }, []);
+
+  // Android hardware back: overlays close → in-app history back → exit at
+  // root (the YouTube navigation contract — see yt-backbutton.ts). No-op on
+  // web/desktop.
+  useEffect(() => mountBackButton(), []);
 
   // Theme engine: apply on every change and follow the OS while "system".
   // Lives here so it is active on every page, not just Settings.

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { UserRound, Palette, ShieldCheck, Settings } from "lucide-react";
 import { useRouter } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
+import { useBackGuard } from "@/lib/yt-backbutton";
 
 function DataModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
@@ -48,6 +49,7 @@ function DataModal({ onClose }: { onClose: () => void }) {
 
 export function AccountButton() {
   const [open, setOpen] = useState(false);
+  useBackGuard("account-menu", open, () => setOpen(false));
   const [dataOpen, setDataOpen] = useState(false);
   const { navigate } = useRouter();
   const theme = useYt(s => s.prefs.theme);

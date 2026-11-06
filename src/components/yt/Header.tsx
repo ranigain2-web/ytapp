@@ -12,7 +12,9 @@ import { resolveIsLight } from "@/lib/yt-theme";
 
 export function YouTubeLogo({ onClick }: { onClick?: () => void }) {
   return (
-    <button onClick={onClick} aria-label="YouTube Home" className="flex items-center gap-[5px] shrink-0 select-none">
+    <button onClick={onClick} aria-label="YouTube Home" className="flex items-center gap-[5px] shrink-0 select-none -my-3 py-3">
+      {/* -my-3/py-3: invisible 44px touch target around the 20px-tall wordmark
+          (measured 28x20 — half the minimum tap size) with zero visual change */}
       <svg viewBox="0 0 28 20" className="h-[20px] w-[28px]">
         <path d="M27.4 3.1s-.3-2-1.1-2.9c-1-1.1-2.2-1.1-2.7-1.2C19.5-1.2 14-1.2 14-1.2h-.1s-5.5 0-9.6.2c-.5.1-1.7.1-2.7 1.2C.8 1.1.5 3.1.5 3.1S.2 5.5.2 8v4c0 2.5.3 4.9.3 4.9s.3 2 1.1 2.9c1 1.1 2.4 1 3 1.2 1.4.1 9.4.2 9.4.2s5.5 0 9.6-.3c.5-.1 1.7-.1 2.7-1.2.8-.9 1.1-2.9 1.1-2.9s.3-2.4.3-4.9V8c0-2.5-.3-4.9-.3-4.9z" fill="#ff0000" />
         <path d="M11.2 13.3V5.7l7.6 3.8-7.6 3.8z" fill="#fff" />

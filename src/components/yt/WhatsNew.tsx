@@ -32,11 +32,10 @@ export default function WhatsNew() {
   if (!open) return null;
 
   const features: { icon: React.ReactNode; title: string; where: string }[] = [
-    { icon: <ShieldCheck className="w-5 h-5" />, title: "Two full versions in one update", where: "1.6 brought subscriptions, notifications, channel tabs, comment threads, truthful Shorts and playlist queues. 1.7 added on-device URL deciphering, seek-preview thumbnails everywhere, honest live and premiere states, and a test suite that proves no ad network is ever contacted." },
-    { icon: <Gauge className="w-5 h-5" />, title: "Light theme, fixed for real", where: "Three genuine light-mode bugs are gone — the Replay button, toasts and the sign-in button all had dark-only colors baked in. Every color in the app now comes from the theme system, with zero exceptions, enforced by a new automated check." },
-    { icon: <PlayCircle className="w-5 h-5" />, title: "It moves like YouTube now", where: "Pages rise in on navigation, chips press down when tapped, thumbnails zoom on hover, and switching category chips keeps your place instead of jumping back — with a smooth cross-fade into the new feed." },
-    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Loading states everywhere", where: "Search suggestions show skeleton rows while loading on both mobile and desktop, the video grid keeps six columns at very wide sizes just like the skeleton promised, and everything respects your reduce-motion setting." },
-    { icon: <LayoutPanelTop className="w-5 h-5" />, title: "Install it like an app", where: "On the web, ytapp is now an installable PWA — add it to your home screen or desktop and it opens in its own window with its own icon." },
+    { icon: <ShieldCheck className="w-5 h-5" />, title: "Far fewer fallbacks to the official player", where: "When the backend's token provider wasn't ready at startup, every video quietly fell back to YouTube's own player — with ads and no background play. The server now recovers automatically within about a minute, failed lookups are retried once before giving up, and bad results are no longer cached for an hour. Most videos that used to show the 'ads may appear' notice now play directly — which is what makes background play work." },
+    { icon: <Gauge className="w-5 h-5" />, title: "The Android back button navigates", where: "Pressing the system back button used to minimize the whole app. Now it behaves like YouTube: it closes whatever is open — search, comments, menus — then goes to the previous screen, and only exits when you're already home." },
+    { icon: <PlayCircle className="w-5 h-5" />, title: "Background play, more reliable", where: "Background playback (with lock-screen controls and the media notification) works whenever a video streams directly — and with the playback fixes above, that's now almost always." },
+    { icon: <PictureInPicture2 className="w-5 h-5" />, title: "Sharper touch targets", where: "The YouTube logo in the header was only 28×20 pixels — hard to hit. Its tap area is now double height with no visual change." },
   ];
 
   return (

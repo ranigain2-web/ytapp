@@ -34,14 +34,19 @@ class TTLCache {
   constructor() { this.map = new Map(); this.inflight = new Map(); }
   get(key) { const e = this.map.get(key); if (e && e.exp > Date.now()) return e.val; this.map.delete(key); return undefined; }
   set(key, val, ttlMs) { this.map.set(key, { val, exp: Date.now() + ttlMs }); }
-  async wrap(key, ttlMs, fn) {
-    const hit = this.get(key);
-    if (hit !== undefined) return hit;
+  // ttl: number of ms, or (val) => ms — lets callers cache failures much
+  // shorter than successes (an extraction failure must not pin a video to
+  // the embed fallback for the full hour)
+  async wrap(key, ttlMs, fn, { fresh = false } = {}) {
+    if (!fresh) {
+      const hit = this.get(key);
+      if (hit !== undefined) return hit;
+    }
     if (this.inflight.has(key)) return this.inflight.get(key);
     const p = (async () => {
       try {
         const val = await fn();
-        this.set(key, val, ttlMs);
+        this.set(key, val, typeof ttlMs === 'function' ? ttlMs(val) : ttlMs);
         return val;
       } finally { this.inflight.delete(key); }
     })();
@@ -83,10 +88,26 @@ async function refreshToken() {
 class SessionPool {
   constructor() { this.sessions = []; this.lock = null; }
   async get(index = 0) {
+    // Re-token path (cold-boot race fix): if pooled sessions were created
+    // WITHOUT a PO token (bgutil not yet up when yt-api started), they stay
+    // broken forever — getInfo returns gated playability as a NORMAL result,
+    // so withRetry never rotates. Here: once the token backoff has expired,
+    // try to obtain a token; on success drop the token-less sessions so the
+    // next _create() rebuilds them WITH the token.
+    if (this.sessions.some(s => !s.hasToken)) {
+      if (!tokenState.poToken && Date.now() >= tokenState.expiresAt) {
+        await refreshToken();
+      }
+      if (tokenState.poToken) {
+        const dropped = this.sessions.filter(s => !s.hasToken).length;
+        this.sessions = this.sessions.filter(s => s.hasToken);
+        log(`PO token acquired — dropping ${dropped} token-less session(s); they will be recreated with the token`);
+      }
+    }
     while (this.sessions.length <= index) {
       await this._create();
     }
-    return this.sessions[index];
+    return this.sessions[index].yt;
   }
   async _create() {
     await refreshToken();
@@ -98,8 +119,8 @@ class SessionPool {
     };
     if (YOUTUBE_COOKIE) opts.cookie = YOUTUBE_COOKIE;
     const yt = await Innertube.create(opts);
-    this.sessions.push(yt);
-    log(`session #${this.sessions.length - 1} created (visitor ${String(tokenState.visitorData || '').slice(0, 16)}...)`);
+    this.sessions.push({ yt, hasToken: !!tokenState.poToken });
+    log(`session #${this.sessions.length - 1} created (visitor ${String(tokenState.visitorData || '').slice(0, 16)}...${tokenState.poToken ? '' : ' NO PO TOKEN'})`);
     return yt;
   }
   async rotate() {
@@ -346,8 +367,10 @@ function normalizeStoryboard(info) {
   } catch { return null; }
 }
 
-async function getVideoFull(id) {
-  return cache.wrap(`video:${id}`, 60 * 60 * 1000, async () => {
+async function getVideoFull(id, { fresh = false } = {}) {
+  // success: 1h. failure (embed_fallback): 90s — a transient extraction
+  // failure must not pin a video to the embed for an hour.
+  return cache.wrap(`video:${id}`, v => (v.ok ? 60 * 60 * 1000 : 90 * 1000), async () => {
     const result = {
       id,
       ok: false, embed_fallback: false,
@@ -442,6 +465,20 @@ async function getVideoFull(id) {
         if (andInfo?.playability_status?.status === 'OK' && andInfo.streaming_data) {
           result.formats = normalizeFormats(andInfo.streaming_data);
           result.ok = result.formats.length > 0;
+        }
+      } catch { /* noop */ }
+    }
+
+    // WEB streams as the 3rd chance: webInfo was already fetched for
+    // metadata — zero extra API calls, and its URLs are deciphered because
+    // the session was created with retrieve_player: true.
+    if (!result.ok && playable && webInfo.streaming_data) {
+      try {
+        const webFormats = normalizeFormats(webInfo.streaming_data);
+        if (webFormats.some(f => f.url)) {
+          result.formats = webFormats;
+          result.ok = true;
+          log(`WEB streams rescued ${id} (${webFormats.length} formats)`);
         }
       } catch { /* noop */ }
     }
@@ -869,17 +906,31 @@ const wrap = fn => (req, res) => fn(req, res).catch(e => {
   res.status(502).json({ error: String(e.message || e).slice(0, 200) });
 });
 
-app.get('/api/health', (req, res) => {
+// bgutil reachability probe (memoized 30s) — surfaces deployment problems
+// ("POT provider down at boot → every video falls back to the embed") to the
+// client's Settings page instead of leaving them invisible.
+let potProbe = { at: 0, ok: false };
+async function potReachable() {
+  if (Date.now() - potProbe.at < 30_000) return potProbe.ok;
+  try {
+    const r = await fetch(`${BGUTIL_URL}/ping`, { signal: AbortSignal.timeout(2500) });
+    potProbe = { at: Date.now(), ok: r.ok };
+  } catch { potProbe = { at: Date.now(), ok: false }; }
+  return potProbe.ok;
+}
+
+app.get('/api/health', wrap(async (req, res) => {
   res.json({
     ok: true,
     po_token: !!tokenState.poToken,
+    pot_reachable: await potReachable(),
     token_expires: tokenState.expiresAt ? new Date(tokenState.expiresAt).toISOString() : null,
     sessions: pool.sessions.length,
     cache_size: cache.size,
     hls_cache: hlsManifestCache.size,
     uptime: process.uptime(),
   });
-});
+}));
 
 app.get('/api/home', wrap(async (req, res) => {
   const category = String(req.query.category || 'all').toLowerCase();
@@ -900,7 +951,9 @@ app.get('/api/search', wrap(async (req, res) => {
 app.get('/api/video/:id', wrap(async (req, res) => {
   const id = String(req.params.id || '');
   if (!/^[\w-]{6,15}$/.test(id)) return res.status(400).json({ error: 'Bad video id' });
-  res.json(await getVideoFull(id));
+  // ?fresh=1 — bypass the cache READ (the client retries once before giving
+  // up on direct streaming); the fresh result still overwrites the cache
+  res.json(await getVideoFull(id, { fresh: req.query.fresh === '1' }));
 }));
 
 app.get('/api/video/:id/comments', wrap(async (req, res) => {

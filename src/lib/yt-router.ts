@@ -69,6 +69,16 @@ if (typeof window !== "undefined") {
   window.addEventListener("popstate", () => {
     useRouterStore.getState().setRoute(parseRoute());
   });
+  // Mark the boot entry as the history root for the Android hardware back
+  // button (yt-backbutton.ts). If the app cold-opens on a deep route
+  // (process death on /?v=…), seed a synthetic home entry UNDER the current
+  // one so hardware back lands on the home feed first, then exits — the
+  // YouTube navigation contract.
+  try {
+    const bootUrl = window.location.pathname + window.location.search;
+    window.history.replaceState({ ytRoot: true }, "", "/");
+    if (bootUrl !== "/" && bootUrl !== "") window.history.pushState({ yt: true }, "", bootUrl);
+  } catch { /* SSR / tests */ }
 }
 
 export function useRouter() {
@@ -85,8 +95,10 @@ export function useRouter() {
 
   const navigate = (r: Route, replace = false) => {
     const url = href(r);
-    if (replace) window.history.replaceState({}, "", url);
-    else window.history.pushState({}, "", url);
+    // entries carry { yt: true } so the Android back handler can tell
+    // in-app history from the boot root (see yt-backbutton.ts)
+    if (replace) window.history.replaceState({ yt: true }, "", url);
+    else window.history.pushState({ yt: true }, "", url);
     setRoute(r);
     if (!replace) window.scrollTo({ top: 0 });
   };

@@ -207,6 +207,19 @@ Owner: `ranigain2-web` (GitHub). Repo layout and quickstart: see
 
 ## 3. Current state (as of 2026-11-06, session 19 — THE PLAN IS COMPLETE: v1.6.0, v1.7.0, v2.0.0 shipped
 
+### v2.1.0 (playback reliability + Android back)
+- Embed-fallback root cause FIXED (session-pool token race + 60min failure
+  cache): pool re-tokens and drops token-less sessions, failures cache 90s,
+  WEB is a 3rd extraction client, ?fresh=1 cache-bust + client retries before
+  the embed. Background play works whenever streams are direct (which is now
+  the norm). verify-retoken.mjs proves the drop path.
+- Android hardware back: @capacitor/app + yt-backbutton.ts (LIFO overlays →
+  history.back → exitApp at root); router entries carry yt/ytRoot marks;
+  deep cold-opens seed a home entry underneath. Parity section 7 guards it.
+- If a user reports fallbacks again: check Settings → Test connection for
+  "token server unreachable" (their server's bgutil is down) — the app now
+  surfaces it.
+
 ### v2.0.0 (phase 6 — appearance final)
 - Zero hardcoded colors (audit-colors.mjs, CI-gated) + zero dead CSS
   (audit-deadcss.mjs, CI-gated); status/banner tokens in both themes.

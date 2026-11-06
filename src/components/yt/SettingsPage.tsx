@@ -31,7 +31,7 @@ function Toggle({ label, desc, value, onChange, labelIcon }: { label: string; de
 
 export default function SettingsPage() {
   const [apiBase, setApiBaseInput] = useState(() => getApiBase());
-  const [health, setHealth] = useState<{ ok: boolean; po_token: boolean; uptime: number } | null>(null);
+  const [health, setHealth] = useState<{ ok: boolean; po_token: boolean; pot_reachable?: boolean; uptime: number } | null>(null);
   const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [sourceLabel, setSourceLabel] = useState<string>("checking…");
@@ -134,8 +134,9 @@ export default function SettingsPage() {
               {testing ? <RefreshCw className="w-4 h-4 animate-spin" /> : null} Test connection
             </button>
             {health && (
-              <span className="flex items-center gap-2 text-[13px] text-[var(--yt-status-ok)]">
+              <span className={`flex items-center gap-2 text-[13px] ${health.pot_reachable === false ? "text-[var(--yt-status-warn)]" : "text-[var(--yt-status-ok)]"}`}>
                 <Check className="w-4 h-4" /> Connected · PO token {health.po_token ? "active" : "inactive"}
+                {health.pot_reachable === false && " · token server unreachable — ask the server owner to restart the backend with its pot-provider"}
               </span>
             )}
             {health === null && !testing && (

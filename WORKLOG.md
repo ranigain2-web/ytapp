@@ -1113,3 +1113,48 @@ commit.
 - **Final regression all green**: playback 108/108, parity 12/12, decipher
   5/5, ads 11/0/1, colors 0, deadcss 0, electron bundle PASSED.
   **v2.0.0 — the plan is complete.**
+
+## Session 20 (2026-11-06) — v2.1.0: playback reliability (embed-fallback root cause), Android back button
+
+User-reported: the "Playing via the official YouTube player — ads may appear"
+fallback showing often (so no background play), and the Android hardware back
+button minimizing the app instead of navigating back.
+
+- **Root cause #1 (reproduced end-to-end, REA-style before/after)**: the
+  yt-api session pool creates Innertube sessions ONCE with the PO-token state
+  at creation time. If bgutil isn't up yet at boot (or dies briefly),
+  token-less sessions are created and NEVER re-token — getInfo returns gated
+  playability as a NORMAL result, so withRetry's rotation never fires. One
+  cold-boot race = permanent embed fallback until a manual restart. Verified:
+  POT-down boot → embed_fallback; POT recovered + 66s → STILL broken (old
+  code); with the fix → "PO token acquired — dropping 1 token-less
+  session(s)" logged, po_token: true.
+- **Fixes (server/index.mjs)**: pool `get()` re-checks the token once the
+  60s backoff expires and drops token-less sessions when a token appears;
+  video failures now cache 90s instead of 60min (TTLCache accepts a TTL
+  function); WEB streaming_data is a 3rd extraction chance (zero extra API
+  calls — reuses the metadata fetch); `/api/video/:id?fresh=1` bypasses the
+  cache read; `/api/health` gains `pot_reachable` (memoized bgutil probe).
+- **Fixes (client)**: WatchPage retries once with `?fresh=1` before honoring
+  `embed_fallback`; VideoSurface's noSource path does the same before
+  setEmbed; Settings shows a warning when the server's token provider is
+  unreachable.
+- **Root cause #2**: Capacitor 7 has NO hardware-back handling in core
+  (it lives in @capacitor/app, which wasn't installed) → BridgeActivity's
+  default onBackPressed finishes the activity = the app "minimizes".
+- **Fix**: @capacitor/app + `src/lib/yt-backbutton.ts` — backButton →
+  LIFO overlay closers (search overlay, notifications, account menu, player
+  menus, shorts comments — all registered via useBackGuard) → history.back()
+  → exitApp at root. Router entries now carry {yt}/{ytRoot} marks; a deep
+  cold-open seeds a synthetic home entry underneath (process-death case).
+  Verified in-browser (parity section 7): ytRoot mark, card-tap → yt mark,
+  back → home, deep cold-open seeding.
+- **Polish**: objective DOM-density audit (no overflow/overlap found on
+  phone surfaces); the YouTube-logo tap target was 28×20px → doubled via
+  negative-margin padding (zero visual change).
+- **Regression**: playback 108/108 · parity 16/16 (4 new back-button
+  checks) · ads 11/0/1 · decipher 5/5 · colors 0 · deadcss 0 · electron
+  bundle PASSED. NOTE: this sandbox IP is now bot-gated for playability, so
+  format extraction returns 0 formats HERE regardless of tokens — the
+  dQw4w9WgXcQ run earlier today (24 formats + HLS with token) proves the
+  chain; the user's residential server is the real test.

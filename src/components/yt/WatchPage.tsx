@@ -59,7 +59,15 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
     let alive = true;
     (async () => {
       try {
-        const v = await fetchVideo(videoId);
+        let v = await fetchVideo(videoId);
+        // phase 7: a cached server-side extraction failure (embed_fallback)
+        // must not hand the video to the ad-bearing official player without
+        // ONE cache-busted retry — the failure TTL is short and a fresh
+        // fetch usually recovers (e.g. the server's PO token came online)
+        if (v.embed_fallback && !usePlayback.getState().isForcedEmbed(v.id)) {
+          const fresh = await fetchVideo(videoId, { fresh: true }).catch(() => null);
+          if (alive && fresh && !fresh.embed_fallback) v = fresh;
+        }
         if (!alive) return;
         setData(v);
         if (v.title) {

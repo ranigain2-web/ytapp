@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import Hls from "hls.js";
+import { fetchVideo } from "@/lib/yt-api";
 import type { YtVideoFull, YtFormat, SbSegment } from "@/lib/yt-api";
 import { absStream, fetchSponsorBlock } from "@/lib/yt-api";
 import { formatTime } from "@/lib/yt-format";
@@ -32,6 +33,7 @@ import {
   setMediaHandlers, setMediaMetadata, setMediaPlaybackState, setMediaPositionState, clearMediaHandlers,
 } from "@/lib/yt-native";
 import { CountdownCard } from "./CountdownCard";
+import { useBackGuard } from "@/lib/yt-backbutton";
 import {
   Play, Pause, SkipForward, Volume2, Volume1, VolumeX, Maximize, Minimize,
   Settings, Subtitles, ArrowLeft, Gauge, Check, ChevronRight, ChevronLeft, PictureInPicture2, Headphones,
@@ -140,6 +142,7 @@ export default function VideoSurface() {
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [menu, setMenu] = useState<null | "main" | "speed" | "quality" | "captions">(null);
+  useBackGuard("player-menu", menu !== null, () => setMenu(null));
   const [levels, setLevels] = useState<{ index: number; label: string; height: number }[]>([]);
   const [currentLevel, setCurrentLevel] = useState(-1);
   const [speed, setSpeed] = useState(1);
@@ -192,9 +195,32 @@ export default function VideoSurface() {
   }, [video?.formats]);
   const noSource = !!video && mode === "direct" && !video.hls && !fallbackFormat?.url && !(audioOnly && audioFormat?.url);
 
-  // no directly-playable stream at all → hand off to the embed player ([A2])
+  // no directly-playable stream → ONE cache-busted retry, then the embed ([A2]).
+  // Covers direct-mode loads whose formats went stale between fetch and play,
+  // and cached server failures older than the short failure TTL.
+  const freshRetriedRef = useRef<string>("");
   useEffect(() => {
-    if (noSource && video) usePlayback.getState().setEmbed(video.id);
+    if (!noSource || !video) return;
+    if (freshRetriedRef.current === video.id) {
+      usePlayback.getState().setEmbed(video.id);
+      return;
+    }
+    freshRetriedRef.current = video.id;
+    let alive = true;
+    (async () => {
+      try {
+        const v = await fetchVideo(video.id, { fresh: true });
+        if (!alive) return;
+        if (v && (v.hls || (v.formats || []).some(f => f.url))) {
+          usePlayback.getState().load(v, { mode: "direct" });
+        } else {
+          usePlayback.getState().setEmbed(video.id);
+        }
+      } catch {
+        if (alive) usePlayback.getState().setEmbed(video.id);
+      }
+    })();
+    return () => { alive = false; };
   }, [noSource, video]);
 
   // poster + captions list follow the store's video

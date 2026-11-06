@@ -8,6 +8,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { ArrowLeft, Search, Clock, X } from "lucide-react";
 import { useRouter } from "@/lib/yt-router";
 import { fetchSuggestions } from "@/lib/yt-api";
+import { useBackGuard } from "@/lib/yt-backbutton";
 
 const RECENTS_KEY = "yt_recent_searches";
 const MAX_RECENTS = 12;
@@ -77,7 +78,10 @@ export default function SearchOverlay({ open, onClose, onSearch, initialQuery = 
     }
   }, [open, initialQuery]);
 
-  // Back handling: overlay open → close overlay instead of leaving the page
+  // Back handling: overlay open → close overlay instead of leaving the page.
+  // Android hardware back goes through useBackGuard (closes without
+  // consuming a history entry); popstate stays for browser back.
+  useBackGuard("search-overlay", open, onClose);
   useEffect(() => {
     if (!open) return;
     const onPop = () => onClose();
