@@ -10,6 +10,10 @@ import { execSync } from "node:child_process";
 // Player/Shorts black surfaces: the video player is intentionally
 // theme-independent (YouTube's player chrome is always dark-on-black).
 const EXEMPT_FILES = [
+  // The compat injection bundle runs INSIDE YouTube's page, where this app's
+  // CSS custom properties do not exist — every style it applies (the exit
+  // pill, the continue-watching dialog) must carry raw literals.
+  "src/lib/compat/compat-injection.ts",
   "src/components/yt/VideoPlayer.tsx",
   "src/components/yt/ShortsPage.tsx",
   "src/components/yt/CountdownCard.tsx",
