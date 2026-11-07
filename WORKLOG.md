@@ -1382,3 +1382,42 @@ defined on the user's server — this sandbox is the worst-case IP (research:
 - USER MEASUREMENT PENDING (per plan section 12): after deploying v2.4.0 to
   the real server, Copy Diagnostics before/after — target battery >=5/6 and
   embed_fallback_rate visibly below the pre-deploy number.
+
+### Session 26 — Phase 2 (Compat Mode): code complete, gate blocked (v2.5.0 NOT tagged)
+
+Per docs/designs/phase-1... correction: docs/designs/phase-2 compat work per
+master plan section 7. Honest state: all Phase 2 code is written, tsc 0, unit
+25/25; the phase gate is BLOCKED by a sandbox build OOM, so v2.5.0 is NOT
+tagged. Details:
+
+- Built: plugins/yt-compat (Capacitor plugin: fullscreen m.youtube.com
+  WebView, document-start injection via onPageStarted, ytCompatNative bridge,
+  execute/close; Java UNVERIFIED — no Android SDK in this sandbox, needs a
+  device/CI build), guard-core.ts (pure decisions: shouldAutoResume,
+  isContinueWatchingDialog, stripAdPayload cycle-safe, toNetscapeCookieFile —
+  unit 25/25 via bun), compat-injection.ts (composes the bundle from the
+  guard-core function sources via Function.toString — single source of truth;
+  bundle syntax-validated in the unit test), yt-compat.ts wrapper, compat
+  route + CompatPage (media relay to yt-background, controls via
+  evaluateJavascript with __ytUserPauseAt attribution, cookie share to
+  POST /api/cookie, honest notices, injected "back to ytapp" pill), WatchPage
+  compat entry (native-only + kill-switch), Settings toggles (compatEnabled,
+  compatShareCookies), yt-store prefs extended. iOS (C-06) descoped: not one
+  of the three targets.
+- e2e-compat.mjs (mocked native bridge: fake Capacitor PluginHeaders +
+  nativePromise/nativeCallback + androidBridge): proved entry + route +
+  injection content; then exposed a REAL pre-existing bug: the VideoSurface
+  pipOnHome effect re-fires ~1200x/s when native promises resolve (render
+  loop), crashing the renderer. Mitigated with a push-only-on-change ref
+  guard (committed); root cause of the re-render itself still open — top
+  suspect for next session.
+- Build OOM (new, environmental): bun run build:static now OOM-kills the
+  Turbopack PostCSS worker — measured 3.4GB peak on the 4GB sandbox. The
+  identical tree built green earlier today (the stash-bisect run proved it);
+  experimental.cpus 1/2 did not help. Next session: try a clean reboot of
+  the sandbox build env, build via CI, or investigate the CSS worker. The
+  Turbopack "panic" earlier in the session was the same OOM, flakily.
+- Ops learnings recorded in PROGRESS.md: kill leftover chromium/servers
+  before builds; playwright browsers need reinstall after sandbox recycling.
+- NOT done from the plan: Phase 2 full gate (build+e2e suite), Phases 3-5.
+  Phases 0 (v2.3.0) and 1 (v2.4.0) are tagged with green gates.

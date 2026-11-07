@@ -78,3 +78,7 @@ prompt
 test
 coverage
 /skills/
+
+# crash dumps (a 2.9GB core once got auto-committed and OOM'd every build)
+core
+core.*

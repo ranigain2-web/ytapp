@@ -6,7 +6,7 @@ Program: ytapp Master Build Plan (2026-11-07) · Phases 0-5 · EGM + gauntlet lo
 | --- | --- | --- | --- |
 | 0 — Stabilize & Instrument | ✅ gate green | tsc 0 · battery · diagnostics · journey e2e | v2.3.0 |
 | 1 — Extraction Engine v2 | ✅ sandbox gate green | | battery ≥5/6 on mildly-gated IP · fallback rate ↓ | v2.4.0 |
-| 2 — Compat Mode | ⬜ | gated video plays screen-off on device · kill-switch | v2.5.0 |
+| 2 — Compat Mode | 🔄 code complete, gate BLOCKED (sandbox build OOM) | | gated video plays screen-off on device · kill-switch | v2.5.0 |
 | 3 — Downloads v1 | ⬜ | muxed MP4 e2e on web+Android+desktop · caps | v2.6.0 |
 | 4 — Native Android Player | ⬜ | notification + screen-off on device | v2.7.0 |
 | 5 — UX Parity | ⬜ | per-item e2e · tsc stays 0 | v2.8.0 |
@@ -15,6 +15,29 @@ Program: ytapp Master Build Plan (2026-11-07) · Phases 0-5 · EGM + gauntlet lo
 
 | ID | Piece | Status |
 | --- | --- | --- |
+| C-01 | yt-compat plugin (Android WebView overlay + bridge) + compat route | 🔄 code written; Java NOT compilable here — needs an Android build (documented) |
+| C-02 | injection bundle (spoof + guard + user-intent attribution) | ✅ unit 25/25 incl. syntax validation of the composed bundle |
+| C-03 | ad-strip (fetch/XHR/ytInitial) | ✅ unit-tested stripAdPayload (cycle-safe) |
+| C-04 | MediaSession bridge (controls via evaluateJavascript, pause attribution) | ✅ wired; mocked e2e partially verified (entry+route proven) |
+| C-05 | entry UX + honest notice + kill-switch | ✅ code complete; e2e blocked by build OOM |
+| C-06 | iOS variant | ⛔ descoped with reason: iOS is not one of the three targets (dev web / Capacitor Android / Electron) |
+| C-07 | cookie export to server (Netscape + POST /api/cookie reuse) | ✅ toNetscapeCookieFile unit-tested; sharing toggle in Settings |
+
+## Phase 2 open questions (honest)
+
+1. **setPipOnHome unbounded loop** (REAL BUG found by the mocked-native e2e):
+   the VideoSurface effect re-fires ~1200x/s once native promises resolve,
+   spamming the bridge until the renderer dies. Mitigated by a
+   push-only-on-change ref guard; the re-render trigger itself is
+   unidentified (dep is a stable boolean selector) — needs a React
+   Profiler pass with the fake bridge next session.
+2. **Sandbox build OOM**: bun run build:static now OOM-kills the Turbopack
+   PostCSS worker (3.4GB peak on a 4GB box — measured live). experimental
+   cpus 2/1 did not prevent it. tsc is clean and the SAME tree built
+   successfully earlier today; next steps: build on CI (GitHub runners have
+   more RAM) or trim the CSS worker path. The last green bundle artifacts
+   were produced before the OOM started; e2e needing a fresh build is
+   blocked until then.
 | E-01 | youtubei.js 18.3.0 (server + pot-provider) | ✅ |
 | E-02 | HTML-seeded WEB (watch page + playerResponse + decipher) | ✅ in chain (SEEDED_WEB); page itself gated on this IP — real judge is the user's server |
 | E-03 | PO token on every player call | ✅ proven live: 52/52 player calls carry poToken (counting fetch + battery assertion) |
