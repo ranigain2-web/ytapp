@@ -75,7 +75,7 @@ public class YtCompatPlugin extends Plugin {
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 // SYSTEM_UI flags: the compat surface is immersive video, and the
                 // app's own Close affordance lives in the injected bundle bar.
-                activity.getWindow().getDecorView().addView(compatRoot);
+                ((ViewGroup) activity.getWindow().getDecorView()).addView(compatRoot);
                 compatView.loadUrl(url);
                 call.resolve();
             } catch (Exception e) {

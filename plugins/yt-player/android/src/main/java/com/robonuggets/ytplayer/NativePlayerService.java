@@ -121,7 +121,9 @@ public class NativePlayerService extends MediaSessionService {
                 stopSelf();
                 return START_NOT_STICKY;
             default:
-                break;
+                // media-button / session-service intents belong to the
+                // Media3 base class (headset buttons, session connections)
+                return super.onStartCommand(intent, flags, startId);
         }
         return START_STICKY;
     }
