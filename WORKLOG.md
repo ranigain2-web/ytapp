@@ -1660,3 +1660,8 @@ and green. Plugin Java compiles in CI's Android workflow (the cap sync
 path). Honest limits, unchanged: an embed whose stream cannot be extracted
 cannot play screen-off audio — that needs YouTube Premium's server, not an
 app.
+
+Session 29 addendum: v2.8.2 tagged — the embed background fix shipped as a
+release so it is installable from GitHub Releases. The tester-facing
+feature guide (what each feature does, exact test steps, expected
+observations) was delivered alongside, outside the repo.

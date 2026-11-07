@@ -1,6 +1,6 @@
 {
   "name": "ytapp",
-  "version": "2.8.1",
+  "version": "2.8.2",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
@@ -56,6 +56,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "docx": "^9.15.3",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.2",
     "hls.js": "^1.7.3",
