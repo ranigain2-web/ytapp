@@ -1542,3 +1542,29 @@ Per master plan section 10, delivered subset (labeled PARTIAL honestly):
   changes are additive UI (RYD count, banner, speed persistence) with no
   player-path edits — the full re-run is left for the next session's
   first action, recorded in PROGRESS.md.
+
+### Session 28 — Push to origin/main (v2.3.0 → v2.8.0)
+
+Pushed the whole program: 14 commits, tags v2.3.0 through v2.8.0 (remote
+was at the v2.2.0 era). All four workflows auto-trigger (ci, build-android,
+build-macos, release-on-tags).
+
+Push gates run first: build:static GREEN; fast e2e subset GREEN (embed 7/0,
+parity 16/0, compat 8/0, downloads 9/0 + 2 environmental skips, native
+player 4/0); electron bundle test ALL PASS (required — the RYD backend
+route changed since the last bundle run). v2.8.0's full-suite re-run note
+from session 27 still stands: playback/background/battery/premium/v12 were
+last run green at v2.7.0; this push gate re-proved the build + bundle +
+core journeys.
+
+Android CI risk handling before pushing (the APK workflow runs cap sync,
+which compiles the never-compiled plugin Java): added yt-compat's missing
+library manifest (yt-background, CI-proven, has one); removed unused
+NativePlayerService imports whose classes may not be on the classpath
+(imports of missing classes fail compilation even when unused); verified
+every Capacitor API call against the @capacitor/android source shipped in
+node_modules (PluginCall.getDouble/getString/getBoolean, Plugin.getContext/
+getBridge, notifyListeners, JSObject.fromJSONObject all confirmed). The
+media3 API usage follows the documented 1.5 service pattern. The Java is
+still UNVERIFIED until this very CI run — if the APK workflow fails, the
+failure IS the device-verification step; fix forward from its log.
