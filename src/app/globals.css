@@ -1,11 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Tailwind v4 auto-detection walks every non-gitignored text file in the
-   project (scripts/, docs/, plugins/...) hunting class candidates — on the
-   4GB build sandbox that scan is what pushes the PostCSS worker past the
-   memory ceiling (OOM-killed builds). Utilities only ever come from src/,
-   so restrict the scan to it. */
+/* Tailwind v4 auto-detection walks every non-gitignored file in the project
+   hunting class candidates — including a 2.9GB core dump that an auto-commit
+   once swallowed (that file OOM-killed every build until it was found).
+   Utilities only ever come from src/, so keep the scan away from the
+   non-app directories as defense in depth. */
 @source not "../../scripts";
 @source not "../../docs";
 @source not "../../plugins";
