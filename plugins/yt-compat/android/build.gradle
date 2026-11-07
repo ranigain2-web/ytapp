@@ -1,0 +1,23 @@
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.robonuggets.ytcompat'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 23
+        targetSdk 35
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+    // Plugin.getActivity() returns AppCompatActivity — needed for the
+    // fullscreen overlay attach/detach.
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+}

@@ -12,6 +12,7 @@ import Comments from "./Comments";
 import { CountdownCard } from "./CountdownCard";
 import { parkSurfaceVideoIfInside } from "./VideoSurface";
 import { ytToast } from "@/lib/yt-toast";
+import { isNativeApp } from "@/lib/yt-native";
 import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Scissors, Bell, AlertTriangle, SkipForward, Headphones, Play, RotateCcw } from "lucide-react";
 
 export default function WatchPage({ videoId, startAt }: { videoId: string; startAt?: number }) {
@@ -30,6 +31,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const nextTrack = usePlayback(s => s.nextTrack);
   const seekTo = usePlayback(s => s.seekTo);
   const autoplay = useYt(s => s.prefs.autoplay);
+  const compatEnabled = useYt(s => s.prefs.compatEnabled);
   const forcedEmbed = usePlayback(s => !!s.forceEmbedIds[videoId]);
   // true when the surface already holds THIS video: render the slot
   // immediately — returning to a video resumes with zero skeleton flash
@@ -362,6 +364,17 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               : "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Background play works when a video streams directly."}
             {v.gate_reason === "bot_gate" && " The server's IP is bot-gated by YouTube — setting server cookies (Settings → Server cookies) may restore direct, ad-free playback."}
           </p>
+        )}
+        {/* C-05: the Compat Mode entry — native only (a browser cannot script
+            YouTube's page), killed by the Settings toggle */}
+        {embedActive && !blockedMessage && isNativeApp() && compatEnabled && (
+          <button
+            onClick={() => navigate({ name: "compat", id: v.id })}
+            data-testid="compat-entry"
+            className="flex items-center gap-2 h-9 px-4 ml-4 mb-2 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[13px] font-medium shrink-0"
+          >
+            <Play className="w-4 h-4" /> Play in Compat Mode
+          </button>
         )}
 
         {/* PLAYER BAR — always visible in BOTH player modes so playback

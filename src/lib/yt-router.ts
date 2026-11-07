@@ -18,6 +18,7 @@ export type Route =
   | { name: "liked" }
   | { name: "later" }
   | { name: "playlists" }
+  | { name: "compat"; id: string }
   | { name: "settings" };
 
 export function parseRoute(): Route {
@@ -36,6 +37,7 @@ export function parseRoute(): Route {
     case "liked": return { name: "liked" };
     case "later": return { name: "later" };
     case "playlists": return { name: "playlists" };
+    case "compat": return p.get("id") ? { name: "compat", id: p.get("id")! } : { name: "home" };
     case "settings": return { name: "settings" };
     default: return { name: "home" };
   }
@@ -49,6 +51,7 @@ export function href(route: Route): string {
     case "channel": return `/?channel=${encodeURIComponent(route.id)}`;
     case "shorts": return route.id ? `/?page=shorts&id=${encodeURIComponent(route.id)}` : "/?page=shorts";
     case "playlist": return `/?page=playlist&id=${encodeURIComponent(route.id)}`;
+    case "compat": return `/?page=compat&id=${encodeURIComponent(route.id)}`;
     default: return `/?page=${route.name}`;
   }
 }

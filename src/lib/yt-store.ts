@@ -89,6 +89,12 @@ interface YtStore {
     /** Phase 2 (PiP): pressing Home while a video plays shrinks it into a
      *  floating window (Android). */
     pipOnHome: boolean;
+    /** Phase 2 (Compat Mode): show the "Play in Compat Mode" entry on
+     *  embed-fallback videos (the kill-switch — off hides it everywhere). */
+    compatEnabled: boolean;
+    /** Phase 2 (Compat Mode): share the compat session's YouTube cookies with
+     *  your server so its extraction chain and downloads can use them. */
+    compatShareCookies: boolean;
   };
   setPrefs: (p: Partial<YtStore["prefs"]>) => void;
 }
@@ -186,6 +192,8 @@ export const useYt = create<YtStore>()(
         audioOnly: false,
         dataSaver: false,
         pipOnHome: true,
+        compatEnabled: true,
+        compatShareCookies: true,
       },
       setPrefs: (p) => set({ prefs: { ...get().prefs, ...p } }),
     }),

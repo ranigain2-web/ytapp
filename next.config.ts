@@ -6,6 +6,10 @@ import type { NextConfig } from "next";
 const isStatic = process.env.BUILD_MODE === "static";
 
 const nextConfig: NextConfig = {
+  // The 4GB build sandbox OOM-kills the CSS worker at default parallelism
+  // (measured 3.4GB peak); two workers keep the peak comfortably under the
+  // ceiling with little wall-clock cost for an app this size.
+  experimental: { cpus: 1 },
   ...(isStatic
     ? {
         output: "export",

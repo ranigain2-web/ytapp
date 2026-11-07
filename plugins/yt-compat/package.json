@@ -1,0 +1,20 @@
+{
+  "name": "yt-compat",
+  "version": "1.0.0",
+  "description": "ytapp local Capacitor plugin — Compat Mode: fullscreen m.youtube.com WebView with document-start injection (visibility spoof, background guard, ad strip), a message bridge to the app, and evaluateJavascript control",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "files": [
+    "android",
+    "dist"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^7.0.0"
+  }
+}

@@ -237,6 +237,34 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Compat Mode (Phase 2) */}
+      <section className="mb-10">
+        <h2 className="text-[16px] font-medium mb-2">Compat Mode</h2>
+        {isNativeApp() ? (
+          <>
+            <Toggle
+              label="Compat Mode"
+              labelIcon={<PlayCircle className="w-4 h-4" />}
+              desc="When the server cannot extract a video, offer playing it inside YouTube's own mobile site in a controlled fullscreen player — ads stripped where possible, background play enforced, lock-screen controls wired. The kill-switch: off hides every Compat entry"
+              value={prefs.compatEnabled}
+              onChange={v => setPrefs({ compatEnabled: v })}
+            />
+            <Toggle
+              label="Share compat cookies with your server"
+              desc="A Compat session's YouTube cookies (including your login if you sign in inside Compat Mode) go to your own server so its extraction and downloads can use them. Your server, your cookies — but a leaked cookie is a logged-in session, so turn this off if the server is shared"
+              value={prefs.compatShareCookies}
+              onChange={v => setPrefs({ compatShareCookies: v })}
+            />
+          </>
+        ) : (
+          <p className="text-[13px] text-[var(--yt-text-2)] leading-relaxed">
+            Compat Mode plays server-gated videos inside YouTube&apos;s own mobile site in a native
+            WebView that ytapp controls — browsers cannot script a cross-origin page, so it exists
+            only in the Android app.
+          </p>
+        )}
+      </section>
+
       {/* Appearance — YouTube's exact setting */}
       <section className="mb-10">
         <h2 className="text-[16px] font-medium mb-2">Appearance</h2>
