@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """patch_footers.py — WPS-compat page numbers: patch each section's footer PAGE
-field with an explicit \\* ROMAN / \\* arabic format switch (MS Office already
-respects w:pgNumType; WPS needs the instrText switch). Idempotent."""
+field with an explicit \\* ROMAN / \\* arabic switch plus \\* MERGEFORMAT (MS
+Office already respects w:pgNumType; WPS needs the instrText switch).
+Usage: python3 patch_footers.py <file.docx>   (idempotent)"""
 import re, shutil, sys, zipfile
 
-DOCX = "/home/z/my-project/download/ytapp-deep-research-report.docx"
+DOCX = sys.argv[1] if len(sys.argv) > 1 else "/home/z/my-project/download/ytapp-deep-research-report.docx"
 
 def main():
     with zipfile.ZipFile(DOCX) as z:
@@ -29,11 +30,11 @@ def main():
                 continue
             key = "word/" + target
             xml = files[key].decode("utf-8")
-            new = re.sub(r'(<w:instrText xml:space="preserve">)PAGE(</w:instrText>)',
-                         r"\g<1>PAGE \\* " + switch + r"\g<2>", xml)
+            new = re.sub(r'(<w:instrText xml:space="preserve">)PAGE(?: \\* (?:ROMAN|roman|arabic))?(?: \\* MERGEFORMAT)?(</w:instrText>)',
+                         r"\g<1>PAGE \\* " + switch + r" \\* MERGEFORMAT\g<2>", xml)
             if new != xml:
                 files[key] = new.encode("utf-8")
-                patched.append(f"{target} -> PAGE \\* {switch}")
+                patched.append(f"{target} -> PAGE \\* {switch} \\* MERGEFORMAT")
 
     # strip empty pgNumType (cover section emits one; some engines dislike it)
     doc2 = doc.replace("<w:pgNumType/>", "")

@@ -1264,3 +1264,33 @@ per phase before any implementation.
 Test scripts kept for re-verification: `scripts/ytapi-battery.mjs`,
 `scripts/ytdlp_battery.py`, `scripts/instance_probes.py`,
 `scripts/repo-activity-audit.mjs`, `scripts/research-search.sh`.
+
+### Session 23 — Master build plan (NO code changes to the app)
+
+User directive: using the gauntlet-loop and EGM (Elephant & Goldfish) skills,
+turn the deep-research report into a complete, phase-executable build plan;
+re-verify the current codebase first. Nothing built; plan awaits approval.
+
+- Loaded gauntlet-loop, egm-draft, egm-review skills; the plan encodes their
+  mechanics: per phase -> EGM design doc (docs/designs/<phase>.md via SITEMAP)
+  -> 5-stage goldfish review (consolidated mode) -> resolve -> gauntlet loops
+  per work item (named fetchable bar, builder + fresh-context harsh critic,
+  blind compare, no round-count exit) -> phase gate -> drift report.
+- Codebase re-verified live: clean tree (research committed in f3e5687),
+  v2.2.0 shipped, 92 TS files / 16,927 LOC, server/index.mjs 1,213 lines,
+  15 tsc baseline errors re-confirmed, 9 test suites, 22 WORKLOG sessions.
+- Deliverable: download/ytapp-master-build-plan.docx (+ PDF) — 13 sections,
+  10 tables: verified current state, the EGM+gauntlet operating system with a
+  filled S-01 gauntlet prompt, program map, Phases 0-5 (S/E/C/D/N/U work-item
+  registers with bars and judges), risk register with kill-switches, a
+  self-critique section (5 failure modes incl. device-only judges and the
+  unverifiable-from-sandbox Phase 1 gate), and the decisions list for the
+  owner (cookie storage model, compat scope, download auth, Phase 4 go/no-go,
+  device participation).
+- Phase map: 0 Stabilize/Instrument (v2.3.0) -> 1 Extraction Engine v2
+  (v2.4.0) -> 2 Compat Mode (v2.5.0) -> 3 Downloads (v2.6.0) -> 4 Native
+  player optional (v2.7.0) -> 5 UX parity (v2.8.0). Critical path 0->1->2->3.
+- Generator persisted: scripts/docx-gen/{plan-content1,plan-content2,gen-plan}
+  .mjs; patch_footers.py now takes a path arg and emits PAGE \* ROMAN/arabic
+  \* MERGEFORMAT per the docx skill checklist. Postcheck: 0 errors. 15 pages,
+  all content verified, no blank pages.
