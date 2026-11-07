@@ -10,14 +10,7 @@
 "use client";
 
 import { Capacitor } from "@capacitor/core";
-// BISECT-TEST: local stub replacing the plugin import
-const YtCompatNative = {
-  open: async (_o: unknown) => { throw new Error("stub"); },
-  execute: async (_o: unknown) => ({ value: null }),
-  close: async () => {},
-  addListener: async (_e: string, _cb: unknown) => ({ remove: async () => {} }),
-  removeAllListeners: async () => {},
-} as unknown as typeof import("yt-compat").YtCompat;
+import { YtCompat as YtCompatNative } from "yt-compat";
 import type { YtCompatMessage } from "yt-compat";
 import { buildCompatInjection } from "./compat/compat-injection";
 

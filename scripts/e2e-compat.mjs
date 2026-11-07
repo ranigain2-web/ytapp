@@ -34,10 +34,17 @@ await page.addInitScript(() => {
   window.androidBridge = {};
   window.Capacitor = {
     PluginHeaders: [
-      { name: "YtCompat", methods: [...promiseMethods(["open", "execute", "close", "removeAllListeners"]), { name: "addListener", rtype: "callback" }] },
-      { name: "YtBackground", methods: [...promiseMethods(["enable", "update", "disable", "keepAwake", "enterPip", "setPipOnHome", "removeAllListeners"]), { name: "addListener", rtype: "callback" }] },
+      { name: "YtCompat", methods: [...promiseMethods(["open", "execute", "close", "removeAllListeners", "removeListener"]), { name: "addListener", rtype: "callback" }] },
+      { name: "YtBackground", methods: [...promiseMethods(["enable", "update", "disable", "keepAwake", "enterPip", "setPipOnHome", "removeAllListeners", "removeListener"]), { name: "addListener", rtype: "callback" }] },
     ],
-    nativePromise: (plugin, method, options) => window.Capacitor.Plugins[plugin][method](options),
+    // Dispatch through a PRIVATE table: registerPlugin() overwrites
+    // Capacitor.Plugins[name] with its own proxy, so dispatching through
+    // Plugins would recurse proxy -> nativePromise -> proxy forever (that
+    // self-recursion in an earlier revision of this fake was misread as an
+    // app-side "setPipOnHome loop" — the app was innocent).
+    nativePromise: (plugin, method, options) => window.__impls[plugin] && window.__impls[plugin][method]
+      ? window.__impls[plugin][method](options)
+      : Promise.reject(new Error("not faked: " + plugin + "." + method)),
     nativeCallback: (plugin, method, options, cb) => {
       if (method === "addListener") {
         const key = plugin + ":" + (options && options.eventName);
@@ -46,19 +53,22 @@ await page.addInitScript(() => {
       }
       return { remove: () => {} };
     },
-    Plugins: {
-      YtCompat: {
-        open: (o) => { log.opens.push(o); return Promise.resolve(); },
-        execute: (o) => { log.execs.push(o.js); return Promise.resolve({ value: "ok" }); },
-        close: () => { log.closed++; return Promise.resolve(); },
-        removeAllListeners: () => Promise.resolve(),
-      },
-      YtBackground: {
-        enable: () => { log.bgEnabled++; return Promise.resolve(); },
-        update: (o) => { log.bgUpdates.push(o); return Promise.resolve(); },
-        disable: () => Promise.resolve(),
-        removeAllListeners: () => Promise.resolve(),
-      },
+    Plugins: {},
+  };
+  window.__impls = {
+    YtCompat: {
+      open: (o) => { log.opens.push(o); return Promise.resolve(); },
+      execute: (o) => { log.execs.push(o.js); return Promise.resolve({ value: "ok" }); },
+      close: () => { log.closed++; return Promise.resolve(); },
+      removeAllListeners: () => Promise.resolve(),
+      removeListener: () => Promise.resolve(),
+    },
+    YtBackground: {
+      enable: () => { log.bgEnabled++; return Promise.resolve(); },
+      update: (o) => { log.bgUpdates.push(o); return Promise.resolve(); },
+      disable: () => Promise.resolve(),
+      removeAllListeners: () => Promise.resolve(),
+      removeListener: () => Promise.resolve(),
     },
   };
   window.__fireCompat = (m) => (listeners["YtCompat:message"] || []).forEach(cb => cb(m));

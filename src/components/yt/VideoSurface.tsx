@@ -949,12 +949,10 @@ export default function VideoSurface() {
   }, [countdown?.until, countdown?.nextId, countdown]);
 
   // ---- PiP: pref push + Android home-press is native-only ([A5]) ----
-  // Push-only-on-change guard: the v2.5.0 compat e2e (mocked native bridge)
-  // caught this effect re-firing ~1200x/s once native promises resolve,
-  // spamming the bridge until the renderer died. The plugin only needs the
-  // pref when it CHANGES; the ref makes repeats no-ops regardless of what
-  // re-triggers the effect. Root cause of the re-fire itself is still open
-  // (see PROGRESS.md — Phase 2 open questions).
+  // Push-only-on-change: the plugin needs the pref when it CHANGES. (An
+  // earlier mocked-bridge e2e made it LOOK like this effect re-fired
+  // ~1200x/s; the real defect was a self-recursive fake bridge in the test
+  // itself — the app was innocent. The guard stays as cheap insurance.)
   const lastPipPushRef = useRef<string | null>(null);
   useEffect(() => {
     const key = String(pipOnHome);
