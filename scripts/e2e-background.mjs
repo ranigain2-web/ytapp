@@ -19,6 +19,10 @@
 //                 EmbedController contract is duck-typed for exactly this)
 //   EMBED-STUCK   embed fallback that never yields streams → background
 //                 attempt fails honestly, embed stays, no double audio
+//   EMBED-PIP     embed PLAYING pushes setEmbedActive to the plugin (Home
+//                 can PiP it — the iframe cannot background), pausing
+//                 releases eligibility, and an unextractable embed explains
+//                 itself on return (embedBgNote) instead of dying silently
 //
 // Failure output dumps scenario id, step, bridge calls, video element state
 // and store state — six months from now CI will still name the culprit.
@@ -93,7 +97,7 @@ const FIXTURES = {
   AUDIO01: (() => { const f = { ...baseMeta("AUDIO01", "Audio Only Rescue Video"), formats: [audioFmt(`${STUB}/media/audio.webm`)] }; f.audio_only = true; f.extracted_by = "MWEB"; return f; })(),
 };
 // scenario fixtures whose responses depend on fresh-call counts
-const freshCounts = { EMBED01: 0, EMBED02: 0, STUCK01: 0 };
+const freshCounts = { EMBED01: 0, EMBED02: 0, STUCK01: 0, EMBED03: 0 };
 const embedPayload = (id) => ({
   ...baseMeta(id, `Embed ${id} Video`), ok: false, embed_fallback: true,
   extracted_by: "", audio_only: false, formats: [], related: [RELATED_NEXT],
@@ -150,8 +154,8 @@ const stubServer = http.createServer((req, res) => {
           ? { ...baseMeta(id, `Embed ${id} Video`), formats: [videoFmt(`${STUB}/media/video.webm`)] }
           : embedPayload(id);
       } else payload = embedPayload(id);
-    } else if (id === "STUCK01") {
-      if (fresh) freshCounts.STUCK01++;
+    } else if (id === "STUCK01" || id === "EMBED03") {
+      if (fresh) freshCounts[id]++;
       payload = embedPayload(id);
     } else {
       payload = FIXTURES[id] || embedPayload(id);
@@ -232,6 +236,7 @@ const initScript = `
           { name: "keepAwake", rtype: "promise" },
           { name: "enterPip", rtype: "promise" },
           { name: "setPipOnHome", rtype: "promise" },
+          { name: "setEmbedActive", rtype: "promise" },
         ] },
       ],
       nativePromise: function (plugin, method, options) {
@@ -457,6 +462,54 @@ const waitFor = (page, fn, timeout = 20000) => page.waitForFunction(fn, { timeou
     const freshAfter = stubHits.filter((h) => h.id === "STUCK01" && h.fresh).length;
     if (freshAfter === freshBefore) ok("second backgrounding does NOT re-attempt (API amplification capped)");
     else bad(`second backgrounding re-attempted (${freshBefore}→${freshAfter} fresh calls) — cap broken`);
+    await ctx.close();
+  }
+
+  // ===================== SCENARIO 4b: EMBED-PIP =====================
+  // The reported bug (session 29): embed playing → minimize → NOTHING. Root
+  // causes fixed here: (1) the embed never told the plugin it was eligible,
+  // so the Home press could not PiP it; (2) when the handoff had nothing to
+  // hand off to, the user got silence with no explanation.
+  console.log("== scenario EMBED-PIP: embed playing → PiP eligibility + explained background failure ==");
+  {
+    const { ctx, page } = await newPage(browser);
+    const S = "EMBED-PIP";
+    await page.goto(`${BASE}/?v=EMBED03`, { waitUntil: "domcontentloaded" });
+    await waitFor(page, () => window.__ytPlayback?.getState?.().mode === "embed", 30000);
+    await sleep(600);
+    // idle embed: eligibility must NOT be on
+    await check(page, S, "idle-not-eligible", () => page.evaluate(() => !window.__bgCalls.some((c) => c[0] === "setEmbedActive" && c[1] && c[1].on === true)), "an embed that never played does not claim PiP eligibility");
+    // IFrame-API state 1 (PLAYING) mirrors through the surface to the plugin
+    await page.evaluate(() => window.__ytPlayback.getState().setEmbedPlaying(true));
+    const eligible = await waitFor(page, () => window.__bgCalls.some((c) => c[0] === "setEmbedActive" && c[1] && c[1].on === true));
+    await check(page, S, "playing-eligible", () => eligible, "embed PLAYING pushes setEmbedActive(on:true) — Home can PiP it (the iframe cannot background)");
+    // pause releases eligibility (a paused embed must not capture Home)
+    await page.evaluate(() => window.__ytPlayback.getState().setEmbedPlaying(false));
+    const released = await waitFor(page, () => {
+      const calls = window.__bgCalls.filter((c) => c[0] === "setEmbedActive");
+      return calls.length >= 2 && calls[calls.length - 1][1] && calls[calls.length - 1][1].on === false;
+    });
+    await check(page, S, "pause-releases", () => released, "pausing the embed releases PiP eligibility");
+    // backgrounding with nothing to hand off to: the failure is EXPLAINED
+    await page.evaluate(() => {
+      window.__embedPaused = false;
+      window.__ytPlayback.getState().registerEmbedController({
+        getPosition: () => 30, getDuration: () => 60, getPlayerState: () => 1,
+        pause: () => { window.__embedPaused = true; },
+      });
+      window.__ytPlayback.getState().setEmbedPlaying(true);
+    });
+    await goBackground(page);
+    const noteSet = await waitFor(page, () => !!window.__ytPlayback?.getState?.().embedBgNote, 30000);
+    await check(page, S, "note-set", () => noteSet, "no extractable stream → embedBgNote set (not silent death)");
+    await check(page, S, "no-fake-session", () => page.evaluate(() => !window.__bgCalls.some((c) => c[0] === "enable")), "no background session faked for an unextractable embed");
+    await goForeground(page);
+    const noteVisible = await waitFor(page, () => !!document.querySelector("[data-testid='embed-bg-note']"));
+    await check(page, S, "note-visible", () => noteVisible, "returning shows the explanation under the player");
+    // Dismiss clears it
+    await page.click("[data-testid='embed-bg-note'] button[aria-label='Dismiss']");
+    const noteCleared = await waitFor(page, () => !window.__ytPlayback?.getState?.().embedBgNote);
+    await check(page, S, "note-dismiss", () => noteCleared, "Dismiss clears the note");
     await ctx.close();
   }
 

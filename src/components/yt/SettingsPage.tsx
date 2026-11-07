@@ -307,7 +307,7 @@ export default function SettingsPage() {
           <Toggle
             label="Background play"
             labelIcon={<PlayCircle className="w-4 h-4" />}
-            desc="Minimize the app or turn the screen off and playback keeps going, with a lock-screen notification (prev / pause / next / close). Works while a video streams directly; videos inside YouTube's own player follow YouTube's rules"
+            desc="Minimize the app or turn the screen off and playback keeps going, with a lock-screen notification (prev / pause / next / close). Works while a video streams directly. Videos inside YouTube's own player can't hand over their audio — for those, press Home to keep watching in a floating window instead (the app also tries to take over the stream automatically)"
             value={prefs.backgroundPlay}
             onChange={v => setPrefs({ backgroundPlay: v })}
           />

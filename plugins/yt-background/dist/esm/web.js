@@ -8,6 +8,7 @@ export class YtBackgroundWeb {
   async keepAwake() {}
   async enterPip() {}
   async setPipOnHome() {}
+  async setEmbedActive() {}
   async addListener() {
     return { remove: async () => {} };
   }

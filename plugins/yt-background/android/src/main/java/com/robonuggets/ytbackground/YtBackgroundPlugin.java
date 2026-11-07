@@ -33,6 +33,17 @@ public class YtBackgroundPlugin extends Plugin {
     /** Phase 2 (PiP): JS-side toggle for Home-press → PiP ([A5]). */
     private volatile boolean pipOnHome = true;
 
+    /**
+     * True while an embed-fallback video is actively playing in YouTube's
+     * iframe. The iframe's audio cannot be moved into the foreground service
+     * (it lives inside Google's player), and YouTube pauses its own player
+     * the moment the page is hidden — so the ONLY way embed playback survives
+     * the user leaving is the activity staying VISIBLE, i.e. PiP. Tracked
+     * separately from mediaActive (which means "the foreground service owns
+     * playback" and also gates the WebView-timer resume).
+     */
+    private volatile boolean embedActive = false;
+
     @Override
     public void load() {
         instance = this;
@@ -54,7 +65,10 @@ public class YtBackgroundPlugin extends Plugin {
         // Entering PiP from the pause path is the documented-safe moment.
         if (PipHomeWatcher.HOME_REQUESTED) {
             PipHomeWatcher.HOME_REQUESTED = false;
-            if (pipOnHome && mediaActive) tryEnterPip();
+            // embedActive: an embed-fallback video is playing in the iframe —
+            // it cannot background (YouTube pauses it), so PiP is its only
+            // survival path, same as the service-backed direct player.
+            if (pipOnHome && (mediaActive || embedActive)) tryEnterPip();
         }
         if (mediaActive) resumeWebViewTimers();
     }
@@ -115,6 +129,7 @@ public class YtBackgroundPlugin extends Plugin {
         if (instance == this) {
             instance = null;
             mediaActive = false;
+            embedActive = false;
             Context ctx = getContext();
             if (ctx != null) {
                 MediaPlaybackService.stop(ctx);
@@ -134,6 +149,11 @@ public class YtBackgroundPlugin extends Plugin {
         // when background playback first starts.
         requestNotificationsPermissionIfNeeded();
         mediaActive = true;
+        // The embed→direct handoff (VideoSurface) calls enable() AFTER the
+        // activity already paused — handleOnPause ran with mediaActive=false
+        // and never resumed the WebView timers, so hls.js would starve a few
+        // seconds into background playback. Resuming here is idempotent.
+        resumeWebViewTimers();
         String title = call.getString("title", "YouTube");
         String artist = call.getString("artist", "");
         String artwork = call.getString("artwork", "");
@@ -259,6 +279,18 @@ public class YtBackgroundPlugin extends Plugin {
     public void setPipOnHome(PluginCall call) {
         Boolean enable = call.getBoolean("enable", Boolean.TRUE);
         pipOnHome = enable == null || enable.booleanValue();
+        call.resolve();
+    }
+
+    /**
+     * Embed-fallback PiP eligibility: true while YouTube's iframe player is
+     * actively PLAYING (IFrame-API state 1/3). The JS layer pushes this from
+     * the watch page; a paused embed must not capture the Home press.
+     */
+    @PluginMethod
+    public void setEmbedActive(PluginCall call) {
+        Boolean on = call.getBoolean("on", Boolean.FALSE);
+        embedActive = on != null && on.booleanValue();
         call.resolve();
     }
 }

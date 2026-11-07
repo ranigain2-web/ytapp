@@ -30,7 +30,7 @@ import { usePlayback } from "@/lib/yt-playback";
 import { useRouter, useRouterStore } from "@/lib/yt-router";
 import {
   addControlListener, nativeBackgroundDisable, nativeBackgroundEnable, nativeBackgroundUpdate, isNativeApp,
-  nativeKeepAwake, nativeEnterPip, nativeSetPipOnHome,
+  nativeKeepAwake, nativeEnterPip, nativeSetPipOnHome, nativeSetEmbedActive,
   setMediaHandlers, setMediaMetadata, setMediaPlaybackState, setMediaPositionState, clearMediaHandlers,
 } from "@/lib/yt-native";
 import { CountdownCard } from "./CountdownCard";
@@ -1028,6 +1028,19 @@ export default function VideoSurface() {
     lastPipPushRef.current = key;
     if (isNativeApp()) nativeSetPipOnHome(pipOnHome);
   }, [pipOnHome]);
+
+  // ---- embed PiP eligibility: the iframe cannot background ----
+  // YouTube's iframe player pauses the moment the page is hidden (their
+  // policy, not ours) and its audio can't be moved into the foreground
+  // service — so while an embed is PLAYING we mark it PiP-eligible and a
+  // Home press shrinks the app instead of killing the audio. Paused embeds
+  // must not capture the Home press.
+  const embedPlaying = usePlayback(s => s.embedPlaying);
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    nativeSetEmbedActive(mode === "embed" && embedPlaying);
+    return () => nativeSetEmbedActive(false);
+  }, [mode, embedPlaying]);
 
   // ---- seek bar (lifted) ----
   const displayTime = scrubbing ? scrubTime : current;

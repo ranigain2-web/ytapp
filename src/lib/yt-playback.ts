@@ -165,6 +165,20 @@ interface PlaybackState {
    *  keepPos (a video that loaded directly before the embed would otherwise
    *  resume its OLD direct position). */
   modeSwitch: { id: string; at: number; from: SurfaceMode } | null;
+
+  // ---- embed PiP eligibility (the iframe cannot background) ----
+  /** IFrame-API state mirror: true while YouTube's embed player is PLAYING
+   *  or BUFFERING (states 1/3). The surface pushes it to the native plugin:
+   *  with the iframe there is no service to keep alive — PiP on Home is the
+   *  only way its playback survives the user leaving. */
+  embedPlaying: boolean;
+  setEmbedPlaying: (b: boolean) => void;
+  /** Set when a background handoff was attempted and REFUSED for a reason
+   *  the user can act on (no extractable stream). Rendered by the watch
+   *  page when the user returns — a silent stop reads as "the app is
+   *  broken", an explained stop reads as "this video can't". */
+  embedBgNote: string | null;
+  clearEmbedBgNote: () => void;
 }
 
 export const usePlayback = create<PlaybackState>()((set, get) => ({
@@ -188,6 +202,8 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
   handoffAttempts: {},
   embedController: null,
   modeSwitch: null,
+  embedPlaying: false,
+  embedBgNote: null,
   watchSlot: null,
   miniFrame: null,
   engine: null,
@@ -211,6 +227,10 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
           ? [...prev.playedIds.filter(id => id !== video.id), video.id].slice(-50)
           : prev.playedIds,
       error: null,
+      // a new load invalidates the previous video's embed liveness + any
+      // stale background note
+      embedPlaying: false,
+      embedBgNote: null,
     });
     // embed = a second audio source: the owner rule pauses + parks us ([A2])
     if (mode !== "direct" && prev.mode === "direct" && prev.playing) {
@@ -224,12 +244,16 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
     // remember embed-ness so the mini never docks for this video
     if (st.videoId === id && st.mode === "direct") {
       st.engine?.stop();
-      set({ mode: "embed", miniOpen: false, countdown: null });
+      set({ mode: "embed", miniOpen: false, countdown: null, embedPlaying: false });
     }
     set(s => ({ forceEmbedIds: { ...s.forceEmbedIds, [id]: Date.now() } }));
   },
 
   registerEmbedController: (c) => set({ embedController: c }),
+
+  setEmbedPlaying: (b) => set(s => (s.embedPlaying === b ? s : { embedPlaying: b })),
+
+  clearEmbedBgNote: () => set(s => (s.embedBgNote ? { embedBgNote: null } : s)),
 
   handoffEmbedToDirect: (video, opts) => {
     const st = get();
@@ -254,7 +278,14 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
       return fail(`already ${att.outcome} (TTL)`);
     }
     const playableNow = !!(video.hls || (video.formats || []).some(f => f.url));
-    if (!playableNow) return fail("no direct streams in the payload");
+    if (!playableNow) {
+      // the one refusal the user can act on: this video has no extractable
+      // stream, so background audio is impossible — explain it when they
+      // come back instead of dying silently (the reported "minimized and
+      // nothing happened")
+      set({ embedBgNote: "This video can't play in the background — YouTube's own player stops the moment the app is hidden, and this one has no extractable stream to take over. Keep watching in the floating window: press Home while it plays." });
+      return fail("no direct streams in the payload");
+    }
     const ctl = st.embedController;
     if (!ctl) return fail("no embed controller registered (iframe API still attaching)", { record: false });
 
@@ -279,7 +310,12 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
     set(s => {
       const forceEmbedIds = { ...s.forceEmbedIds };
       delete forceEmbedIds[video.id];
-      return { forceEmbedIds, handoffAttempts: { ...s.handoffAttempts, [video.id]: { at: Date.now(), outcome: "done" } } };
+      return {
+        forceEmbedIds,
+        handoffAttempts: { ...s.handoffAttempts, [video.id]: { at: Date.now(), outcome: "done" } },
+        embedPlaying: false,
+        embedBgNote: null,
+      };
     });
     // mark the mode switch so the surface's keepPos logic does not reuse a
     // stale direct position from a previous load of this id

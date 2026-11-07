@@ -31,6 +31,11 @@ export interface YtBackgroundPipOnHomeOptions {
   enable?: boolean;
 }
 
+export interface YtBackgroundEmbedActiveOptions {
+  /** true = an embed-fallback video is playing in the iframe (PiP-eligible). */
+  on?: boolean;
+}
+
 export interface YtBackgroundControlEvent {
   action: "play" | "pause" | "next" | "prev" | "stop" | "seek" | "duck" | "unduck";
   /** Target position in seconds (only for action === "seek"). */
@@ -51,6 +56,10 @@ export interface YtBackgroundPlugin {
    *  MainActivity's onUserLeaveHint sets a flag the plugin polls on
    *  activity-pause; this is the JS-side toggle for it). Default: enabled. */
   setPipOnHome(options: YtBackgroundPipOnHomeOptions): Promise<void>;
+  /** Embed fallback: mark YouTube's iframe player as actively playing. The
+   *  iframe cannot hand its audio to the foreground service — PiP is its
+   *  only survival path when the user presses Home. */
+  setEmbedActive(options: YtBackgroundEmbedActiveOptions): Promise<void>;
   addListener(
     eventName: "control",
     listenerFunc: (event: YtBackgroundControlEvent) => void,

@@ -114,6 +114,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   // iframe MUST unmount or both players would be live at once)
   const surfaceMode = usePlayback(s => s.mode);
   const surfaceVideoId = usePlayback(s => s.videoId);
+  const embedBgNote = usePlayback(s => s.embedBgNote);
   const storeOwnsEmbed = surfaceMode === "embed" && surfaceVideoId === v?.id;
   const embedActive = !!(v
     && (v.embed_fallback || forcedEmbed)
@@ -156,8 +157,13 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
                 if (e.data === 0) { // ENDED → [A7] countdown (autoplay) or overlay
                   if (autoplayRef.current) usePlayback.getState().advance();
                   setEmbedEnded(true);
+                  usePlayback.getState().setEmbedPlaying(false);
                 } else {
                   setEmbedEnded(false);
+                  // 1 PLAYING / 3 BUFFERING = the iframe is live audio: the
+                  // surface mirrors this to the plugin so a Home press can
+                  // PiP it (the iframe cannot background — YouTube pauses it)
+                  usePlayback.getState().setEmbedPlaying(e.data === 1 || e.data === 3);
                 }
               },
             },
@@ -179,6 +185,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
       dead = true;
       embedPlayerRef.current = null;
       usePlayback.getState().registerEmbedController(null);
+      usePlayback.getState().setEmbedPlaying(false);
       try { player?.destroy(); } catch { /* iframe already gone */ }
     };
   }, [embedActive, data?.id]);
@@ -367,14 +374,21 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
           />
         )}
         {embedActive && !blockedMessage && (
-          <p className="px-4 sm:px-0 py-2 text-[12px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev)] sm:rounded-lg sm:mt-2 flex items-center gap-2">
+          <p className="px-4 sm:px-0 py-2 text-[12px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev)] sm:rounded-lg sm:mt-2 flex items-center gap-2" data-testid="embed-notice">
             <span className="w-2 h-2 rounded-full bg-[var(--yt-status-warn)] shrink-0" />
             {standaloneMode
-              ? "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Background play works when a video streams directly."
+              ? "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Press Home while it plays to keep watching in a floating window; screen-off audio works when the app can take over the stream (it tries automatically)."
               : communityMode
-              ? "Community mode — playing via the official embed (ads may appear on monetized videos). Use Skip video below to jump to the next one. Background play works when a video streams directly."
-              : "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Background play works when a video streams directly."}
+              ? "Community mode — playing via the official embed (ads may appear on monetized videos). Use Skip video below to jump to the next one. Press Home while it plays to keep watching in a floating window; screen-off audio works when the app can take over the stream (it tries automatically)."
+              : "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Press Home while it plays to keep watching in a floating window; screen-off audio works when the app can take over the stream (it tries automatically)."}
             {v.gate_reason === "bot_gate" && " The server's IP is bot-gated by YouTube — setting server cookies (Settings → Server cookies) may restore direct, ad-free playback."}
+          </p>
+        )}
+        {embedActive && !blockedMessage && embedBgNote && (
+          <p className="px-4 sm:px-0 py-2 text-[12px] text-[var(--yt-text-2)] bg-[var(--yt-bg-elev)] sm:rounded-lg flex items-start gap-2" data-testid="embed-bg-note">
+            <span className="w-2 h-2 rounded-full bg-[var(--yt-status-warn)] shrink-0 mt-1" />
+            <span>{embedBgNote}</span>
+            <button onClick={() => usePlayback.getState().clearEmbedBgNote()} className="ml-auto shrink-0 font-medium text-[var(--yt-text)] hover:opacity-70" aria-label="Dismiss">Dismiss</button>
           </p>
         )}
         {/* C-05: the Compat Mode entry — native only (a browser cannot script

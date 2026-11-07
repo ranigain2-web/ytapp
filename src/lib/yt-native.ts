@@ -20,6 +20,7 @@ import type {
   YtBackgroundEnableOptions,
   YtBackgroundUpdateOptions,
   YtBackgroundPipOnHomeOptions,
+  YtBackgroundEmbedActiveOptions,
 } from "yt-background";
 
 let nativePlugin: YtBackgroundPlugin | null = null;
@@ -113,6 +114,19 @@ export function nativeEnterPip() {
 export function nativeSetPipOnHome(enable: boolean) {
   const opts: YtBackgroundPipOnHomeOptions = { enable };
   getNative()?.setPipOnHome(opts).catch(() => {});
+}
+
+/**
+ * Embed fallback: tell the plugin whether YouTube's iframe player is
+ * actively playing. The iframe's audio cannot be moved into the foreground
+ * service (it lives inside Google's player, and YouTube pauses it the moment
+ * the page is hidden) — so PiP on Home is the only way embed playback
+ * survives the user leaving. Only pushed while playing; a paused embed
+ * must not capture the Home press.
+ */
+export function nativeSetEmbedActive(on: boolean) {
+  const opts: YtBackgroundEmbedActiveOptions = { on };
+  getNative()?.setEmbedActive(opts).catch(() => {});
 }
 
 export function addControlListener(

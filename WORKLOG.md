@@ -1614,3 +1614,49 @@ tags (v2.3.0-v2.8.0) stay as accurate history markers; their commits predate
 CI so the release gate refuses to build them (by design — no tag ships
 untested). v2.8.1 tags the first fully green commit and is the release that
 carries the whole program's artifacts.
+
+### Session 29 — the reported bug: embed video dies on minimize (fixed end-to-end)
+
+User report: played a video on the embed fallback ("ads may appear" notice),
+pressed Home expecting background play, got silence. Root causes (three, all
+real):
+
+1. PiP was service-gated: handleOnPause enters PiP only when the foreground
+   service is active (mediaActive), and the service only ever runs for the
+   DIRECT player — so a Home press during an embed did nothing at all.
+2. The embed's only background rescue is the embed→direct handoff, which
+   needs a fresh fetch to yield streams — the exact thing that failed to put
+   the video on the embed path. When it failed, it failed SILENTLY.
+3. Even when the handoff succeeded, enable() ran after handleOnPause had
+   already skipped resumeWebViewTimers (mediaActive was false at pause
+   time) — hls.js would starve once the buffer drained.
+
+Research check before fixing: NewPipe backgrounds playback by never using
+the iframe (extracted streams + native service — same as our handoff);
+YouTube's iframe player pauses itself when the page is hidden (their
+policy), so for the iframe itself PiP is the ONLY survival mechanism. Our
+design was right; the wiring was broken.
+
+Fixes:
+- YtBackgroundPlugin: setEmbedActive(on) — PiP eligibility for a PLAYING
+  embed (separate volatile from mediaActive, which still means "the service
+  owns playback"); the Home-press gate is now (mediaActive || embedActive);
+  enable() also resumes WebView timers (idempotent) so a late handoff
+  doesn't starve; destroy resets the flag.
+- Store: embedPlaying (IFrame-API state 1/3 mirror, set by WatchPage
+  onStateChange, cleared on unmount/ended), embedBgNote — the
+  "no extractable stream" handoff refusal now leaves an explanation under
+  the player (dismissable) instead of silent death.
+- VideoSurface: pushes nativeSetEmbedActive(mode === "embed" && embedPlaying).
+- Copy: embed notice + Settings now say what actually happens (Home →
+  floating window; screen-off audio when the app can take over the stream).
+
+e2e: new EMBED-PIP scenario in e2e-background.mjs (42/0 total) — idle embed
+never claims eligibility, PLAYING pushes setEmbedActive(true), pausing
+releases it, unextractable embed sets the note with no faked service, the
+note renders on return and Dismiss clears it. All previous scenarios
+(DIRECT, AUDIO-ONLY, EMBED-RESCUE, EMBED-STUCK, PRODUCTION-API) unchanged
+and green. Plugin Java compiles in CI's Android workflow (the cap sync
+path). Honest limits, unchanged: an embed whose stream cannot be extracted
+cannot play screen-off audio — that needs YouTube Premium's server, not an
+app.
