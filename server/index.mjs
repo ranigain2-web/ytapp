@@ -371,10 +371,14 @@ function normalizeStoryboard(info) {
   } catch { return null; }
 }
 
-// per-client extraction counters (surfaced in /api/health for support)
-const extractStats = {
-  IOS: { ok: 0 }, ANDROID: { ok: 0 }, WEB: { ok: 0 }, MWEB: { ok: 0 },
-};
+// per-client extraction diagnostics (surfaced in /api/health; the Settings
+// page's Copy Diagnostics button pastes them into a support ticket — statuses
+// only, never cookie or token material)
+const newClientStats = () => ({ ok: 0, fail: 0, last_error: null, last_at: null });
+const extractStats = { IOS: newClientStats(), ANDROID: newClientStats(), WEB: newClientStats(), MWEB: newClientStats() };
+const embedFallbackStats = { count: 0, last_video: null, last_reasons: null, last_at: null };
+const noteOk = (client) => { const s = extractStats[client]; if (!s) return; s.ok++; s.last_error = null; s.last_at = new Date().toISOString(); };
+const noteFail = (client, reason) => { const s = extractStats[client]; if (!s) return; s.fail++; s.last_error = String(reason || 'unknown').slice(0, 140); s.last_at = new Date().toISOString(); };
 // fresh=1 re-extraction cooldown: { videoId: { at, tokenKey } }. A fresh
 // request within 90s of the last attempt is refused (cached result returned,
 // zero API calls) unless the PO-token state changed since — that is exactly
@@ -414,9 +418,14 @@ async function getVideoFull(id, { fresh = false } = {}) {
     let webInfo = null;
     try {
       webInfo = await pool.withRetry(async yt => await yt.getInfo(id, { client: 'WEB' }), { label: `getInfo WEB ${id}` });
-    } catch (e) { warn(`WEB getInfo failed for ${id}:`, String(e.message).slice(0, 120)); }
+    } catch (e) {
+      noteFail('WEB', e.message);
+      warn(`WEB getInfo failed for ${id}:`, String(e.message).slice(0, 120));
+    }
 
     const playable = webInfo && webInfo.playability_status?.status === 'OK';
+    const playability = {};
+    if (webInfo && !playable) playability.WEB = webInfo.playability_status?.status || 'UNKNOWN';
 
     // --- metadata: primary_info/secondary_info (from watch page; works even when player is gated) ---
     const pi = webInfo?.primary_info, si = webInfo?.secondary_info;
@@ -481,21 +490,21 @@ async function getVideoFull(id, { fresh = false } = {}) {
     // the embed_fallback warn tells support exactly who said what.
     const chainDeadline = Date.now() + 30_000;
     const budgetLeft = () => chainDeadline - Date.now();
-    const playability = {};
     const tryClient = async (client, attempts) => {
       playability[client] = 'not-tried';
-      if (budgetLeft() <= 0) { playability[client] = 'no-budget'; return null; }
+      if (budgetLeft() <= 0) { playability[client] = 'no-budget'; noteFail(client, 'no-budget'); return null; }
       try {
         const info = await pool.withRetry(async yt => await yt.getInfo(id, { client }), { label: `getInfo ${client} ${id}`, attempts });
         const sd = info?.streaming_data;
         playability[client] = info?.playability_status?.status || 'UNKNOWN';
         if (info?.playability_status?.status === 'OK' && sd) {
           const formats = normalizeFormats(sd);
-          if (formats.length > 0) return { formats, info };
+          if (formats.length > 0) { noteOk(client); return { formats, info }; }
         }
       } catch (e) {
         playability[client] = `ERROR ${String(e.message || e).slice(0, 60)}`;
       }
+      noteFail(client, playability[client]);
       return null;
     };
 
@@ -506,7 +515,6 @@ async function getVideoFull(id, { fresh = false } = {}) {
       result.audio_only = formats.length > 0 && formats.every(f => !f.has_video);
       if (!result.title) result.title = String(info.basic_info?.title || '').trim();
       if (!result.duration) result.duration = info.basic_info?.duration || 0;
-      extractStats[label].ok++;
     };
 
     // IOS first (direct URLs up to 4K + HLS manifest)
@@ -529,8 +537,12 @@ async function getVideoFull(id, { fresh = false } = {}) {
         if (webFormats.some(f => f.url)) {
           accept('WEB', { formats: webFormats, info: webInfo });
           playability.WEB = 'OK';
+          noteOk('WEB');
         }
       } catch { /* noop */ }
+    }
+    if (!result.ok && !playability.WEB) {
+      noteFail('WEB', webInfo ? (playable ? 'no-streams' : (webInfo.playability_status?.status || 'gated')) : 'unreachable');
     }
     // MWEB last (attempts: 1 — a fourth chance does not earn session
     // rotation). Measured 2026-11-06: on a bot-gated datacenter IP MWEB was
@@ -543,7 +555,12 @@ async function getVideoFull(id, { fresh = false } = {}) {
     if (!result.ok) {
       result.embed_fallback = true; // frontend will use IFrame embed
       const parts = Object.entries(playability).map(([c, p]) => `${c}=${p}`).join(' ');
+      result.playability_reason = parts || 'no client produced streams';
       warn(`embed_fallback ${id}: ${parts || 'no client produced streams'}`);
+      embedFallbackStats.count++;
+      embedFallbackStats.last_video = id;
+      embedFallbackStats.last_reasons = { ...playability };
+      embedFallbackStats.last_at = new Date().toISOString();
     }
     result.extract_ms = Date.now() - chainStartedAt;
     return result;
@@ -982,13 +999,19 @@ async function potReachable() {
 }
 
 app.get('/api/health', wrap(async (req, res) => {
+  const okTotal = Object.values(extractStats).reduce((n, s) => n + s.ok, 0);
+  const attempts = okTotal + embedFallbackStats.count;
   res.json({
     ok: true,
     po_token: !!tokenState.poToken,
     pot_reachable: await potReachable(),
     token_expires: tokenState.expiresAt ? new Date(tokenState.expiresAt).toISOString() : null,
     sessions: pool.sessions.length,
-    extract_stats: Object.fromEntries(Object.entries(extractStats).map(([k, v]) => [k.toLowerCase(), v.ok])),
+    extract_stats: Object.fromEntries(Object.entries(extractStats).map(([k, v]) => [k.toLowerCase(), { ok: v.ok, fail: v.fail, last_error: v.last_error, last_at: v.last_at }])),
+    extract_total: attempts,
+    embed_fallbacks: embedFallbackStats.count,
+    embed_fallback_rate: attempts ? +(embedFallbackStats.count / attempts).toFixed(3) : null,
+    last_fallback: embedFallbackStats.last_video ? { video: embedFallbackStats.last_video, reasons: embedFallbackStats.last_reasons, at: embedFallbackStats.last_at } : null,
     cache_size: cache.size,
     hls_cache: hlsManifestCache.size,
     uptime: process.uptime(),

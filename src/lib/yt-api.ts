@@ -207,7 +207,7 @@ export interface YtChapter {
   start: number;
 }
 
-export interface YtVideoFull extends Partial<YtVideo> {
+export interface YtVideoFull extends Omit<Partial<YtVideo>, "views" | "duration"> {
   id: string;
   ok: boolean;
   embed_fallback: boolean;
@@ -322,7 +322,8 @@ export async function fetchHome(category: string): Promise<{ category: string; s
     const r = await communityHomePaged(category);
     return r;
   }
-  return api<{ category: string; source: string; results: YtVideo[] }>(`/api/home?category=${encodeURIComponent(category)}`, { timeoutMs: 60000 });
+  const r = await api<{ category: string; source: string; results: YtVideo[] }>(`/api/home?category=${encodeURIComponent(category)}`, { timeoutMs: 60000 });
+  return { ...r, continuation: null };
 }
 
 export async function fetchHomeMore(category: string, token: string): Promise<YtFeedPage> {
@@ -353,7 +354,8 @@ export async function fetchSearch(q: string): Promise<{ query: string; channel?:
   if (mode === "community") {
     return pipedSearchPaged(q);
   }
-  return api<{ query: string; channel?: YtChannelResult | null; results: YtVideo[] }>(`/api/search?q=${encodeURIComponent(q)}&type=video`, { timeoutMs: 60000 });
+  const r = await api<{ query: string; channel?: YtChannelResult | null; results: YtVideo[] }>(`/api/search?q=${encodeURIComponent(q)}&type=video`, { timeoutMs: 60000 });
+  return { ...r, continuation: null };
 }
 
 export async function fetchSearchMore(token: string): Promise<YtFeedPage> {
@@ -478,8 +480,23 @@ export async function fetchSponsorBlock(id: string): Promise<{ segments: SbSegme
   }
 }
 
-export async function fetchHealth(): Promise<{ ok: boolean; po_token: boolean; pot_reachable?: boolean; uptime: number }> {
-  return api<{ ok: boolean; po_token: boolean; pot_reachable?: boolean; uptime: number }>(`/api/health`, { timeoutMs: 8000 });
+export interface YtHealth {
+  ok: boolean;
+  po_token: boolean;
+  pot_reachable?: boolean;
+  token_expires?: string | null;
+  sessions?: number;
+  uptime: number;
+  extract_stats?: Record<string, { ok: number; fail: number; last_error: string | null; last_at: string | null }>;
+  extract_total?: number;
+  embed_fallbacks?: number;
+  embed_fallback_rate?: number | null;
+  last_fallback?: { video: string; reasons: Record<string, string> | null; at: string | null } | null;
+  cache_size?: number;
+}
+
+export async function fetchHealth(): Promise<YtHealth> {
+  return api<YtHealth>(`/api/health`, { timeoutMs: 8000 });
 }
 
 // Absolute URL resolver for streams (HLS/captions/storyboard paths are relative)
@@ -499,6 +516,7 @@ export function absStream(url: string | null | undefined): string {
 import {
   communityHome, communitySearch as pipedSearch, communityVideo,
   communityComments, communityChannel, mapPipedItem, activeCommunityInstance as pipedActiveInstance,
+  type PipedItem,
 } from "./community";
 
 async function communityHomePaged(category: string): Promise<{ category: string; source: string; results: YtVideo[]; continuation: string | null }> {
@@ -517,7 +535,7 @@ async function pipedSearchPaged(q: string): Promise<{ query: string; channel?: Y
     const text = await res.text();
     if (!res.ok || text.trimStart().startsWith("<")) throw new Error("bad response");
     const d = JSON.parse(text) as { items?: unknown[]; nextpage?: string | null };
-    const videos = (d.items || []).map(mapPipedItem).filter(Boolean) as YtVideo[];
+    const videos = (d.items || []).map((it) => mapPipedItem(it as PipedItem)).filter(Boolean) as YtVideo[];
     // channel info via the original adapter (it does its own requests)
     const base = await pipedSearch(q).catch(() => null);
     return { query: q, channel: base?.channel || null, results: videos, continuation: d.nextpage || null };
@@ -541,7 +559,7 @@ async function communitySearchMore(token: string): Promise<YtFeedPage> {
     const text = await res.text();
     if (!res.ok || text.trimStart().startsWith("<")) throw new Error("bad response");
     const d = JSON.parse(text) as { items?: unknown[]; nextpage?: string | null };
-    const videos = (d.items || []).map(mapPipedItem).filter(Boolean) as YtVideo[];
+    const videos = (d.items || []).map((it) => mapPipedItem(it as PipedItem)).filter(Boolean) as YtVideo[];
     return { results: videos, continuation: d.nextpage || null };
   } catch {
     return { results: [], continuation: null };

@@ -1,7 +1,7 @@
 // Verify deep pagination: home feed chain across many pages
 import { itHome } from "../src/lib/innertube";
 let total = 0;
-let cont: string | null | undefined;
+let cont: string | undefined;
 let pages = 0;
 for (let i = 0; i < 6; i++) {
   const page = await itHome("all", cont);

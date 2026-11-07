@@ -74,7 +74,7 @@ export async function probeCommunity(timeoutMs = 8000): Promise<string | null> {
 
 // ---------- mapping ----------
 
-interface PipedItem {
+export interface PipedItem {
   url?: string;
   type?: string;
   title?: string;

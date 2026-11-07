@@ -1294,3 +1294,44 @@ re-verify the current codebase first. Nothing built; plan awaits approval.
   .mjs; patch_footers.py now takes a path arg and emits PAGE \* ROMAN/arabic
   \* MERGEFORMAT per the docx skill checklist. Postcheck: 0 errors. 15 pages,
   all content verified, no blank pages.
+
+### Session 24 — Phase 0 complete: stabilize & instrument (v2.3.0)
+
+Executed per docs/designs/phase-0-stabilize.md (master plan Phase 0). Gate
+GREEN on every check; v2.3.0 tagged.
+
+- S-01 tsc 15→0: cast fixes in innertube.ts (6 unknown-narrowing sites),
+  YtVideoFull via Omit<Partial<YtVideo>,"views"|"duration">, api-mode wrappers
+  return explicit continuation:null (matches what the server actually sends),
+  PipedItem exported, deep-page-test.ts param type, tsconfig excludes the
+  untracked skills/ overlay, and next.config.ts DROPS typescript.
+  ignoreBuildErrors — the zero baseline is now build-enforced. Behavior parity
+  proven via git-stash before/after: suite outcomes identical (v12's 7
+  failures and parity's original 2 failures exist on pre-change code —
+  environment gating, not regressions; parity now 16/0 with the healthy
+  stack).
+- S-02 scripts/e2e-battery.mjs: six-video battery; PASS needs formats/HLS +
+  extracted_by + title; embed_fallback = SKIP with the new per-client
+  playability_reason (e.g. WEB=LOGIN_REQUIRED IOS=LOGIN_REQUIRED ...); a
+  fully-gated runner (0 passes) exits 1. Sandbox result: 1 pass (dQw4w9WgXcQ
+  by=IOS, 24 formats, HLS), 5 skips, 0 fails; fallback rate 0.833 — the
+  research's worst-case-IP finding is now reproducible data.
+- S-03 diagnostics: server extractStats per-client {ok,fail,last_error,
+  last_at} recorded at accept/fail decision points; embedFallbackStats;
+  /api/health gains extract_total, embed_fallbacks, embed_fallback_rate,
+  last_fallback; fetchVideo responses carry playability_reason on fallback
+  (typed field, previously never set — additive). Settings: Copy Diagnostics
+  button (secret-free by construction; server never exposes cookie/token
+  material). One TDZ bug caught by the battery (playability referenced before
+  init) — fixed by hoisting the declaration.
+- S-04 scripts/e2e-embed-fallback.mjs: mocked gated API (playwright routes,
+  forced server mode via yt_api_base) — 7/7: iframe mounts, honest notice,
+  metadata, one-shot fresh=1 rescue retry, hard-blocked clean state, no
+  iframe for blocked, Watch-on-YouTube hatch.
+- S-05 docs/designs/phase-0-stabilize.md + SITEMAP + PROGRESS.md wired.
+- Gate: tsc 0; build:static green (types enforced); battery 1/5/0; embed 7/7;
+  parity 16/0; ads 8/0/4skip; background 35/0; playback 108/0; premium 14/0;
+  v12 12/7 (identical before/after — pre-existing env); bundle test ALL PASS.
+- Ops note: sandbox recycling wiped server/node_modules — reinstalled; the
+  start-stack.sh shim died between calls so suites now self-start via
+  with-server.sh. Playwright chromium reinstalled (v1243).

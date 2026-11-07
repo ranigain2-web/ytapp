@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getApiBase, setApiBase, fetchHealth, getActiveSourceLabel, invalidateDataSource, resolveDataSource } from "@/lib/yt-api";
+import { getApiBase, setApiBase, fetchHealth, getActiveSourceLabel, invalidateDataSource, resolveDataSource, type YtHealth } from "@/lib/yt-api";
 import { useYt } from "@/lib/yt-store";
 import { applyTheme, watchSystemTheme, type ThemeMode } from "@/lib/yt-theme";
 import { APP_VERSION } from "@/lib/version";
 import { isNativeApp } from "@/lib/yt-native";
 import { ytToast } from "@/lib/yt-toast";
-import { Check, X, RefreshCw, Globe, Server, Smartphone, Moon, Sun, Monitor, Headphones, PlayCircle, Gauge, Signal } from "lucide-react";
+import { Check, X, RefreshCw, Globe, Server, Smartphone, Moon, Sun, Monitor, Headphones, PlayCircle, Gauge, Signal, ClipboardCopy } from "lucide-react";
 
 function Toggle({ label, desc, value, onChange, labelIcon }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void; labelIcon?: React.ReactNode }) {
   return (
@@ -31,7 +31,7 @@ function Toggle({ label, desc, value, onChange, labelIcon }: { label: string; de
 
 export default function SettingsPage() {
   const [apiBase, setApiBaseInput] = useState(() => getApiBase());
-  const [health, setHealth] = useState<{ ok: boolean; po_token: boolean; pot_reachable?: boolean; uptime: number } | null>(null);
+  const [health, setHealth] = useState<YtHealth | null>(null);
   const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [sourceLabel, setSourceLabel] = useState<string>("checking…");
@@ -78,6 +78,28 @@ export default function SettingsPage() {
       setHealth(null);
     }
     setTesting(false);
+  };
+
+  // Phase 0 (S-03): one-tap support bundle. Server statuses only — the server
+  // never exposes cookie/token material, so the blob is secret-free by
+  // construction. Paste it into an issue and support sees the whole picture.
+  const copyDiagnostics = async () => {
+    const h = await fetchHealth().catch(() => null);
+    const blob = {
+      app: "ytapp",
+      app_version: APP_VERSION,
+      at: new Date().toISOString(),
+      platform: isNativeApp() ? "native" : "web",
+      data_source: sourceLabel,
+      api_base: getApiBase() || "(on-device)",
+      health: h, // null = server unreachable; that fact is itself the diagnostic
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(blob, null, 2));
+      ytToast("Diagnostics copied — paste it wherever you need support");
+    } catch {
+      ytToast("Clipboard unavailable in this context");
+    }
   };
 
   return (
@@ -129,9 +151,12 @@ export default function SettingsPage() {
               {saved ? <Check className="w-4 h-4" /> : "Save"}
             </button>
           </div>
-          <div className="flex items-center gap-3 mt-4">
+          <div className="flex items-center gap-3 mt-4 flex-wrap">
             <button onClick={test} className="flex items-center gap-2 h-8 px-4 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[13px]" disabled={testing}>
               {testing ? <RefreshCw className="w-4 h-4 animate-spin" /> : null} Test connection
+            </button>
+            <button onClick={copyDiagnostics} data-testid="copy-diagnostics" className="flex items-center gap-2 h-8 px-4 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[13px]">
+              <ClipboardCopy className="w-4 h-4" /> Copy diagnostics
             </button>
             {health && (
               <span className={`flex items-center gap-2 text-[13px] ${health.pot_reachable === false ? "text-[var(--yt-status-warn)]" : "text-[var(--yt-status-ok)]"}`}>

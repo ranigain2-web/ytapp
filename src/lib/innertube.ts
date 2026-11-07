@@ -305,18 +305,19 @@ function parseLockup(lv: AnyObj): YtVideo | null {
     || cleaned.find(p => !isTime(p.text) && isCompactCount(p.text))?.text
     || "";
   const timePart = cleaned.find(p => isTime(p.text))?.text || "";
-  const tv = img.thumbnailViewModel;
-  const thumb = tv?.image?.sources?.[0]?.url || `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
+  const tv = img.thumbnailViewModel as AnyObj | undefined;
+  const thumb = ((tv?.image as AnyObj | undefined)?.sources as { url?: string }[] | undefined)?.[0]?.url
+    || `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
   let duration = "";
   let is_live = false;
   const readBadge = (b: AnyObj) => {
-    const t = (b.thumbnailBadgeViewModel?.text as string) || "";
+    const t = ((b.thumbnailBadgeViewModel as AnyObj | undefined)?.text as string) || "";
     if (!t) return;
     if (/^\d+(:\d+)+/.test(t)) duration = t;
     else if (/live/i.test(t)) { is_live = true; duration = "LIVE"; }
   };
-  for (const o of tv?.overlays || []) {
-    for (const b of (o.thumbnailOverlayBadgeViewModel?.badges as AnyObj[] | undefined) || []) readBadge(b);
+  for (const o of (tv?.overlays as AnyObj[] | undefined) || []) {
+    for (const b of (((o.thumbnailOverlayBadgeViewModel as AnyObj | undefined)?.badges as AnyObj[] | undefined) || [])) readBadge(b);
     for (const b of ((o.thumbnailBottomOverlayViewModel as AnyObj)?.badges as AnyObj[] | undefined) || []) readBadge(b);
   }
   if (isViewsWord(viewsPart) && /watching/i.test(viewsPart)) is_live = true;
@@ -334,11 +335,11 @@ function parseLockup(lv: AnyObj): YtVideo | null {
 function parseRichItem(ri: AnyObj): YtVideo | null {
   const content = (ri.content as AnyObj | undefined);
   if (!content) return null;
-  const vr = content.videoRenderer;
+  const vr = content.videoRenderer as AnyObj | undefined;
   if (vr) return parseVideoRenderer(vr);
-  const lv = content.lockupViewModel;
+  const lv = content.lockupViewModel as AnyObj | undefined;
   if (lv) return parseLockup(lv);
-  const gvr = content.gridVideoRenderer;
+  const gvr = content.gridVideoRenderer as AnyObj | undefined;
   if (gvr) return parseVideoRenderer(gvr);
   return null;
 }
@@ -500,7 +501,7 @@ function searchContinuationToken(json: AnyObj): string | null {
     }
   }
   // initial response: the itemSectionRenderer holding videoRenderer results
-  const slr = ((json.contents as AnyObj)?.twoColumnSearchResultsRenderer as AnyObj)?.primaryContents?.sectionListRenderer as AnyObj | undefined;
+  const slr = (((json.contents as AnyObj)?.twoColumnSearchResultsRenderer as AnyObj)?.primaryContents as AnyObj | undefined)?.sectionListRenderer as AnyObj | undefined;
   const sections = (slr?.contents as AnyObj[]) || [];
   let best: string | null = null;
   for (const sec of sections) {
@@ -983,7 +984,7 @@ export async function itCommentsContinue(token: string, _sort: "top" | "new" = "
         author: runsText(cr.authorText) || ((cr.authorText as { simpleText?: string })?.simpleText) || "",
         author_id: "",
         author_thumb: parseThumb((cr.authorThumbnail as { thumbnails?: unknown })?.thumbnails),
-        text: ((cr.contentText as unknown) && runsText(cr.contentText)) || "",
+        text: runsText(cr.contentText) || "",
         likes: parseInt(((cr.voteCount as { simpleText?: string })?.simpleText || "0").replace(/[,.]/g, ""), 10) || parseCountLike(cr.voteCount) || 0,
         time: ((cr.publishedTimeText as { simpleText?: string })?.simpleText) || runsText(cr.publishedTimeText) || "",
         replies: parseInt(((cr.replyCount as number) || 0).toString(), 10) || 0,
