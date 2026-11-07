@@ -1,13 +1,13 @@
-// generate-testers-guide.js — ytapp Feature Testing Guide (.docx)
+// generate-testers-guide.mjs — ytapp Feature Testing Guide (.docx)
 // English document · R1 cover (DM-1 Deep Cyan) · 3-section architecture
 // (cover / TOC-roman / body-arabic) per the docx skill references.
-const {
+import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   PageBreak, Header, Footer, PageNumber, NumberFormat, SectionType,
   AlignmentType, HeadingLevel, WidthType, BorderStyle, ShadingType,
   TableLayoutType, LevelFormat, TableOfContents,
-} = require("docx");
-const fs = require("fs");
+} from "docx";
+import fs from "node:fs";
 
 // ---------- palette: DM-1 Deep Cyan (tech) ----------
 const P = {
