@@ -1595,3 +1595,22 @@ Tag note: pushing six tags in one command creates no events (GitHub's >3
 tags rule), so no release runs fired — and the phase commits never ran CI,
 so the release workflow's own green gate would refuse them anyway. Plan:
 main green first, then tag the green commit.
+
+### Session 28 (cont.) — CI green; the plugins are now compile-verified
+
+Five fix-forward rounds after the first push (each a real defect the phase
+2-5 code's first CI run exposed): prisma template leftovers (build), lint
+(guard-core vars, setState-in-effect x3, unused disable), yt-compat's
+decorView cast, yt-player's onGetSession signature (ControllerInfo is
+MediaSession.ControllerInfo — verified against the media3-session 1.5.1
+AAR class list after two wrong guesses), and the color gate exempting the
+compat injection (it runs inside YouTube's page; app theme tokens cannot
+exist there).
+
+State on 74802ad: CI green, Android APK green (the never-compiled yt-compat
+and yt-player Java now compiles through cap sync and the APK builds — debug
++ release-unsigned + PiP manifest assertion), macOS green. The six phase
+tags (v2.3.0-v2.8.0) stay as accurate history markers; their commits predate
+CI so the release gate refuses to build them (by design — no tag ships
+untested). v2.8.1 tags the first fully green commit and is the release that
+carries the whole program's artifacts.
