@@ -5,7 +5,7 @@ Program: ytapp Master Build Plan (2026-11-07) · Phases 0-5 · EGM + gauntlet lo
 | Phase | Status | Gate | Release |
 | --- | --- | --- | --- |
 | 0 — Stabilize & Instrument | ✅ gate green | tsc 0 · battery · diagnostics · journey e2e | v2.3.0 |
-| 1 — Extraction Engine v2 | ⬜ | battery ≥5/6 on mildly-gated IP · fallback rate ↓ | v2.4.0 |
+| 1 — Extraction Engine v2 | ✅ sandbox gate green | | battery ≥5/6 on mildly-gated IP · fallback rate ↓ | v2.4.0 |
 | 2 — Compat Mode | ⬜ | gated video plays screen-off on device · kill-switch | v2.5.0 |
 | 3 — Downloads v1 | ⬜ | muxed MP4 e2e on web+Android+desktop · caps | v2.6.0 |
 | 4 — Native Android Player | ⬜ | notification + screen-off on device | v2.7.0 |
@@ -15,6 +15,12 @@ Program: ytapp Master Build Plan (2026-11-07) · Phases 0-5 · EGM + gauntlet lo
 
 | ID | Piece | Status |
 | --- | --- | --- |
+| E-01 | youtubei.js 18.3.0 (server + pot-provider) | ✅ |
+| E-02 | HTML-seeded WEB (watch page + playerResponse + decipher) | ✅ in chain (SEEDED_WEB); page itself gated on this IP — real judge is the user's server |
+| E-03 | PO token on every player call | ✅ proven live: 52/52 player calls carry poToken (counting fetch + battery assertion) |
+| E-04 | CLIENT_CHAIN config + gate classification | ✅ classify 8/8 unit; gate_reason on every fallback |
+| E-05 | cookie endpoint + Settings UI | ✅ e2e 6/6 (verbatim POST, masked, no DOM leak, clean removal) |
+| E-06 | format-URL range-probe before acceptance | ✅ hollow extractions rejected and classified bot_gate |
 | S-01 | tsc 15 → 0 + enforce (ignoreBuildErrors removed) | ✅ tsc exit 0, build:static green, suite outcomes identical before/after (2 parity failures pre-existing: environment gating, proven via stash) |
 | S-02 | six-video battery e2e (SKIP-with-reason) | ✅ 1 pass / 5 skip-with-reason / 0 fail (WEB status now in reasons) |
 | S-03 | per-client diagnostics + Copy Diagnostics | ✅ health shows per-client ok/fail/last_error + fallback rate 0.833; secret-free |

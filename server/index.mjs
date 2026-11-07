@@ -8,6 +8,7 @@
 import express from 'express';
 import path from 'node:path';
 import { Innertube, YTNodes } from 'youtubei.js';
+import { classifyGate } from './gate-classify.mjs';
 const { ContinuationItem } = YTNodes;
 
 const PORT = process.env.PORT || 3001;
@@ -23,6 +24,23 @@ const STATIC_DIR = process.env.STATIC_DIR || '';
 // In production set URL_SUFFIX="" (empty) when serving from a real domain, or PUBLIC_URL=https://api.example.com
 const URL_SUFFIX = process.env.URL_SUFFIX !== undefined ? process.env.URL_SUFFIX : '&XTransformPort=3001';
 const REQUEST_TIMEOUT_MS = 15000;
+
+// ----------------------------------------------------------------------------
+// Phase 1: extraction engine v2
+// ----------------------------------------------------------------------------
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+// The client chain is data, not code (the arms race is lost the moment the
+// order is hardcoded). SEEDED_WEB = watch-page-seeded WEB extraction (E-02):
+// it avoids the /player API entirely, which is what survives player-level
+// bot-gating on residential-adjacent IPs.
+const CLIENT_CHAIN = (process.env.CLIENT_CHAIN || 'IOS,SEEDED_WEB,ANDROID,WEB,MWEB')
+  .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+let runtimeCookie = ''; // set via POST /api/cookie (E-05); takes precedence over the env
+const activeCookie = () => runtimeCookie || YOUTUBE_COOKIE;
+// E-03 proof: every /player call must carry the PO token. youtubei.js 18.3
+// stamps serviceIntegrityDimensions.poToken from the session token; this
+// counter verifies it live instead of trusting the source.
+const playerCallStats = { calls: 0, with_po_token: 0 };
 
 const log = (...a) => console.log(`[yt-api]`, ...a);
 const warn = (...a) => console.warn(`[yt-api]`, ...a);
@@ -117,7 +135,20 @@ class SessionPool {
       retrieve_player: true,
       generate_session_locally: false,
     };
-    if (YOUTUBE_COOKIE) opts.cookie = YOUTUBE_COOKIE;
+    if (activeCookie()) opts.cookie = activeCookie();
+    // Counting fetch (E-03): observes every InnerTube request the library
+    // makes; /player calls and their PO-token coverage land in /api/health.
+    opts.fetch = async (input, init) => {
+      try {
+        const url = typeof input === 'string' ? input : String(input?.url || '');
+        if (url.includes('/youtubei/v1/player')) {
+          playerCallStats.calls++;
+          const body = typeof init?.body === 'string' ? init.body : '';
+          if (body.includes('"poToken"')) playerCallStats.with_po_token++;
+        }
+      } catch { /* diagnostics only */ }
+      return fetch(input, init);
+    };
     const yt = await Innertube.create(opts);
     this.sessions.push({ yt, hasToken: !!tokenState.poToken });
     log(`session #${this.sessions.length - 1} created (visitor ${String(tokenState.visitorData || '').slice(0, 16)}...${tokenState.poToken ? '' : ' NO PO TOKEN'})`);
@@ -373,12 +404,114 @@ function normalizeStoryboard(info) {
 
 // per-client extraction diagnostics (surfaced in /api/health; the Settings
 // page's Copy Diagnostics button pastes them into a support ticket — statuses
-// only, never cookie or token material)
+// only, never cookie or token material). statsFor() creates entries on
+// demand so the chain can be reconfigured without touching this.
 const newClientStats = () => ({ ok: 0, fail: 0, last_error: null, last_at: null });
 const extractStats = { IOS: newClientStats(), ANDROID: newClientStats(), WEB: newClientStats(), MWEB: newClientStats() };
+const statsFor = (client) => (extractStats[client] ||= newClientStats());
 const embedFallbackStats = { count: 0, last_video: null, last_reasons: null, last_at: null };
-const noteOk = (client) => { const s = extractStats[client]; if (!s) return; s.ok++; s.last_error = null; s.last_at = new Date().toISOString(); };
-const noteFail = (client, reason) => { const s = extractStats[client]; if (!s) return; s.fail++; s.last_error = String(reason || 'unknown').slice(0, 140); s.last_at = new Date().toISOString(); };
+const noteOk = (client) => { const s = statsFor(client); s.ok++; s.last_error = null; s.last_at = new Date().toISOString(); };
+const noteFail = (client, reason) => { const s = statsFor(client); s.fail++; s.last_error = String(reason || 'unknown').slice(0, 140); s.last_at = new Date().toISOString(); };
+
+// Robust ytInitialPlayerResponse extraction: find the assignment, then
+// brace-match with string/escape state (regex on megabyte HTML is where
+// parsers go to die).
+function extractJsonAfter(html, key) {
+  const idx = html.indexOf(`${key} =`);
+  if (idx === -1) return null;
+  let i = idx + key.length;
+  while (i < html.length && html[i] !== '{') i++;
+  if (html[i] !== '{') return null;
+  let depth = 0, inStr = false, esc = false, start = i;
+  for (; i < html.length; i++) {
+    const c = html[i];
+    if (esc) { esc = false; continue; }
+    if (c === '\\') { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) { try { return JSON.parse(html.slice(start, i + 1)); } catch { return null; } } }
+  }
+  return null;
+}
+
+// E-06: a client that lists formats whose URLs 403 is worse than a client
+// that admits failure — the player would buffer forever. Range-probe ONE
+// raw URL before accepting the extraction.
+async function probeFormats(streamingData) {
+  const raw = [...(streamingData?.adaptive_formats || []), ...(streamingData?.formats || [])].find(f => f && f.url);
+  if (!raw) return { ok: false, error: 'no-raw-url' };
+  try {
+    const r = await fetch(raw.url, { headers: { Range: 'bytes=0-1023' }, signal: AbortSignal.timeout(8000) });
+    try { r.body?.cancel?.(); } catch { /* we only care about the status */ }
+    if (r.status >= 400) return { ok: false, error: `probe HTTP ${r.status}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: `probe ${String(e.message || e).slice(0, 60)}` };
+  }
+}
+
+// E-02: watch-page-seeded WEB extraction. The page itself is far less
+// bot-gated than the /player API (research + FreeTube's production pattern):
+// fetch it as a real browser, take its playerResponse, decipher the format
+// URLs with the session's own player. Zero /player API calls.
+async function seededWebExtract(id) {
+  return cache.wrap(`seeded:${id}`, 10 * 60 * 1000, async () => {
+    const r = await fetch(`https://www.youtube.com/watch?v=${id}&hl=en`, {
+      headers: {
+        'User-Agent': CHROME_UA,
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        ...(activeCookie() ? { Cookie: activeCookie() } : {}),
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!r.ok) throw new Error(`watch page HTTP ${r.status}`);
+    const html = await r.text();
+    const pr = extractJsonAfter(html, 'ytInitialPlayerResponse');
+    if (!pr) throw new Error('no ytInitialPlayerResponse in page');
+    const status = pr?.playabilityStatus?.status;
+    if (status !== 'OK') {
+      const reason = pr?.playabilityStatus?.reason ? `: ${String(pr.playabilityStatus.reason).slice(0, 60)}` : '';
+      throw new Error(`page playability ${status}${reason}`);
+    }
+    const sd = pr?.streamingData;
+    const rawFormats = [...(sd?.formats || []), ...(sd?.adaptiveFormats || [])];
+    if (!rawFormats.length) throw new Error('page has no streamingData (consent wall or gate)');
+    const yt = await pool.get(0);
+    const player = yt.session?.player;
+    if (!player?.decipher) throw new Error('no session player for deciphering');
+    const nsigCache = new Map();
+    const mapped = [];
+    for (const f of rawFormats) {
+      try {
+        const url = await player.decipher(f.url, f.signatureCipher, f.cipher, nsigCache);
+        if (!url) continue;
+        mapped.push({
+          itag: f.itag, url,
+          mime_type: f.mimeType || '',
+          quality_label: f.qualityLabel || f.quality || '',
+          height: f.height || 0, width: f.width || 0, fps: f.fps || 0,
+          bitrate: f.bitrate || f.averageBitrate || 0,
+          has_video: /video/.test(f.mimeType || ''), has_audio: /audio/.test(f.mimeType || ''),
+          duration_ms: f.approxDurationMs,
+        });
+      } catch { /* one broken format must not sink the page */ }
+    }
+    if (!mapped.length) throw new Error('decipher produced no URLs');
+    const vd = pr.videoDetails || {};
+    return {
+      formats: mapped,
+      playability: { status: 'OK' },
+      probe_data: { adaptive_formats: mapped },
+      info: {
+        playability_status: { status: 'OK' },
+        basic_info: { title: vd.title || '', duration: vd.lengthSeconds ? Number(vd.lengthSeconds) : 0 },
+      },
+      hls_url: sd?.hlsManifestUrl || null,
+    };
+  });
+}
 // fresh=1 re-extraction cooldown: { videoId: { at, tokenKey } }. A fresh
 // request within 90s of the last attempt is refused (cached result returned,
 // zero API calls) unless the PO-token state changed since — that is exactly
@@ -409,6 +542,7 @@ async function getVideoFull(id, { fresh = false } = {}) {
       id,
       ok: false, embed_fallback: false,
       extracted_by: '', audio_only: false, extract_ms: 0,
+      gate_reason: null, playability_detail: null,
       title: '', channel: '', channel_id: '', channel_thumb: '',
       views: 0, likes: 0, duration: 0, published: '', description: '',
       formats: [], hls: null, captions: [], storyboard: null, related: [],
@@ -419,7 +553,6 @@ async function getVideoFull(id, { fresh = false } = {}) {
     try {
       webInfo = await pool.withRetry(async yt => await yt.getInfo(id, { client: 'WEB' }), { label: `getInfo WEB ${id}` });
     } catch (e) {
-      noteFail('WEB', e.message);
       warn(`WEB getInfo failed for ${id}:`, String(e.message).slice(0, 120));
     }
 
@@ -498,6 +631,10 @@ async function getVideoFull(id, { fresh = false } = {}) {
         const sd = info?.streaming_data;
         playability[client] = info?.playability_status?.status || 'UNKNOWN';
         if (info?.playability_status?.status === 'OK' && sd) {
+          // E-06: verify the URLs actually fetch before accepting — a hollow
+          // extraction (formats listed, URLs 403) is a failure, not a win.
+          const probe = await probeFormats(sd);
+          if (!probe.ok) { playability[client] = `HOLLOW ${probe.error}`; throw new Error(`hollow extraction (${probe.error})`); }
           const formats = normalizeFormats(sd);
           if (formats.length > 0) { noteOk(client); return { formats, info }; }
         }
@@ -517,32 +654,71 @@ async function getVideoFull(id, { fresh = false } = {}) {
       if (!result.duration) result.duration = info.basic_info?.duration || 0;
     };
 
-    // IOS first (direct URLs up to 4K + HLS manifest)
-    const ios = await tryClient('IOS', 2);
-    if (ios) {
-      accept('IOS', ios);
-      const hlsUrl = ios.info.streaming_data.hls_manifest_url;
-      if (hlsUrl) result.hls = `${PUBLIC_URL}/api/hls/${id}`;
-    }
-    // ANDROID combined fallback (360p) — audio-only results count too
-    if (!result.ok) {
-      const android = await tryClient('ANDROID', 2);
-      if (android) accept('ANDROID', android);
-    }
-    // WEB streams: webInfo was already fetched for metadata — zero extra API
-    // calls, URLs deciphered via retrieve_player.
-    if (!result.ok && playable && webInfo.streaming_data) {
+    // E-02: watch-page-seeded WEB — no /player API call at all.
+    const trySeededWeb = async () => {
+      playability.SEEDED_WEB = 'not-tried';
+      if (budgetLeft() <= 0) { playability.SEEDED_WEB = 'no-budget'; noteFail('SEEDED_WEB', 'no-budget'); return null; }
       try {
-        const webFormats = normalizeFormats(webInfo.streaming_data);
-        if (webFormats.some(f => f.url)) {
-          accept('WEB', { formats: webFormats, info: webInfo });
-          playability.WEB = 'OK';
-          noteOk('WEB');
+        const seeded = await seededWebExtract(id);
+        const probe = await probeFormats(seeded.probe_data);
+        if (!probe.ok) { playability.SEEDED_WEB = `HOLLOW ${probe.error}`; throw new Error(`hollow extraction (${probe.error})`); }
+        const formats = normalizeFormats({ adaptive_formats: seeded.formats, formats: [] });
+        if (formats.length > 0) {
+          playability.SEEDED_WEB = 'OK';
+          noteOk('SEEDED_WEB');
+          return { formats, info: seeded.info, hls_url: seeded.hls_url };
         }
-      } catch { /* noop */ }
-    }
-    if (!result.ok && !playability.WEB) {
-      noteFail('WEB', webInfo ? (playable ? 'no-streams' : (webInfo.playability_status?.status || 'gated')) : 'unreachable');
+        throw new Error('seeded page produced no usable formats');
+      } catch (e) {
+        playability.SEEDED_WEB = `ERROR ${String(e.message || e).slice(0, 60)}`;
+        noteFail('SEEDED_WEB', e.message);
+        return null;
+      }
+    };
+
+    // E-04: the chain is configuration (CLIENT_CHAIN), not code.
+    for (const client of CLIENT_CHAIN) {
+      if (result.ok || budgetLeft() <= 0) break;
+      if (client === 'SEEDED_WEB') {
+        const sw = await trySeededWeb();
+        if (sw) {
+          accept('SEEDED_WEB', sw);
+          if (sw.hls_url) result.hls = `${PUBLIC_URL}/api/hls/${id}`;
+        }
+        continue;
+      }
+      if (client === 'WEB') {
+        // WEB streams: webInfo was already fetched for metadata — zero extra
+        // API calls, URLs deciphered via retrieve_player.
+        if (!webInfo) { noteFail('WEB', 'unreachable'); continue; }
+        if (!playable || !webInfo.streaming_data) {
+          noteFail('WEB', playability.WEB || 'no-streams');
+          continue;
+        }
+        try {
+          const probe = await probeFormats(webInfo.streaming_data);
+          if (probe.ok) {
+            const webFormats = normalizeFormats(webInfo.streaming_data);
+            if (webFormats.some(f => f.url)) {
+              accept('WEB', { formats: webFormats, info: webInfo });
+              playability.WEB = 'OK';
+              noteOk('WEB');
+              continue;
+            }
+          } else {
+            playability.WEB = `HOLLOW ${probe.error}`;
+          }
+        } catch { /* fall through to the fail below */ }
+        noteFail('WEB', playability.WEB || 'no-streams');
+        continue;
+      }
+      const res = await tryClient(client, client === 'MWEB' ? 1 : 2);
+      if (res) {
+        accept(client, res);
+        if (client === 'IOS' && res.info.streaming_data?.hls_manifest_url) {
+          result.hls = `${PUBLIC_URL}/api/hls/${id}`;
+        }
+      }
     }
     // MWEB last (attempts: 1 — a fourth chance does not earn session
     // rotation). Measured 2026-11-06: on a bot-gated datacenter IP MWEB was
@@ -556,7 +732,9 @@ async function getVideoFull(id, { fresh = false } = {}) {
       result.embed_fallback = true; // frontend will use IFrame embed
       const parts = Object.entries(playability).map(([c, p]) => `${c}=${p}`).join(' ');
       result.playability_reason = parts || 'no client produced streams';
-      warn(`embed_fallback ${id}: ${parts || 'no client produced streams'}`);
+      result.playability_detail = String(webInfo?.playability_status?.reason || '').slice(0, 160) || null;
+      result.gate_reason = classifyGate(playability, webInfo?.playability_status?.reason);
+      warn(`embed_fallback ${id} [${result.gate_reason}]: ${parts || 'no client produced streams'}`);
       embedFallbackStats.count++;
       embedFallbackStats.last_video = id;
       embedFallbackStats.last_reasons = { ...playability };
@@ -998,8 +1176,39 @@ async function potReachable() {
   return potProbe.ok;
 }
 
-app.get('/api/health', wrap(async (req, res) => {
-  const okTotal = Object.values(extractStats).reduce((n, s) => n + s.ok, 0);
+// --- Server cookies (E-05): runtime YOUTUBE_COOKIE management. The cookie
+// value itself is never returned and never logged — only presence, source
+// and a one-name masked hint. Sessions are dropped on change so the pool
+// recreates them with (or without) the cookie.
+app.post('/api/cookie', express.json({ limit: '32kb' }), wrap(async (req, res) => {
+  const cookie = String(req.body?.cookie || '').trim();
+  if (!cookie) return res.status(400).json({ error: 'Missing cookie' });
+  if (!/^[\x20-\x7e]{10,8000}$/.test(cookie)) return res.status(400).json({ error: 'Cookie must be plain ASCII header text (10-8000 chars)' });
+  runtimeCookie = cookie;
+  pool.sessions.length = 0; // recreate with the cookie
+  log(`cookie set at runtime (${cookie.length} chars) — sessions will be recreated`);
+  res.json({ ok: true, present: true, length: cookie.length });
+}));
+
+app.get('/api/cookie', (req, res) => {
+  const c = activeCookie();
+  const eq = c ? c.indexOf('=') : -1;
+  res.json({
+    present: !!c,
+    source: runtimeCookie ? 'runtime' : (YOUTUBE_COOKIE ? 'env' : 'none'),
+    length: c ? c.length : 0,
+    masked: eq > 0 ? `${c.slice(0, eq + 1)}…` : null, // name only, never a value char
+  });
+});
+
+app.delete('/api/cookie', (req, res) => {
+  runtimeCookie = '';
+  pool.sessions.length = 0;
+  log('runtime cookie cleared — sessions will be recreated');
+  res.json({ ok: true, present: !!YOUTUBE_COOKIE });
+});
+
+app.get('/api/health', wrap(async (req, res) => {  const okTotal = Object.values(extractStats).reduce((n, s) => n + s.ok, 0);
   const attempts = okTotal + embedFallbackStats.count;
   res.json({
     ok: true,
@@ -1009,6 +1218,9 @@ app.get('/api/health', wrap(async (req, res) => {
     sessions: pool.sessions.length,
     extract_stats: Object.fromEntries(Object.entries(extractStats).map(([k, v]) => [k.toLowerCase(), { ok: v.ok, fail: v.fail, last_error: v.last_error, last_at: v.last_at }])),
     extract_total: attempts,
+    player_calls: playerCallStats.calls,
+    player_calls_po: playerCallStats.with_po_token,
+    cookie: { present: !!activeCookie(), source: runtimeCookie ? 'runtime' : (YOUTUBE_COOKIE ? 'env' : 'none') },
     embed_fallbacks: embedFallbackStats.count,
     embed_fallback_rate: attempts ? +(embedFallbackStats.count / attempts).toFixed(3) : null,
     last_fallback: embedFallbackStats.last_video ? { video: embedFallbackStats.last_video, reasons: embedFallbackStats.last_reasons, at: embedFallbackStats.last_at } : null,

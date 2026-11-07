@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getApiBase, setApiBase, fetchHealth, getActiveSourceLabel, invalidateDataSource, resolveDataSource, type YtHealth } from "@/lib/yt-api";
+import { getApiBase, setApiBase, fetchHealth, getActiveSourceLabel, invalidateDataSource, resolveDataSource, fetchCookieStatus, setServerCookie, clearServerCookie, type YtHealth, type ServerCookieStatus } from "@/lib/yt-api";
 import { useYt } from "@/lib/yt-store";
 import { applyTheme, watchSystemTheme, type ThemeMode } from "@/lib/yt-theme";
 import { APP_VERSION } from "@/lib/version";
@@ -32,6 +32,9 @@ function Toggle({ label, desc, value, onChange, labelIcon }: { label: string; de
 export default function SettingsPage() {
   const [apiBase, setApiBaseInput] = useState(() => getApiBase());
   const [health, setHealth] = useState<YtHealth | null>(null);
+  const [cookieStatus, setCookieStatus] = useState<ServerCookieStatus | null>(null);
+  const [cookieInput, setCookieInput] = useState("");
+  const [cookieBusy, setCookieBusy] = useState(false);
   const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [sourceLabel, setSourceLabel] = useState<string>("checking…");
@@ -60,8 +63,23 @@ export default function SettingsPage() {
       .then(() => { if (alive) setSourceLabel(getActiveSourceLabel()); })
       .catch(() => { if (alive) setSourceLabel("not connected"); });
     fetchHealth().then(h => { if (alive) setHealth(h); }).catch(() => { if (alive) setHealth(null); });
+    fetchCookieStatus().then(c => { if (alive) setCookieStatus(c); }).catch(() => { if (alive) setCookieStatus(null); });
     return () => { alive = false; };
   }, []);
+
+  const applyCookie = async (cookie: string | null) => {
+    setCookieBusy(true);
+    try {
+      if (cookie === null) await clearServerCookie();
+      else await setServerCookie(cookie);
+      setCookieStatus(await fetchCookieStatus());
+      setCookieInput("");
+      ytToast(cookie === null ? "Server cookies removed" : "Server cookies updated — new sessions will use them");
+    } catch {
+      ytToast("Cookie update failed — is the server reachable?");
+    }
+    setCookieBusy(false);
+  };
 
   const save = () => {
     setApiBase(apiBase);
@@ -170,6 +188,52 @@ export default function SettingsPage() {
               </span>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Server cookies (Phase 1: gated-deployment unlock) */}
+      <section className="mb-10">
+        <h2 className="text-[16px] font-medium mb-4">Server cookies</h2>
+        <div className="rounded-xl bg-[var(--yt-elev2-60)] p-4">
+          <p className="text-[13px] text-[var(--yt-text-2)] leading-relaxed mb-3">
+            Paste YouTube cookies from a signed-in browser session to unlock age-gated and bot-gated videos on servers
+            whose IP YouTube distrusts (datacenters, VPNs). They are stored on your server only, never in this app or
+            the repo, and never appear in diagnostics. Use a throwaway account — a leaked cookie is a logged-in session.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={cookieInput}
+              onChange={(e) => setCookieInput(e.target.value)}
+              placeholder={cookieStatus?.present ? `${cookieStatus.masked || "cookies set"} — paste to replace` : "Paste Cookie header (VISITOR_INFO1_LIVE=…; SID=…; …)"}
+              className="flex-1 h-10 px-4 rounded-lg bg-[var(--yt-bg-input)] border border-[var(--yt-border)] text-[13px] outline-none focus:border-[var(--yt-blue)]"
+              data-testid="cookie-input"
+            />
+            <button
+              onClick={() => cookieInput.trim() && applyCookie(cookieInput.trim())}
+              disabled={cookieBusy || !cookieInput.trim()}
+              className="h-10 px-5 rounded-full bg-[var(--yt-blue)] text-[var(--yt-blue-contrast)] text-[14px] font-medium shrink-0 disabled:opacity-40"
+              data-testid="cookie-set"
+            >
+              Set
+            </button>
+            {cookieStatus?.present && (
+              <button
+                onClick={() => applyCookie(null)}
+                disabled={cookieBusy}
+                className="h-10 px-4 rounded-full bg-[var(--yt-bg-elev2)] hover:bg-[var(--yt-hover)] text-[13px] shrink-0"
+                data-testid="cookie-remove"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          <p className="text-[12px] text-[var(--yt-text-2)] mt-3" data-testid="cookie-status">
+            {cookieStatus === null
+              ? "Server unreachable — cookie status unknown"
+              : cookieStatus.present
+                ? `Cookies active (${cookieStatus.length} chars, ${cookieStatus.source === "env" ? "set via server env" : "set from this page"}${cookieStatus.masked ? `, ${cookieStatus.masked}…` : ""})`
+                : "No cookies set — the server extracts anonymously"}
+          </p>
         </div>
       </section>
 

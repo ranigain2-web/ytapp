@@ -13,7 +13,7 @@
     "express": "^5.2.1",
     "jsdom": "^29.1.1",
     "proxy-agent": "^8.0.2",
-    "youtubei.js": "^18.0.0"
+    "youtubei.js": "^18.3.0"
   },
   "engines": {
     "node": ">=20"

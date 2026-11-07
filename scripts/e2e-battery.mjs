@@ -54,6 +54,14 @@ for (const v of BATTERY) {
 try {
   const h = await (await fetch(`${API}/api/health`, { signal: AbortSignal.timeout(5000) })).json();
   console.log(`  health: po_token=${h.po_token} pot_reachable=${h.pot_reachable} fallbacks=${h.embed_fallbacks} rate=${h.embed_fallback_rate}`);
+  // E-03: while the PO token is active, EVERY player call must carry it.
+  if (h.po_token && h.player_calls > 0) {
+    if (h.player_calls_po >= h.player_calls) {
+      ok(`PO token on ${h.player_calls_po}/${h.player_calls} player calls`);
+    } else {
+      bad(`PO-token coverage incomplete: ${h.player_calls_po}/${h.player_calls} player calls carry the token`);
+    }
+  }
 } catch { /* health is informational here */ }
 
 console.log(`RESULT: ${PASS} passed, ${SKIP} skipped, ${FAIL} failed`);

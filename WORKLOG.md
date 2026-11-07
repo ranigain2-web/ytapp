@@ -1335,3 +1335,50 @@ GREEN on every check; v2.3.0 tagged.
 - Ops note: sandbox recycling wiped server/node_modules — reinstalled; the
   start-stack.sh shim died between calls so suites now self-start via
   with-server.sh. Playwright chromium reinstalled (v1243).
+
+### Session 25 — Phase 1 complete: extraction engine v2 (v2.4.0)
+
+Executed per docs/designs/phase-1-extraction-v2.md. Sandbox gate GREEN;
+v2.4.0 tagged. The headline metric (battery >=5/6 on a mildly-gated IP) is
+defined on the user's server — this sandbox is the worst-case IP (research:
+1/6) and is the wrong judge by design.
+
+- E-01 youtubei.js ^18.3.0 in server/ AND pot-provider/ (repo rule: both pins
+  together). 18.3 stamps serviceIntegrityDimensions.poToken from the session
+  token on every getInfo player call (read in dist source to confirm).
+- E-02 seededWebExtract(): genuine-Chrome-UA watch-page fetch -> brace-matched
+  ytInitialPlayerResponse (string/escape-state parser, no regex on raw HTML)
+  -> decipher formats via session player (nsig cache shared per request) ->
+  zero /player API calls. In the chain as SEEDED_WEB (default order
+  IOS,SEEDED_WEB,ANDROID,WEB,MWEB). On this IP the page itself is gated
+  (LOGIN_REQUIRED / HTTP 429) and reports honestly in the SKIP reasons; on a
+  residential IP it is the mechanism FreeTube ships.
+- E-03 PO-token proof: counting fetch wrapper at session create counts
+  /youtubei/v1/player calls and poToken coverage; /api/health exposes
+  player_calls/player_calls_po; the battery FAILs if coverage < 100% while
+  po_token is active. Live result: 52/52.
+- E-04 CLIENT_CHAIN env (the chain is config, not code); classifyGate() in
+  server/gate-classify.mjs (pure module — deliberate, tested exception to the
+  single-file rule: zero deps, no side effects, unit-testable without
+  booting the server; the bundle test runs the server dir in place and
+  passes). gate_reason + playability_detail on every embed_fallback.
+  Classifications: members_only/drm/age_gate/bot_gate (incl. hollow
+  extractions)/live_ended/unavailable/unknown — 8/8 unit cases.
+- E-05 POST/GET/DELETE /api/cookie (value never returned or logged; masked
+  name-only hint; sessions dropped on change so the pool recreates with it;
+  runtime > env precedence). Settings: Server-cookies section with paste,
+  masked status, remove, honest security note. e2e-cookie.mjs 6/6.
+- E-06 probeFormats(): range-fetch one raw format URL (bytes=0-1023, body
+  cancelled) before accepting any client's formats; hollow extractions are
+  rejected, recorded as failures, and classified bot_gate.
+- WatchPage: bot_gate hint on the embed notice points at Settings -> Server
+  cookies.
+- Gate: tsc 0; build:static green; classify 8/8; cookie e2e 6/6; battery
+  2 passed / 5 skip-with-reason / 0 fail + PO coverage 52/52 (battery
+  extracted 2/6 this run — one more than the research baseline, same IP);
+  embed 7/0; parity 16/0; ads 11/0/1skip; background 35/0; playback 108/0;
+  premium 14/0; v12 failures IDENTICAL to the pre-change baseline (env);
+  bundle test ALL PASS.
+- USER MEASUREMENT PENDING (per plan section 12): after deploying v2.4.0 to
+  the real server, Copy Diagnostics before/after — target battery >=5/6 and
+  embed_fallback_rate visibly below the pre-deploy number.

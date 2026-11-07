@@ -237,6 +237,10 @@ export interface YtVideoFull extends Omit<Partial<YtVideo>, "views" | "duration"
   related: YtVideo[];
   chapters: YtChapter[];
   playability_reason?: string | null;
+  /** Phase 1: machine-readable failure class (bot_gate/age_gate/members_only/drm/live_ended/unavailable) */
+  gate_reason?: string | null;
+  /** Phase 1: the human-readable playability reason from the WEB client */
+  playability_detail?: string | null;
   embed_blocked?: boolean;
   /** hard-unplayable (deleted / geo-blocked / offline live) — full error page */
   unavailable?: boolean;
@@ -489,6 +493,9 @@ export interface YtHealth {
   uptime: number;
   extract_stats?: Record<string, { ok: number; fail: number; last_error: string | null; last_at: string | null }>;
   extract_total?: number;
+  player_calls?: number;
+  player_calls_po?: number;
+  cookie?: { present: boolean; source: string };
   embed_fallbacks?: number;
   embed_fallback_rate?: number | null;
   last_fallback?: { video: string; reasons: Record<string, string> | null; at: string | null } | null;
@@ -497,6 +504,33 @@ export interface YtHealth {
 
 export async function fetchHealth(): Promise<YtHealth> {
   return api<YtHealth>(`/api/health`, { timeoutMs: 8000 });
+}
+
+// ---- Phase 1 (E-05): server cookies — runtime YOUTUBE_COOKIE management ----
+export interface ServerCookieStatus {
+  present: boolean;
+  source: string;
+  length: number;
+  masked: string | null;
+}
+
+export async function fetchCookieStatus(): Promise<ServerCookieStatus> {
+  return api<ServerCookieStatus>(`/api/cookie`, { timeoutMs: 8000 });
+}
+
+export async function setServerCookie(cookie: string): Promise<void> {
+  const res = await fetch(apiHref("/api/cookie"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ cookie }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status);
+}
+
+export async function clearServerCookie(): Promise<void> {
+  const res = await fetch(apiHref("/api/cookie"), { method: "DELETE", signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status);
 }
 
 // Absolute URL resolver for streams (HLS/captions/storyboard paths are relative)

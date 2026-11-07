@@ -9,8 +9,8 @@
     "dev": "node --watch index.mjs"
   },
   "dependencies": {
-    "youtubei.js": "^18.0.0",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "youtubei.js": "^18.3.0"
   },
   "engines": {
     "node": ">=20"

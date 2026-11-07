@@ -360,6 +360,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
               : communityMode
               ? "Community mode — playing via the official embed (ads may appear on monetized videos). Use Skip video below to jump to the next one. Background play works when a video streams directly."
               : "Playing via the official YouTube player — ads may appear on monetized videos. Use Skip video below to jump to the next one. Background play works when a video streams directly."}
+            {v.gate_reason === "bot_gate" && " The server's IP is bot-gated by YouTube — setting server cookies (Settings → Server cookies) may restore direct, ad-free playback."}
           </p>
         )}
 
