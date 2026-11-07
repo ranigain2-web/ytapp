@@ -17,6 +17,7 @@ import PlaylistPage from "./PlaylistPage";
 import SettingsPage from "./SettingsPage";
 import CompatPage from "./CompatPage";
 import DownloadsPage from "./DownloadsPage";
+import OfflineBanner from "./OfflineBanner";
 import { HistoryPage, SubscriptionsPage, LikedPage, LaterPage, PlaylistsPage } from "./LibraryPages";
 import ShortsPage from "./ShortsPage";
 import WhatsNew from "./WhatsNew";
@@ -138,6 +139,7 @@ export default function AppShell() {
       {/* the persistent direct-mode player — owns the one <video> element and
           adopts it into the watch slot / mini frame ([A1]) */}
       <VideoSurface />
+      <OfflineBanner />
       {/* Shorts is immersive full-screen: no header, no bottom nav (YouTube behavior) */}
       {route.name !== "shorts" && (
         <Header onToggleSidebar={onToggleSidebar} onSearch={onSearch} />

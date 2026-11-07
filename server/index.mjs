@@ -1474,6 +1474,30 @@ app.get('/api/sponsorblock/:id', wrap(async (req, res) => {
   res.json(await getSponsorBlock(id));
 }));
 
+// --- Return YouTube Dislike (Phase 5, U-01): the public RYD API gives back
+// the dislike counts YouTube hid. Cached an hour per video; failures return
+// nulls (the UI simply shows no count — never an error state).
+async function getRyd(id) {
+  return cache.wrap(`ryd:${id}`, 60 * 60 * 1000, async () => {
+    try {
+      const r = await fetch(`https://returnyoutubedislikeapi.com/votes?videoId=${encodeURIComponent(id)}`, {
+        signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' },
+      });
+      if (!r.ok) throw new Error(`RYD HTTP ${r.status}`);
+      const d = await r.json();
+      return { dislikes: Number(d.dislikes) || 0, likes: Number(d.likes) || 0, viewCount: Number(d.viewCount) || 0 };
+    } catch (e) {
+      return { dislikes: null, likes: null, viewCount: null, error: String(e.message || e).slice(0, 80) };
+    }
+  });
+}
+
+app.get('/api/ryd/:id', wrap(async (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^[\w-]{6,15}$/.test(id)) return res.status(400).json({ error: 'Bad video id' });
+  res.json(await getRyd(id));
+}));
+
 // --- HLS manifest (rewritten) ---
 app.get('/api/hls/:id', wrap(async (req, res) => {
   const id = String(req.params.id || '');

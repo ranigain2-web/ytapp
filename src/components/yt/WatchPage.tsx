@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { fetchVideo, fetchComments, getActiveSource, type YtVideoFull, type YtComment } from "@/lib/yt-api";
+import { fetchVideo, fetchComments, fetchRyd, getActiveSource, type YtVideoFull, type YtComment } from "@/lib/yt-api";
 import { useRouter } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
 import { usePlayback } from "@/lib/yt-playback";
@@ -56,6 +56,14 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const isSubbed = subs.some(s => s.id === (data?.channel_id || ""));
   const isLiked = liked.some(l => l.id === videoId);
   const isDisliked = disliked.includes(videoId);
+  // U-01: Return YouTube Dislike — the count YouTube removed, restored
+  const [ryd, setRyd] = useState<{ dislikes: number | null; likes: number | null } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setRyd(null);
+    fetchRyd(videoId).then(r => { if (alive && r && typeof r.dislikes === "number") setRyd(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [videoId]);
   const isLater = later.some(l => l.id === videoId);
 
   useEffect(() => {
@@ -477,6 +485,9 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
                 aria-label="Dislike"
               >
                 <ThumbsDown className="w-5 h-5" style={isDisliked ? { fill: "var(--yt-blue)" } : undefined} />
+                {ryd?.dislikes != null && ryd.dislikes > 0 && (
+                  <span className="text-[13px] tabular-nums" data-testid="ryd-count">{formatCount(ryd.dislikes)}</span>
+                )}
               </button>
             </div>
             <button

@@ -146,7 +146,14 @@ export default function VideoSurface() {
   useBackGuard("player-menu", menu !== null, () => setMenu(null));
   const [levels, setLevels] = useState<{ index: number; label: string; height: number }[]>([]);
   const [currentLevel, setCurrentLevel] = useState(-1);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(() => {
+    // U-04: speed memory — the last chosen rate applies from the first play
+    try {
+      const v = Number(window.localStorage.getItem("yt-playback-speed"));
+      return v >= 0.25 && v <= 2 ? v : 1;
+    } catch { return 1; }
+  });
+  useEffect(() => { speedRef.current = speed; }, [speed]);
   const [captions, setCaptions] = useState<YtVideoFull["captions"]>([]);
   const [activeCaption, setActiveCaption] = useState<string>("");
   const [sbSegments, setSbSegments] = useState<SbSegment[]>([]);
@@ -1098,6 +1105,8 @@ export default function VideoSurface() {
     if (el) el.playbackRate = s;
     speedRef.current = s;
     setSpeed(s);
+    // U-04: the chosen speed sticks across videos and sessions
+    try { window.localStorage.setItem("yt-playback-speed", String(s)); } catch { /* private mode */ }
     setMenu(null);
   };
   const pickCaption = useCallback((lang: string) => {

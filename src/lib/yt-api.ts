@@ -502,6 +502,11 @@ export interface YtHealth {
   cache_size?: number;
 }
 
+/** Phase 5 (U-01): Return YouTube Dislike — counts YouTube hid. */
+export async function fetchRyd(id: string): Promise<{ dislikes: number | null; likes: number | null; viewCount: number | null }> {
+  return api<{ dislikes: number | null; likes: number | null; viewCount: number | null }>(`/api/ryd/${encodeURIComponent(id)}`, { timeoutMs: 9000 });
+}
+
 export async function fetchHealth(): Promise<YtHealth> {
   return api<YtHealth>(`/api/health`, { timeoutMs: 8000 });
 }

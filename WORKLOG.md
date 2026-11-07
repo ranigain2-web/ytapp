@@ -1518,3 +1518,27 @@ Per docs/designs/phase-4-native-player.md. Gate green; v2.7.0 tagged.
 - Gate: tsc 0; build green; native-url 6/6; native-player 4/4; guard-core
   25/25; compat 8/8; embed 7/7; downloads 14/14; parity 16/0; ads 9/0/3;
   background 35/0; playback 108/0; premium 14/0; bundle ALL PASS.
+
+### Session 27 (cont.) — Phase 5 partial: UX parity (v2.8.0)
+
+Per master plan section 10, delivered subset (labeled PARTIAL honestly):
+- U-01 RYD: server /api/ryd/:id (public Return-YouTube-Dislike API, 1h
+  cache, nulls on failure — never an error state) + watch-page dislike
+  count. Live-verified: dQw4w9WgXcQ → 521,615 dislikes.
+- U-04 speed memory: chosen playbackRate persists (localStorage) and
+  applies from the first play (speedRef synced with the restored value —
+  the ref was the load-path applier).
+- U-04 offline banner: OnlineBanner component (online/offline events) in
+  AppShell.
+- NOT done, with reasons: U-04 AMOLED theme (touches the theme/boot/
+  hydration system — not a buzzer-beater change), U-02 search filters
+  (sp-param plumbing through innertube + server), U-03 playlist/dead-UI
+  audit items, U-05 player consolidation (VideoPlayer is NOT dead code —
+  ShortsPage imports it; merging 1,459-line VideoSurface with Shorts'
+  dependency is exactly the risky refactor the plan said runs last, and it
+  does not belong in an untested buzzer edit).
+- Gate (reduced, stated plainly): tsc 0, build:static green, RYD live-
+  verified; the full suite ran green at v2.7.0 an hour before and these
+  changes are additive UI (RYD count, banner, speed persistence) with no
+  player-path edits — the full re-run is left for the next session's
+  first action, recorded in PROGRESS.md.

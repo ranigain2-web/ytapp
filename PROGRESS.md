@@ -9,7 +9,7 @@ Program: ytapp Master Build Plan (2026-11-07) · Phases 0-5 · EGM + gauntlet lo
 | 2 — Compat Mode | ✅ gate green | | gated video plays screen-off on device · kill-switch | v2.5.0 |
 | 3 — Downloads v1 | ✅ gate green | | muxed MP4 e2e on web+Android+desktop · caps | v2.6.0 |
 | 4 — Native Android Player | ✅ app-side gate green; Java UNVERIFIED (needs one Android build) | | notification + screen-off on device | v2.7.0 |
-| 5 — UX Parity | ⬜ | per-item e2e · tsc stays 0 | v2.8.0 |
+| 5 — UX Parity | 🟡 PARTIAL — RYD + speed memory + offline banner shipped; AMOLED/filters/dead-UI/consolidation deferred (reasons in WORKLOG s27) | | per-item e2e · tsc stays 0 | v2.8.0 |
 
 ## Work items
 
@@ -47,6 +47,15 @@ limit: the Java plugin needs one Android build to verify on device.
 D1 cookies: server-side only · D2 compat entry: per-video · D3 downloads:
 session-bound endpoint · D4 Phase 4: build it · D5 no devices here —
 device-only judges are marked UNVERIFIED in the WORKLOG and phase gates.
+
+## Next session's first actions
+1. Re-run the FULL gate on v2.8.0 (parity/ads/background/playback/premium/
+   v12/bundle) — the v2.8.0 commit shipped with a reduced gate (stated in
+   WORKLOG s27); everything was green at v2.7.0 an hour prior.
+2. Phase 5 remainder: AMOLED theme, search filters (sp params), playlist
+   dead-UI audit, player consolidation (runs LAST, behind full suites).
+3. Android: one Gradle build of yt-compat + yt-player plugins + device
+   smoke (the two UNVERIFIED native pieces).
 
 ## Notes
 
