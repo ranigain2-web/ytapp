@@ -56,12 +56,15 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
   const isSubbed = subs.some(s => s.id === (data?.channel_id || ""));
   const isLiked = liked.some(l => l.id === videoId);
   const isDisliked = disliked.includes(videoId);
-  // U-01: Return YouTube Dislike — the count YouTube removed, restored
-  const [ryd, setRyd] = useState<{ dislikes: number | null; likes: number | null } | null>(null);
+  // U-01: Return YouTube Dislike — the count YouTube removed, restored.
+  // Keyed by video id and guarded at render (no synchronous setState reset
+  // in the effect — that re-renders the page on every video switch).
+  const [ryd, setRyd] = useState<{ id: string; dislikes: number } | null>(null);
   useEffect(() => {
     let alive = true;
-    setRyd(null);
-    fetchRyd(videoId).then(r => { if (alive && r && typeof r.dislikes === "number") setRyd(r); }).catch(() => {});
+    fetchRyd(videoId).then(r => {
+      if (alive && r && typeof r.dislikes === "number" && r.dislikes > 0) setRyd({ id: videoId, dislikes: r.dislikes });
+    }).catch(() => {});
     return () => { alive = false; };
   }, [videoId]);
   const isLater = later.some(l => l.id === videoId);
@@ -485,7 +488,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
                 aria-label="Dislike"
               >
                 <ThumbsDown className="w-5 h-5" style={isDisliked ? { fill: "var(--yt-blue)" } : undefined} />
-                {ryd?.dislikes != null && ryd.dislikes > 0 && (
+                {ryd?.id === v.id && ryd.dislikes > 0 && (
                   <span className="text-[13px] tabular-nums" data-testid="ryd-count">{formatCount(ryd.dislikes)}</span>
                 )}
               </button>

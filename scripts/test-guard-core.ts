@@ -56,7 +56,6 @@ const injection = buildCompatInjection();
 let syntacticError: string | null = null;
 try {
   // Parse WITHOUT executing: a syntax error throws here.
-  // eslint-disable-next-line no-new-func
   new Function(injection);
 } catch (e) {
   syntacticError = String((e as Error).message);

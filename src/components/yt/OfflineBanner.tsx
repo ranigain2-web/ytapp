@@ -10,12 +10,15 @@ import { WifiOff } from "lucide-react";
 export default function OfflineBanner() {
   const [online, setOnline] = useState(true);
   useEffect(() => {
-    setOnline(navigator.onLine);
+    // deferred past the effect pass: setState must not fire synchronously
+    // inside the effect (cascading-render lint); the events are async anyway
+    const sync = setTimeout(() => setOnline(navigator.onLine), 0);
     const on = () => setOnline(true);
     const off = () => setOnline(false);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     return () => {
+      clearTimeout(sync);
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
     };

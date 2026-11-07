@@ -40,7 +40,9 @@ export default function DownloadsPage() {
   };
 
   useEffect(() => {
-    refresh();
+    // deferred past the effect pass (no synchronous setState in effects);
+    // the first paint shows the loading state, the fetch lands right after
+    const first = setTimeout(refresh, 0);
     // Poll while any job is active; a quiet list stops the poller.
     timer.current = setInterval(() => {
       setItems(cur => {
@@ -49,7 +51,7 @@ export default function DownloadsPage() {
         return cur;
       });
     }, 2000);
-    return () => { if (timer.current) clearInterval(timer.current); };
+    return () => { clearTimeout(first); if (timer.current) clearInterval(timer.current); };
   }, []);
 
   const act = async (fn: () => Promise<void>, ok: string) => {

@@ -1568,3 +1568,30 @@ getBridge, notifyListeners, JSObject.fromJSONObject all confirmed). The
 media3 API usage follows the documented 1.5 service pattern. The Java is
 still UNVERIFIED until this very CI run — if the APK workflow fails, the
 failure IS the device-verification step; fix forward from its log.
+
+### Session 28 (cont.) — CI red on first push; fix forward
+
+This push was the phase 2-5 code's FIRST-ever CI run (last green CI was the
+v2.2.0 era), and it caught three real problems, all fixed:
+
+1. Static export failed on all three runners: src/lib/db.ts imports
+   PrismaClient from @prisma/client, which CI's frozen install doesn't
+   generate. Nothing imports db.ts, no prisma schema exists — pure
+   create-next-app leftovers (AGENTS.md already called them inert). Removed
+   db.ts, the prisma deps, and the db:* scripts entirely.
+2. Lint (eslint ., never run locally before pushing — my miss): guard-core's
+   embedded functions used `var` (var -> const/let; the stringified
+   injection source changed, guard-core suite re-run 25/25); three
+   setState-synchronously-in-effect violations in the new Phase 5 components
+   (RYD now keyed by video id and guarded at render; OfflineBanner and
+   DownloadsPage defer their initial sync past the effect pass); one unused
+   eslint-disable in test-guard-core.
+3. Plugin de-risking for the APK build (cap sync compiles the Java):
+   yt-compat's missing library manifest added; NativePlayerService's unused
+   imports of possibly-missing classes removed; Capacitor API usage
+   verified against @capacitor/android source.
+
+Tag note: pushing six tags in one command creates no events (GitHub's >3
+tags rule), so no release runs fired — and the phase commits never ran CI,
+so the release workflow's own green gate would refuse them anyway. Plan:
+main green first, then tag the green commit.
