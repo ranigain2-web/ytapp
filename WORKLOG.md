@@ -1421,3 +1421,38 @@ tagged. Details:
   before builds; playwright browsers need reinstall after sandbox recycling.
 - NOT done from the plan: Phase 2 full gate (build+e2e suite), Phases 3-5.
   Phases 0 (v2.3.0) and 1 (v2.4.0) are tagged with green gates.
+
+### Session 27 — Phase 2 complete: Compat Mode (v2.5.0); audit corrections
+
+Brutal-audit findings fixed on the record first (all verified against the
+trees, not memory): (a) commit 3855d01 CLAIMED to restore the plugin import
+but contained the bisect stub — compatOpen threw "stub"; the real fix landed
+now (8bae94f). (b) The "environmental build OOM" was wrong twice over: the
+deterministic failures were a 2.9GB core dump that an auto-commit swallowed
+into the repo (Tailwind's source scan ingested it; purged, core.* ignored,
+gc'd — .git back to 23MB); and the "stub's typeof import()" attribution in
+3855d01's message was wrong — stub-trees build fine now. (c) The
+"setPipOnHome 1200x/s app loop" was a self-recursive MOCK BRIDGE (the fake
+dispatched into Capacitor.Plugins, which registerPlugin replaces with
+proxies that call back into nativePromise — 1.4M calls, renderer death);
+the app was innocent; the fake now dispatches through a private __impls
+table, and the VideoSurface guard's comment no longer tells the false
+story. docs/designs/phase-2-compat-mode.md carries the full post-mortem.
+
+Phase 2 as shipped: yt-compat Capacitor plugin (fullscreen m.youtube.com
+WebView, document-start injection, ytCompatNative bridge, execute/close —
+Java UNVERIFIABLE here, needs one Android build); guard-core pure logic
+(25/25 units incl. composed-bundle syntax validation); the injection
+bundle (visibility spoof, user-intent background guard, one-button
+Continue-watching auto-click, fetch/XHR/ytInitial ad strip, cookie share);
+CompatPage (lock-screen relay, user-attributed pause via __ytUserPauseAt,
+honest notices, injected exit pill); WatchPage entry (native-only +
+kill-switch); Settings toggles; iOS descoped (not a target).
+
+Gate: tsc 0; build:static green; guard-core 25/25; compat e2e 8/8; embed
+7/7; battery 2 pass / 5 skip-with-reason / 0 fail + PO token 32/32; parity
+16/0; ads 11/0/1skip; background 35/0; playback 108/0 (first run had 2
+transient live-YouTube failures, clean on re-run); premium 14/0; v12
+failures IDENTICAL to the pre-existing baseline; bundle test ALL PASS.
+v2.5.0 tagged. Tailwind @source hygiene kept as defense-in-depth (with a
+truthful comment).
