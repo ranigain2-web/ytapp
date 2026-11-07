@@ -12,7 +12,6 @@ import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.session.MediaSession;
-import androidx.media3.session.ControllerInfo;
 import androidx.media3.session.MediaSessionService;
 
 /**
@@ -165,7 +164,7 @@ public class NativePlayerService extends MediaSessionService {
     }
 
     @Override
-    public MediaSession onGetSession(ControllerInfo controllerInfo) {
+    public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
         return mediaSession;
     }
 
