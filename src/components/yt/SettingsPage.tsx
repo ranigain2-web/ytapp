@@ -255,6 +255,13 @@ export default function SettingsPage() {
               value={prefs.compatShareCookies}
               onChange={v => setPrefs({ compatShareCookies: v })}
             />
+            <Toggle
+              label="Native player (experimental)"
+              labelIcon={<Gauge className="w-4 h-4" />}
+              desc="Play direct streams in a native ExoPlayer engine with a real media session — the most reliable screen-off background play. Experimental: it has not yet been verified on a device build; off keeps the proven WebView player"
+              value={prefs.nativePlayer}
+              onChange={v => setPrefs({ nativePlayer: v })}
+            />
           </>
         ) : (
           <p className="text-[13px] text-[var(--yt-text-2)] leading-relaxed">

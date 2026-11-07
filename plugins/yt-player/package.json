@@ -1,0 +1,20 @@
+{
+  "name": "yt-player",
+  "version": "1.0.0",
+  "description": "ytapp local Capacitor plugin — native Media3/ExoPlayer engine: direct-stream playback in a foreground service with a MediaSession (real screen-off background play, no WebView timer starvation), driven by the app's playback store",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "files": [
+    "android",
+    "dist"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^7.0.0"
+  }
+}

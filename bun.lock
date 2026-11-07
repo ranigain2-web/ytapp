@@ -74,6 +74,7 @@
         "vaul": "^1.1.2",
         "yt-background": "file:./plugins/yt-background",
         "yt-compat": "file:./plugins/yt-compat",
+        "yt-player": "file:./plugins/yt-player",
         "z-ai-web-dev-sdk": "^0.0.18",
         "zod": "^4.0.2",
         "zustand": "^5.0.6",
@@ -1976,6 +1977,8 @@
     "yt-background": ["yt-background@file:plugins/yt-background", { "peerDependencies": { "@capacitor/core": "^7.0.0" } }],
 
     "yt-compat": ["yt-compat@file:plugins/yt-compat", { "peerDependencies": { "@capacitor/core": "^7.0.0" } }],
+
+    "yt-player": ["yt-player@file:plugins/yt-player", { "peerDependencies": { "@capacitor/core": "^7.0.0" } }],
 
     "z-ai-web-dev-sdk": ["z-ai-web-dev-sdk@0.0.18", "", { "bin": { "z-ai": "dist/cli.js", "z-ai-generate": "dist/cli.js" } }, "sha512-xVoZIEME2F+/Z06orHCgUKzOMuFPhoHuzN4ZFZqcD71g11nzbzq2jKSP53igi3lJFE8ZbMB4WKb4gp6lCGrMXQ=="],
 

@@ -95,6 +95,10 @@ interface YtStore {
     /** Phase 2 (Compat Mode): share the compat session's YouTube cookies with
      *  your server so its extraction chain and downloads can use them. */
     compatShareCookies: boolean;
+    /** Phase 4: play direct streams in the NATIVE Media3 engine (ExoPlayer
+     *  foreground service) instead of the WebView video element. Experimental
+     *  and OFF by default until it is verified on a device build. */
+    nativePlayer: boolean;
   };
   setPrefs: (p: Partial<YtStore["prefs"]>) => void;
 }
@@ -194,6 +198,7 @@ export const useYt = create<YtStore>()(
         pipOnHome: true,
         compatEnabled: true,
         compatShareCookies: true,
+        nativePlayer: false,
       },
       setPrefs: (p) => set({ prefs: { ...get().prefs, ...p } }),
     }),

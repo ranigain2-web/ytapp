@@ -1,6 +1,6 @@
 {
   "name": "ytapp",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
@@ -87,6 +87,7 @@
     "vaul": "^1.1.2",
     "yt-background": "file:./plugins/yt-background",
     "yt-compat": "file:./plugins/yt-compat",
+    "yt-player": "file:./plugins/yt-player",
     "z-ai-web-dev-sdk": "^0.0.18",
     "zod": "^4.0.2",
     "zustand": "^5.0.6"

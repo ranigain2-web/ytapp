@@ -1486,3 +1486,35 @@ Per docs/designs/phase-3-downloads.md. Gate GREEN; v2.6.0 tagged.
   ALL PASS.
 - Production note: server hosts need yt-dlp (+ ffmpeg for muxed) on PATH;
   YT_DLP_BIN and DOWNLOAD_DIR override.
+
+### Session 27 (cont.) — Phase 4 complete: native player (v2.7.0, experimental OFF)
+
+Per docs/designs/phase-4-native-player.md. Gate green; v2.7.0 tagged.
+
+- plugins/yt-player: YtPlayerPlugin (prepare/play/pause/seekTo/position/
+  release + state listener) + NativePlayerService (ExoPlayer in a
+  MediaSessionService — media notification, audio focus, becoming-noisy,
+  onTaskRemoved stop — the documented Media3 1.5 service pattern), gradle
+  with media3-exoplayer/-hls/-session 1.5.1, manifest with the service.
+  HONEST LIMIT: no Android SDK in this sandbox — the Java has never been
+  compiled; needs one Gradle build + device smoke before the toggle ships
+  ON for users.
+- App side (verified): yt-player.ts wrapper (feature detection),
+  yt-native-engine.ts (selectNativeUrl mirrors the WebView source selection
+  — unit 6/6 incl. gateway-resolved URLs; start/stop engine wiring state
+  events into the playback store AND the surface's local UI state — the
+  seek bar reads local state, not the store, which the first e2e run
+  caught; nativeEngineControls transport overrides).
+- Routing: VideoSurface load effect's native branch (early return, element
+  stays dormant); transport fns (togglePlay/pause/seekTo/seekBy) + the
+  registered store engine route natively when the engine runs. Default-OFF
+  pref ("Native player (experimental)") with an honest toggle description.
+- e2e-native-player 4/4 (mocked bridge): prepare with the right HLS source
+  + metadata, native position reaching the time display (0:42 / 3:33),
+  transport routing (seekTo 52 after +10), engine swap release. The
+  initial version had two real integration gaps the run exposed (store-only
+  state that the UI never reads; controls bypassing the engine) — both
+  fixed in the component, not the test.
+- Gate: tsc 0; build green; native-url 6/6; native-player 4/4; guard-core
+  25/25; compat 8/8; embed 7/7; downloads 14/14; parity 16/0; ads 9/0/3;
+  background 35/0; playback 108/0; premium 14/0; bundle ALL PASS.

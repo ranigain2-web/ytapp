@@ -23,6 +23,7 @@ import Hls from "hls.js";
 import { fetchVideo, isAudioOnly } from "@/lib/yt-api";
 import type { YtVideoFull, YtFormat, SbSegment } from "@/lib/yt-api";
 import { absStream, fetchSponsorBlock } from "@/lib/yt-api";
+import { isNativePlayerActive, selectNativeUrl, startNativeEngine, stopNativeEngine, nativeEngineRunning, nativeEngineControls } from "@/lib/yt-native-engine";
 import { formatTime } from "@/lib/yt-format";
 import { useYt } from "@/lib/yt-store";
 import { usePlayback } from "@/lib/yt-playback";
@@ -239,6 +240,39 @@ export default function VideoSurface() {
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !video || mode !== "direct") return;
+
+    // Phase 4 (N-02): when the native Media3 engine is active it owns the
+    // media — select the same source the WebView path would and hand it
+    // over; the element stays dormant and the store is driven from native
+    // state events (see yt-native-engine.ts).
+    if (isNativePlayerActive()) {
+      const choice = selectNativeUrl(video, { audioOnly, audioRescue, fallbackFormat, audioFormat });
+      let cancelled = false;
+      if (choice.kind === "none") {
+        usePlayback.getState().setEmbed(video.id);
+        return;
+      }
+      startNativeEngine(video, choice, {
+        position: 0,
+        autoplay: true,
+        // native state must reach the SAME local state the element's events
+        // feed (the seek bar / time display read these, not the store)
+        onUIState: (s) => {
+          positionRef.current = s.position || 0;
+          setCurrent(s.position || 0);
+          if (s.duration) setDuration(s.duration);
+          setPlaying(s.state === "playing");
+          setWaiting(s.state === "ready");
+        },
+      }).then(ok => {
+        if (!ok && !cancelled) usePlayback.getState().setEmbed(video.id);
+      }).catch(() => { if (!cancelled) usePlayback.getState().setEmbed(video.id); });
+      return () => {
+        cancelled = true;
+        stopNativeEngine();
+      };
+    }
+
     let hls: Hls | null = null;
     manifestOkRef.current = false;
 
@@ -663,6 +697,9 @@ export default function VideoSurface() {
 
   // ---- Actions ----
   const togglePlay = useCallback(() => {
+    // Phase 4: the native engine owns playback when active — the WebView
+    // element is dormant, so transport must not touch it.
+    if (nativeEngineRunning()) { nativeEngineControls.togglePlay(); return; }
     const el = videoRef.current;
     if (!el) return;
     if (el.paused) {
@@ -673,6 +710,7 @@ export default function VideoSurface() {
   }, [started, userStart, ensureBgEnabled]);
 
   const pause = useCallback(() => {
+    if (nativeEngineRunning()) { nativeEngineControls.pause(); setPlaying(false); setEngineMirror({ playing: false }); return; }
     const el = videoRef.current;
     if (!el) return;
     userPausedRef.current = true;
@@ -685,6 +723,13 @@ export default function VideoSurface() {
   }, []);
 
   const seekTo = useCallback((seconds: number) => {
+    if (nativeEngineRunning()) {
+      if (!isFinite(seconds)) return;
+      usePlayback.getState().cancelCountdown();
+      nativeEngineControls.seekTo(seconds);
+      poke();
+      return;
+    }
     const el = videoRef.current;
     if (!el || !isFinite(seconds)) return;
     usePlayback.getState().cancelCountdown(); // [A7] a manual seek clears it
@@ -693,6 +738,12 @@ export default function VideoSurface() {
   }, [duration, poke]);
 
   const seekBy = useCallback((d: number) => {
+    if (nativeEngineRunning()) {
+      usePlayback.getState().cancelCountdown();
+      nativeEngineControls.seekBy(d);
+      poke();
+      return;
+    }
     const el = videoRef.current;
     if (!el) return;
     usePlayback.getState().cancelCountdown();
@@ -741,8 +792,18 @@ export default function VideoSurface() {
   }, [setVol, ensureBgEnabled]);
 
   // ---- Engine registration: every UI goes through store actions ([A1]) ----
+  // Phase 4: while the native Media3 engine owns playback, the transport
+  // methods route to it instead of the (dormant) WebView element.
   useEffect(() => {
-    const engine = { togglePlay, pause, seekTo, seekBy, restart, toggleMute, stop };
+    const engine = {
+      togglePlay: () => (nativeEngineRunning() ? nativeEngineControls.togglePlay() : togglePlay()),
+      pause: () => (nativeEngineRunning() ? nativeEngineControls.pause() : pause()),
+      seekTo: (s: number) => (nativeEngineRunning() ? nativeEngineControls.seekTo(s) : seekTo(s)),
+      seekBy: (d: number) => (nativeEngineRunning() ? nativeEngineControls.seekBy(d) : seekBy(d)),
+      restart: () => (nativeEngineRunning() ? nativeEngineControls.restart() : restart()),
+      toggleMute,
+      stop,
+    };
     registerEngine(engine);
     return () => {
       if (usePlayback.getState().engine === engine) registerEngine(null);
