@@ -16,6 +16,7 @@ import ChannelPage from "./ChannelPage";
 import PlaylistPage from "./PlaylistPage";
 import SettingsPage from "./SettingsPage";
 import CompatPage from "./CompatPage";
+import DownloadsPage from "./DownloadsPage";
 import { HistoryPage, SubscriptionsPage, LikedPage, LaterPage, PlaylistsPage } from "./LibraryPages";
 import ShortsPage from "./ShortsPage";
 import WhatsNew from "./WhatsNew";
@@ -124,6 +125,9 @@ export default function AppShell() {
       break;
     case "compat":
       content = <CompatPage key={route.id} videoId={route.id} />;
+      break;
+    case "downloads":
+      content = <DownloadsPage />;
       break;
     default:
       content = <HomePage />;

@@ -7,7 +7,7 @@ Program: ytapp Master Build Plan (2026-11-07) · Phases 0-5 · EGM + gauntlet lo
 | 0 — Stabilize & Instrument | ✅ gate green | tsc 0 · battery · diagnostics · journey e2e | v2.3.0 |
 | 1 — Extraction Engine v2 | ✅ sandbox gate green | | battery ≥5/6 on mildly-gated IP · fallback rate ↓ | v2.4.0 |
 | 2 — Compat Mode | ✅ gate green | | gated video plays screen-off on device · kill-switch | v2.5.0 |
-| 3 — Downloads v1 | ⬜ | muxed MP4 e2e on web+Android+desktop · caps | v2.6.0 |
+| 3 — Downloads v1 | ✅ gate green | | muxed MP4 e2e on web+Android+desktop · caps | v2.6.0 |
 | 4 — Native Android Player | ⬜ | notification + screen-off on device | v2.7.0 |
 | 5 — UX Parity | ⬜ | per-item e2e · tsc stays 0 | v2.8.0 |
 

@@ -1456,3 +1456,33 @@ transient live-YouTube failures, clean on re-run); premium 14/0; v12
 failures IDENTICAL to the pre-existing baseline; bundle test ALL PASS.
 v2.5.0 tagged. Tailwind @source hygiene kept as defense-in-depth (with a
 truthful comment).
+
+### Session 27 (cont.) — Phase 3 complete: Downloads v1 (v2.6.0)
+
+Per docs/designs/phase-3-downloads.md. Gate GREEN; v2.6.0 tagged.
+
+- Server: yt-dlp sidecar manager in index.mjs — 2-slot queue, spawn with
+  --newline progress parsing, -f bestaudio[ext=m4a]/bestaudio or
+  bv*[height<=720]+ba/b + --merge-output-format mp4 (ffmpeg present),
+  --print after_move:filepath for final-file discovery, --add-header Cookie
+  from the active runtime cookie (Phase 1 endpoint / Phase 2 compat share
+  feed it), SIGTERM cancel cleans partials. Session-bound routes (D3):
+  GET session mints an X-DL-Token; start/list/cancel/remove/file/:id all
+  401 without it. Health gains downloads.active/total.
+- Frontend: DownloadSheet on the watch page (Video MP4 ≤720p / Audio M4A,
+  honest copy about server-side saving), DownloadsPage (?page=downloads,
+  Sidebar entry) with live progress polling, Save (session-scoped file
+  URL), Cancel, Remove; yt-api.ts download client (token minted once per
+  app session).
+- e2e-download.mjs 14/14: REAL sidecar (401 boundaries, 3.3MB audio
+  download of dQw4w9WgXcQ to done on this worst-case IP — yt-dlp's
+  rotation succeeds where the in-process chain falls back, exactly the
+  research's conclusion — byte-exact attachment streaming, duplicate 409,
+  remove deletes file+record) + mocked UI journey (sheet, payload,
+  progress, Save link).
+- Gate: tsc 0; build green; download e2e 14/14; guard-core 25/25; compat
+  8/8; embed 7/7; battery 2/5/0; parity 16/0; ads 10/0/2; background
+  35/0; playback 108/0; premium 14/0; v12 baseline-identical; bundle test
+  ALL PASS.
+- Production note: server hosts need yt-dlp (+ ffmpeg for muxed) on PATH;
+  YT_DLP_BIN and DOWNLOAD_DIR override.

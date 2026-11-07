@@ -533,6 +533,64 @@ export async function clearServerCookie(): Promise<void> {
   if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status);
 }
 
+// ---- Phase 3: downloads (yt-dlp sidecar, session-bound) ----
+export interface DownloadItem {
+  id: string;
+  videoId: string;
+  title: string;
+  mode: "video" | "audio";
+  status: "queued" | "running" | "done" | "failed" | "cancelled" | "cancelling";
+  progress: number;
+  size: number;
+  file: string | null;
+  error: string | null;
+  startedAt: number;
+  finishedAt: number | null;
+}
+
+let dlToken: string | null = null;
+
+/** Mint (once per app session) the token that scopes our download requests. */
+export async function ensureDownloadSession(): Promise<string> {
+  if (dlToken) return dlToken;
+  const r = await api<{ token: string }>("/api/download/session", { timeoutMs: 8000 });
+  dlToken = r.token;
+  return r.token;
+}
+
+async function dlRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = await ensureDownloadSession();
+  const res = await fetch(apiHref(path), {
+    ...init,
+    headers: { "Content-Type": "application/json", Accept: "application/json", "X-DL-Token": token, ...(init.headers || {}) },
+    signal: AbortSignal.timeout(20000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError((data as { error?: string })?.error || `HTTP ${res.status}`, res.status);
+  return data as T;
+}
+
+export async function startDownload(videoId: string, mode: "video" | "audio", title: string): Promise<{ id: string }> {
+  return dlRequest("/api/download/start", { method: "POST", body: JSON.stringify({ videoId, mode, title }) });
+}
+
+export async function listDownloads(): Promise<DownloadItem[]> {
+  const r = await dlRequest<{ downloads: DownloadItem[] }>("/api/download/list");
+  return r.downloads;
+}
+
+export async function cancelDownload(id: string): Promise<void> {
+  await dlRequest("/api/download/cancel", { method: "POST", body: JSON.stringify({ id }) });
+}
+
+export async function removeDownload(id: string): Promise<void> {
+  await dlRequest("/api/download/remove", { method: "POST", body: JSON.stringify({ id }) });
+}
+
+export function downloadFileUrl(id: string): string {
+  return `${apiHref(`/api/download/file/${id}`)}?token=${encodeURIComponent(dlToken || "")}`;
+}
+
 // Absolute URL resolver for streams (HLS/captions/storyboard paths are relative)
 export function absStream(url: string | null | undefined): string {
   if (!url) return "";

@@ -7,6 +7,9 @@
 // ============================================================================
 import express from 'express';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { createReadStream, mkdirSync, statSync, unlinkSync } from 'node:fs';
 import { Innertube, YTNodes } from 'youtubei.js';
 import { classifyGate } from './gate-classify.mjs';
 const { ContinuationItem } = YTNodes;
@@ -1208,6 +1211,168 @@ app.delete('/api/cookie', (req, res) => {
   res.json({ ok: true, present: !!YOUTUBE_COOKIE });
 });
 
+// ----------------------------------------------------------------------------
+// Phase 3: downloads — yt-dlp sidecar with a 2-slot queue (session-bound).
+// The extraction chain plays; yt-dlp saves. Subprocess isolation means a
+// crashed download can never take the API down, and yt-dlp's client rotation
+// is the proven anti-gating arsenal. Every endpoint below (except session
+// minting) requires the X-DL-Token header — a per-browser token, so other
+// devices on the LAN cannot enumerate or hijack downloads uninvited.
+// ----------------------------------------------------------------------------
+const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR || path.join(process.cwd(), 'downloads');
+const YT_DLP_BIN = process.env.YT_DLP_BIN || 'yt-dlp';
+const MAX_CONCURRENT_DOWNLOADS = 2;
+mkdirSync(DOWNLOAD_DIR, { recursive: true });
+
+const dlSessions = new Map(); // token -> createdAt
+const dlRecords = new Map(); // id -> record
+const dlQueue = []; // ids waiting for a slot
+
+const publicDl = (r) => ({
+  id: r.id, videoId: r.videoId, title: r.title, mode: r.mode,
+  status: r.status, progress: r.progress, size: r.size,
+  file: r.file ? path.basename(r.file) : null, error: r.error,
+  startedAt: r.startedAt, finishedAt: r.finishedAt || null,
+});
+
+function spawnDownload(r) {
+  r.status = 'running';
+  r.progress = 0;
+  const outTemplate = path.join(DOWNLOAD_DIR, `${r.id}.%(ext)s`);
+  const args = [
+    '-f', r.mode === 'audio' ? 'bestaudio[ext=m4a]/bestaudio' : 'bv*[height<=720]+ba/b',
+    ...(r.mode === 'audio' ? [] : ['--merge-output-format', 'mp4']),
+    '-o', outTemplate,
+    '--newline', '--no-playlist', '--no-cache-dir', '--no-part',
+    '--print', 'after_move:filepath', '--no-simulate',
+    ...(activeCookie() ? ['--add-header', `Cookie: ${activeCookie()}`] : []),
+    `https://www.youtube.com/watch?v=${r.videoId}`,
+  ];
+  let lastErr = '';
+  const child = spawn(YT_DLP_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  r.child = child;
+  const onLine = (line) => {
+    const s = String(line);
+    const pct = s.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
+    if (pct) r.progress = Math.min(100, parseFloat(pct[1]));
+    if (/^\s*\//.test(s) && s.includes('.')) r.file = s.trim(); // after_move:filepath
+    const em = s.match(/^(ERROR|WARNING):\s*(.*)$/m);
+    if (em && em[1] === 'ERROR') lastErr = em[2].slice(0, 180);
+  };
+  child.stdout.on('data', (b) => b.toString().split('\n').forEach(onLine));
+  child.stderr.on('data', (b) => { lastErr = String(b).trim().slice(-180) || lastErr; });
+  child.on('error', (e) => finishDownload(r, 'failed', `yt-dlp not runnable: ${e.message}`));
+  child.on('close', (code, signal) => {
+    delete r.child;
+    if (signal === 'SIGTERM' || r.status === 'cancelling') {
+      if (r.file) { try { unlinkSync(r.file); } catch { /* already gone */ } }
+      finishDownload(r, 'cancelled', null);
+    } else if (code === 0 && r.file && statSyncSafe(r.file)) {
+      r.size = statSyncSafe(r.file).size;
+      r.progress = 100;
+      finishDownload(r, 'done', null);
+    } else {
+      finishDownload(r, 'failed', lastErr || `yt-dlp exited with code ${code}`);
+    }
+  });
+}
+
+const statSyncSafe = (p) => { try { return statSync(p); } catch { return null; } };
+
+function finishDownload(r, status, error) {
+  r.status = status;
+  r.error = error;
+  r.finishedAt = Date.now();
+  // drain the queue
+  const next = dlQueue.shift();
+  if (next) {
+    const nr = dlRecords.get(next);
+    if (nr && nr.status === 'queued') spawnDownload(nr);
+  }
+}
+
+function requestSlot(r) {
+  const running = [...dlRecords.values()].filter((x) => x.status === 'running').length;
+  if (running < MAX_CONCURRENT_DOWNLOADS) spawnDownload(r);
+  else dlQueue.push(r.id);
+}
+
+// --- routes ---
+app.get('/api/download/session', wrap(async (req, res) => {
+  const token = randomUUID();
+  dlSessions.set(token, Date.now());
+  // opportunistic cleanup: sessions are per-browser, cap the map
+  if (dlSessions.size > 500) dlSessions.delete(dlSessions.keys().next().value);
+  res.json({ token });
+}));
+
+const requireDlToken = (req, res) => {
+  const token = req.headers['x-dl-token'] || req.query.token;
+  if (!token || !dlSessions.has(token)) {
+    res.status(401).json({ error: 'Invalid or missing download session token' });
+    return false;
+  }
+  return true;
+};
+
+app.post('/api/download/start', express.json({ limit: '8kb' }), wrap(async (req, res) => {
+  if (!requireDlToken(req, res)) return;
+  const videoId = String(req.body?.videoId || '');
+  const mode = req.body?.mode === 'audio' ? 'audio' : 'video';
+  const title = String(req.body?.title || '').slice(0, 140);
+  if (!/^[\w-]{6,15}$/.test(videoId)) return res.status(400).json({ error: 'Bad video id' });
+  const active = [...dlRecords.values()].filter((x) => x.videoId === videoId && (x.status === 'running' || x.status === 'queued'));
+  if (active.length) return res.status(409).json({ error: 'Already downloading this video', id: active[0].id });
+  const r = {
+    id: randomUUID(), videoId, title, mode,
+    status: 'queued', progress: 0, size: 0, file: null, error: null,
+    startedAt: Date.now(), finishedAt: null,
+  };
+  dlRecords.set(r.id, r);
+  requestSlot(r);
+  log(`download start ${videoId} (${mode}) -> ${r.id}`);
+  res.json({ id: r.id });
+}));
+
+app.get('/api/download/list', wrap(async (req, res) => {
+  if (!requireDlToken(req, res)) return;
+  const items = [...dlRecords.values()]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, 100)
+    .map(publicDl);
+  res.json({ downloads: items });
+}));
+
+app.post('/api/download/cancel', express.json({ limit: '2kb' }), wrap(async (req, res) => {
+  if (!requireDlToken(req, res)) return;
+  const r = dlRecords.get(String(req.body?.id || ''));
+  if (!r) return res.status(404).json({ error: 'Unknown download' });
+  if (r.status === 'queued') { r.status = 'cancelled'; r.finishedAt = Date.now(); }
+  else if (r.status === 'running') { r.status = 'cancelling'; try { r.child?.kill('SIGTERM'); } catch { /* already dead */ } }
+  res.json({ ok: true, status: r.status });
+}));
+
+app.post('/api/download/remove', express.json({ limit: '2kb' }), wrap(async (req, res) => {
+  if (!requireDlToken(req, res)) return;
+  const r = dlRecords.get(String(req.body?.id || ''));
+  if (!r) return res.status(404).json({ error: 'Unknown download' });
+  if (r.status === 'running' || r.status === 'queued') return res.status(409).json({ error: 'Cancel it first' });
+  if (r.file) { try { unlinkSync(r.file); } catch { /* already gone */ } }
+  dlRecords.delete(r.id);
+  res.json({ ok: true });
+}));
+
+app.get('/api/download/file/:id', wrap(async (req, res) => {
+  if (!requireDlToken(req, res)) return;
+  const r = dlRecords.get(String(req.params.id || ''));
+  if (!r || r.status !== 'done' || !r.file || !statSyncSafe(r.file)) {
+    return res.status(404).json({ error: 'File not available' });
+  }
+  res.setHeader('Content-Disposition', `attachment; filename="${r.videoId}${path.extname(r.file)}"`);
+  res.setHeader('Content-Length', statSyncSafe(r.file).size);
+  createReadStream(r.file).pipe(res);
+}));
+
 app.get('/api/health', wrap(async (req, res) => {  const okTotal = Object.values(extractStats).reduce((n, s) => n + s.ok, 0);
   const attempts = okTotal + embedFallbackStats.count;
   res.json({
@@ -1221,6 +1386,10 @@ app.get('/api/health', wrap(async (req, res) => {  const okTotal = Object.values
     player_calls: playerCallStats.calls,
     player_calls_po: playerCallStats.with_po_token,
     cookie: { present: !!activeCookie(), source: runtimeCookie ? 'runtime' : (YOUTUBE_COOKIE ? 'env' : 'none') },
+    downloads: {
+      active: [...dlRecords.values()].filter((x) => x.status === 'running' || x.status === 'queued').length,
+      total: dlRecords.size,
+    },
     embed_fallbacks: embedFallbackStats.count,
     embed_fallback_rate: attempts ? +(embedFallbackStats.count / attempts).toFixed(3) : null,
     last_fallback: embedFallbackStats.last_video ? { video: embedFallbackStats.last_video, reasons: embedFallbackStats.last_reasons, at: embedFallbackStats.last_at } : null,

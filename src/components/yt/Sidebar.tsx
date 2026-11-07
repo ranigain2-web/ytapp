@@ -4,7 +4,7 @@ import { useRouter, type Route } from "@/lib/yt-router";
 import { useYt } from "@/lib/yt-store";
 import {
   Home, Play, Clock, ThumbsUp, BookmarkPlus, Flame, Music2, Gamepad2, Newspaper,
-  Trophy, GraduationCap, Podcast, UtensilsCrossed, Film, Settings, ListVideo, Radio, Zap,
+  Trophy, GraduationCap, Podcast, UtensilsCrossed, Film, Settings, ListVideo, Radio, Zap, Download,
 } from "lucide-react";
 
 interface NavItem {
@@ -38,6 +38,7 @@ export function SidebarNavItems({ onNavigate }: { onNavigate: () => void }) {
     { label: "Playlists", icon: ListVideo, route: { name: "playlists" } },
     { label: "Watch later", icon: BookmarkPlus, route: { name: "later" } },
     { label: "Liked videos", icon: ThumbsUp, route: { name: "liked" } },
+    { label: "Downloads", icon: Download, route: { name: "downloads" } },
   ];
 
   const explore: NavItem[] = [

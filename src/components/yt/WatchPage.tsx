@@ -13,6 +13,7 @@ import { CountdownCard } from "./CountdownCard";
 import { parkSurfaceVideoIfInside } from "./VideoSurface";
 import { ytToast } from "@/lib/yt-toast";
 import { isNativeApp } from "@/lib/yt-native";
+import DownloadSheet from "./DownloadSheet";
 import { ThumbsUp, ThumbsDown, Share2, BookmarkPlus, Scissors, Bell, AlertTriangle, SkipForward, Headphones, Play, RotateCcw } from "lucide-react";
 
 export default function WatchPage({ videoId, startAt }: { videoId: string; startAt?: number }) {
@@ -514,6 +515,7 @@ export default function WatchPage({ videoId, startAt }: { videoId: string; start
             >
               <BookmarkPlus className="w-5 h-5" /> {isLater ? "Saved" : "Save"}
             </button>
+            <DownloadSheet videoId={v.id} title={v.title} />
           </div>
         </div>
 

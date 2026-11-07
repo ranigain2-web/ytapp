@@ -19,6 +19,7 @@ export type Route =
   | { name: "later" }
   | { name: "playlists" }
   | { name: "compat"; id: string }
+  | { name: "downloads" }
   | { name: "settings" };
 
 export function parseRoute(): Route {
@@ -38,6 +39,7 @@ export function parseRoute(): Route {
     case "later": return { name: "later" };
     case "playlists": return { name: "playlists" };
     case "compat": return p.get("id") ? { name: "compat", id: p.get("id")! } : { name: "home" };
+    case "downloads": return { name: "downloads" };
     case "settings": return { name: "settings" };
     default: return { name: "home" };
   }
